@@ -55,10 +55,12 @@ Live tracking, chat, ratings, stops and events all hang off the **ride**, so the
 
 - `CHECK (seats_booked >= 0 AND seats_booked <= seats_total)` on `rides`.
 - `CHECK (stars BETWEEN 1 AND 5)` on `ratings`; `CHECK (seat_capacity BETWEEN 1 AND 6)` on `vehicles`.
-- Partial unique index: one `PENDING` request per (ride, rider).
-- `vehicle_locations` is `PARTITION BY RANGE (recorded_at)`, one partition per day.
-- GiST indexes on all geography columns.
-- Row-level security on tenant tables, keyed on `current_setting('app.organization_id')`, as a second safety net. The API's tenant guard remains the main check.
+- One `PENDING` request per (ride, rider): checked inside the request transaction (Prisma cannot manage partial indexes without drift).
+- `vehicle_locations` becomes `PARTITION BY RANGE (recorded_at)` in the Phase 4 migration, before any GPS data exists.
+- GiST indexes on `offices.location`, `rides.route_line`, `rides.origin` (declared in the schema, so Prisma manages them); more are added with the features that query them.
+- Row-level security as a second safety net is planned for production hardening (Phase 5). Today the API's tenant guard plus cross-tenant tests are the protection.
+
+Status 2026-11-05: the CHECK constraints are live in migration `20261105082618_init`.
 
 **Accepting a request** runs in one transaction: lock the ride row (`SELECT … FOR UPDATE`), check seats, insert the booking with a fresh PIN, increment `seats_booked`, set the request to ACCEPTED, set the ride to FULL if needed. Two riders racing for the last seat: exactly one wins.
 

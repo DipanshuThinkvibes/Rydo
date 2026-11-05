@@ -1,0 +1,36 @@
+name: rydo
+# Local services for development. Start with: npm run infra:up
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: rydo
+      POSTGRES_PASSWORD: rydo
+      POSTGRES_DB: rydo
+    ports: ["5432:5432"]
+    volumes: [db-data:/var/lib/postgresql/data, ./infra/db/init:/docker-entrypoint-initdb.d]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rydo"]
+      interval: 5s
+      retries: 10
+
+  # Catches every email (OTP codes) locally. Inbox UI: http://localhost:8025
+  mail:
+    image: axllent/mailpit:latest
+    ports: ["1025:1025", "8025:8025"]
+
+  # S3-compatible storage for license and RC photos (RustFS; MinIO no longer ships public images).
+  # Console: http://localhost:9001
+  storage:
+    image: rustfs/rustfs:latest
+    environment:
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ACCESS_KEY: rydo
+      RUSTFS_SECRET_KEY: rydo-secret
+      RUSTFS_CONSOLE_ENABLE: "true"
+    ports: ["9000:9000", "9001:9001"]
+    volumes: [storage-data:/data]
+
+volumes:
+  db-data:
+  storage-data:

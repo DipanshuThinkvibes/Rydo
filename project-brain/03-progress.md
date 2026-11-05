@@ -1,4 +1,4 @@
-﻿---
+---
 project: RYDO
 status: active
 last_log: 2026-11-05
@@ -17,7 +17,7 @@ Phase 0 (product discovery). Owner approved the stack with changes: no Supabase 
 - [ ] Open questions 1-4 answered (team, Mac/Apple account, in-app admin OK, sign-in method)
 - [x] Clickable mobile prototype v2 (14 screens, Uber/Rapido-level flows): https://claude.ai/artifact/FSjkGmBZCtRNy61Ajd3ThR
 - [x] Phase 0 deliverables: data model (docs/phase-0/schema.prisma + 01-data-model.md), API list (02-api.md), design system (03-design-system.md)
-- [ ] Phase 1 Foundation
+- [x] Phase 1 Foundation built 2026-11-05 (pending: real-phone test, CI first run)
 - [ ] Phase 4 live tracking validated on physical devices
 - [ ] Pilot with one company
 - [ ] Release 1 in App Store + Play Store

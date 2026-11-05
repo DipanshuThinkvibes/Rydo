@@ -1,0 +1,23 @@
+{
+  "name": "rydo",
+  "private": true,
+  "version": "0.1.0",
+  "description": "RYDO - company carpool platform: mobile app, web admin, one API",
+  "workspaces": ["apps/*", "services/*", "packages/*"],
+  "engines": { "node": ">=22" },
+  "packageManager": "npm@11.19.0",
+  "scripts": {
+    "dev": "turbo run dev --parallel",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down",
+    "db:migrate": "npm run db:migrate -w @rydo/api",
+    "db:seed": "npm run db:seed -w @rydo/api"
+  },
+  "devDependencies": {
+    "turbo": "^2.11.10",
+    "typescript": "^5.9.3"
+  }
+}

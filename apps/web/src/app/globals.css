@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+/* RYDO tokens (packages/ui-tokens, docs/phase-0/03-design-system.md) */
+@theme inline {
+  --color-ink: #0b1426;
+  --color-ink-2: #1e2a44;
+  --color-lime: #c8f560;
+  --color-lime-hover: #b5e84a;
+  --color-muted: #5a6578;
+  --color-surface: #f5f7fa;
+  --color-surface-2: #eef1f5;
+  --color-line: #e5e9f0;
+  --color-line-strong: #dde3eb;
+  --color-danger: #dc2626;
+  --color-success: #15803d;
+  --color-success-bg: #dcfce7;
+  --color-warning: #92400e;
+  --color-warning-bg: #fef3c7;
+  --font-sans: var(--font-manrope);
+}
+
+body {
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font-family: var(--font-manrope), system-ui, sans-serif;
+}
