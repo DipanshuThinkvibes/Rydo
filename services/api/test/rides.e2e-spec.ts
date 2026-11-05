@@ -117,7 +117,8 @@ describe('Ride plans and generation', () => {
     const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(first.departAt);
     const a = (await api(app).get(`/api/v1/admin/rides?date=${day}`).set(as('opsA', 'A')).expect(200)).body.data;
     expect(a.length).toBe(2);
-    expect(a[0]).toMatchObject({ driverName: 'rahul person', plateNumber: 'KA 01 RA 1234', seatsTotal: 3, seatsBooked: 0 });
+    expect(a[0]).toMatchObject({ driverName: 'rahul person', plateNumber: 'KA 01 RA 1234', seatsTotal: 3, seatsBooked: 0, pendingRequests: 0, riders: [] });
+    expect(decodePolyline(a[0].route).length).toBeGreaterThan(1);
     expect((await api(app).get(`/api/v1/admin/rides?date=${day}`).set(as('opsB', 'B')).expect(200)).body.data).toHaveLength(0);
     await api(app).get(`/api/v1/admin/rides?date=${day}`).set(as('rahul', 'A')).expect(403);
   });

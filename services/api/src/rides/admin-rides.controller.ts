@@ -6,7 +6,7 @@ import { ZodPipe } from '../common/zod.pipe';
 import { Org, type OrgContext } from '../common/request-context';
 import { OrgScoped } from '../tenancy/decorators';
 
-/** Ops view of the company's rides for one day (company time zone). */
+/** Ops view of the company's rides for one day (company time zone): routes for the map, riders and waiting requests. One query. */
 @Controller('admin/rides')
 @OrgScoped('ORG_ADMIN', 'OPS_ADMIN', 'HR_ADMIN')
 export class AdminRidesController {
@@ -18,7 +18,13 @@ export class AdminRidesController {
       SELECT r.id, r.direction, r.status, r.depart_at AS "departAt", r.origin_label AS "originLabel", r.destination_label AS "destinationLabel",
         r.seats_total AS "seatsTotal", r.seats_booked AS "seatsBooked", r.women_only AS "womenOnly",
         r.distance_meters AS "distanceMeters", r.duration_seconds AS "durationSeconds",
-        u.name AS "driverName", v.plate_number AS "plateNumber", v.make || ' ' || v.model AS vehicle
+        u.name AS "driverName", v.plate_number AS "plateNumber", v.make || ' ' || v.model AS vehicle,
+        ST_AsEncodedPolyline(ST_Simplify(r.route_line::geometry, 0.0001)) AS route,
+        (SELECT count(*)::int FROM ride_requests q WHERE q.ride_id = r.id AND q.status = 'PENDING' AND q.expires_at > now()) AS "pendingRequests",
+        (SELECT COALESCE(json_agg(json_build_object('name', ru.name, 'pickupLabel', b.pickup_label, 'status', b.status, 'seats', b.seats,
+            'lat', ST_Y(b.pickup::geometry), 'lng', ST_X(b.pickup::geometry)) ORDER BY b.created_at), '[]'::json)
+          FROM bookings b JOIN memberships rm ON rm.id = b.rider_membership_id JOIN users ru ON ru.id = rm.user_id
+          WHERE b.ride_id = r.id AND b.status IN ('CONFIRMED', 'BOARDED', 'COMPLETED', 'NO_SHOW')) AS riders
       FROM rides r
       JOIN organizations o ON o.id = r.organization_id
       JOIN memberships m ON m.id = r.driver_membership_id

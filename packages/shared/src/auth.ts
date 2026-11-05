@@ -1,3 +1,4 @@
+import type { OrgFeatures } from './platform';
 import { z } from 'zod';
 import type { OrgRoleName } from './roles';
 
@@ -51,7 +52,7 @@ export type UpdateMe = z.infer<typeof updateMeSchema>;
 
 export interface MembershipSummary {
   id: string;
-  organization: { id: string; name: string; slug: string };
+  organization: { id: string; name: string; slug: string; features: OrgFeatures };
   status: 'PENDING' | 'ACTIVE' | 'REJECTED' | 'SUSPENDED' | 'LEFT';
   roles: OrgRoleName[];
 }

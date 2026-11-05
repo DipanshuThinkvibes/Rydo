@@ -9,7 +9,15 @@ import { loadGoogleMaps, mapsAuthFailed, onMapsAuthFailure } from "./google-load
  * Vendor-neutral map for RYDO pages. Pages pass routes and markers; only this folder talks to Google.
  * Swapping the map vendor later means rewriting this file and google-loader.ts, nothing else.
  */
-export type MarkerKind = "start" | "end" | "pickup" | "drop" | "rider" | "request" | "office" | "me";
+export type MarkerKind = "start" | "end" | "pickup" | "drop" | "rider" | "request" | "office" | "me" | "sos";
+/** A moving car. Kept apart from markers so it glides instead of the map redrawing. */
+export interface MapVehicle {
+  id: string;
+  at: LatLng;
+  label?: string;
+  /** Highlight (e.g. an SOS on this ride). */
+  alert?: boolean;
+}
 export interface MapMarker {
   id: string;
   at: LatLng;
@@ -35,6 +43,9 @@ interface Props {
   markers?: MapMarker[];
   /** Fit the view to this route or marker when it changes (e.g. the selected card). */
   focusId?: string | null;
+  vehicles?: MapVehicle[];
+  /** Keep the map centred on this vehicle as it moves. */
+  followId?: string | null;
   onSelect?: (id: string) => void;
   gesture?: "cooperative" | "greedy";
   className?: string;
@@ -43,7 +54,9 @@ interface Props {
 
 type Drawn = { lines: google.maps.Polyline[]; pins: google.maps.marker.AdvancedMarkerElement[]; timer?: ReturnType<typeof setInterval> };
 
-export function MapView({ routes = [], markers = [], focusId = null, onSelect, gesture = "cooperative", className = "", children }: Props) {
+export function MapView({ routes = [], markers = [], focusId = null, vehicles = [], followId = null, onSelect, gesture = "cooperative", className = "", children }: Props) {
+  const cars = useRef(new Map<string, { pin: google.maps.marker.AdvancedMarkerElement; el: HTMLElement; from: LatLng; to: LatLng; cur: LatLng; t0: number }>());
+  const raf = useRef<number | null>(null);
   const el = useRef<HTMLDivElement>(null);
   const map = useRef<google.maps.Map | null>(null);
   const Pin = useRef<typeof google.maps.marker.AdvancedMarkerElement | null>(null);
@@ -147,6 +160,53 @@ export function MapView({ routes = [], markers = [], focusId = null, onSelect, g
     }
   }, [state, drawKey]);
 
+  // Live cars: create, move smoothly (1 s glide), remove.
+  const carKey = vehicles.map((v) => `${v.id}:${v.at.lat.toFixed(6)},${v.at.lng.toFixed(6)}:${v.alert ? 1 : 0}:${v.label ?? ""}`).join("|");
+  useEffect(() => {
+    const m = map.current;
+    const PinCtor = Pin.current;
+    if (state !== "ready" || !m || !PinCtor) return;
+    const seen = new Set<string>();
+    const now = performance.now();
+    for (const v of vehicles) {
+      seen.add(v.id);
+      const c = cars.current.get(v.id);
+      if (!c) {
+        const el = document.createElement("div");
+        el.className = `rydo-car${v.alert ? " is-alert" : ""}`;
+        el.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0B1426" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 17h14M5 17a2 2 0 1 0 4 0M15 17a2 2 0 1 0 4 0M3 17v-4l2-5a2 2 0 0 1 1.9-1.4h10.2A2 2 0 0 1 19 8l2 5v4"/></svg>';
+        const pin = new PinCtor({ map: m, position: v.at, content: el, title: v.label ?? "Car", zIndex: 2000 });
+        cars.current.set(v.id, { pin, el, from: v.at, to: v.at, cur: v.at, t0: now });
+      } else {
+        c.from = c.cur;
+        c.to = v.at;
+        c.t0 = now;
+        c.el.className = `rydo-car${v.alert ? " is-alert" : ""}`;
+      }
+    }
+    for (const [id, c] of cars.current) {
+      if (!seen.has(id)) {
+        c.pin.map = null;
+        cars.current.delete(id);
+      }
+    }
+    const step = (t: number) => {
+      let moving = false;
+      for (const c of cars.current.values()) {
+        const k = Math.min(1, (t - c.t0) / 1000);
+        if (k < 1) moving = true;
+        c.cur = { lat: c.from.lat + (c.to.lat - c.from.lat) * k, lng: c.from.lng + (c.to.lng - c.from.lng) * k };
+        c.pin.position = c.cur;
+      }
+      raf.current = moving ? requestAnimationFrame(step) : null;
+    };
+    if (raf.current) cancelAnimationFrame(raf.current);
+    raf.current = requestAnimationFrame(step);
+    const follow = followId ? vehicles.find((v) => v.id === followId) : undefined;
+    if (follow) m.panTo(follow.at);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, carKey, followId]);
+
   // Fit the view when the set of things changes, or to the focused item.
   useEffect(() => {
     if (state !== "ready" || !map.current) return;
@@ -157,6 +217,8 @@ export function MapView({ routes = [], markers = [], focusId = null, onSelect, g
     () => () => {
       const d = drawn.current;
       if (d.timer) clearInterval(d.timer);
+      if (raf.current) cancelAnimationFrame(raf.current);
+      cars.current.forEach((c) => (c.pin.map = null));
       d.lines.forEach((l) => l.setMap(null));
       d.pins.forEach((p) => (p.map = null));
     },
@@ -190,7 +252,7 @@ export function MapView({ routes = [], markers = [], focusId = null, onSelect, g
   );
 }
 
-const kindZ: Record<MarkerKind, number> = { start: 10, end: 10, office: 5, pickup: 30, drop: 30, rider: 20, request: 25, me: 40 };
+const kindZ: Record<MarkerKind, number> = { start: 10, end: 10, office: 5, pickup: 30, drop: 30, rider: 20, request: 25, me: 40, sos: 3000 };
 
 function fitTo(m: google.maps.Map, routes: MapRoute[], markers: MapMarker[], focusId: string | null) {
   const b = new google.maps.LatLngBounds();
@@ -230,6 +292,8 @@ function pinElement(p: MapMarker): HTMLElement {
     wrap.append(pill);
   } else if (p.kind === "rider" || p.kind === "request") {
     wrap.textContent = text.slice(0, 2).toUpperCase();
+  } else if (p.kind === "sos") {
+    wrap.textContent = "SOS";
   } else if (p.kind === "office") {
     wrap.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C8F560" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16M16 9h2a2 2 0 0 1 2 2v10M2 21h20M8 7h4M8 11h4M8 15h4"/></svg>';
   }

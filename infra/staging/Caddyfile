@@ -1,0 +1,23 @@
+# HTTPS certificates are fetched automatically (Let's Encrypt) once DNS points at this server.
+{$DOMAIN} {
+	encode zstd gzip
+	header -Server
+
+	# API and live updates go straight to the API servers (round-robin over every replica).
+	handle /api/* {
+		reverse_proxy {
+			dynamic a api 4000
+			lb_policy round_robin
+			health_uri /api/v1/health
+		}
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+}
+
+# Signed links to driver documents.
+files.{$DOMAIN} {
+	reverse_proxy storage:9000
+}

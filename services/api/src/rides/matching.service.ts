@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { DEFAULT_ORG_SETTINGS, type OrgSettings, type RideMatch, type RideSearch } from '@rydo/shared';
+import { DEFAULT_ORG_SETTINGS, orgFeatures, type OrgFeatures, type OrgSettings, type RideMatch, type RideSearch } from '@rydo/shared';
 import { PrismaService } from '../prisma/prisma.service';
 
 interface Row {
@@ -43,9 +43,14 @@ const clamp = (x: number) => Math.max(0, Math.min(1, x));
 export class MatchingService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async settings(organizationId: string): Promise<OrgSettings> {
+  /** The company's ride rules with RYDO's feature switches applied on top (a switched-off feature wins). */
+  async settings(organizationId: string): Promise<OrgSettings & { features: OrgFeatures }> {
     const org = await this.prisma.organization.findUniqueOrThrow({ where: { id: organizationId } });
-    return { ...DEFAULT_ORG_SETTINGS, ...(org.settings as Partial<OrgSettings>) };
+    const features = orgFeatures(org.features);
+    const s = { ...DEFAULT_ORG_SETTINGS, ...(org.settings as Partial<OrgSettings>) };
+    if (!features.womenOnly) s.womenOnlyEnabled = false;
+    if (!features.costShare) s.costPerKmEstimate = null;
+    return { ...s, features };
   }
 
   async search(org: { organizationId: string; membershipId: string }, s: RideSearch, opts: { onlyRideIds?: string[]; excludeRideIds?: string[] } = {}): Promise<RideMatch[]> {

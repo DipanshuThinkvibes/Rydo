@@ -52,9 +52,18 @@ export class MembersController {
     return m;
   }
 
+  /** RYDO sets a seat limit per client (their plan). Approving past it is refused. */
+  private async checkSeatLimit(organizationId: string) {
+    const org = await this.prisma.organization.findUniqueOrThrow({ where: { id: organizationId }, select: { maxEmployees: true } });
+    if (org.maxEmployees == null) return;
+    const active = await this.prisma.membership.count({ where: { organizationId, status: 'ACTIVE' } });
+    if (active >= org.maxEmployees) throw new AppError('SEAT_LIMIT', `Your RYDO plan allows ${org.maxEmployees} active employees. Contact RYDO to add more.`, 409);
+  }
+
   private async decide(auth: AuthContext, org: OrgContext, id: string, status: 'ACTIVE' | 'REJECTED') {
     const m = await this.inMyCompany(org, id);
     if (m.status !== 'PENDING') throw new AppError('CONFLICT', `Already ${m.status.toLowerCase()}.`, 409);
+    if (status === 'ACTIVE') await this.checkSeatLimit(org.organizationId);
     await this.prisma.$transaction(async (tx) => {
       await tx.membership.update({ where: { id }, data: { status, decidedById: org.membershipId, decidedAt: new Date() } });
       await this.audit.log(
@@ -118,6 +127,7 @@ export class MembersController {
   async reactivate(@Auth() auth: AuthContext, @Org() org: OrgContext, @Param('id', ParseUUIDPipe) id: string) {
     const m = await this.inMyCompany(org, id);
     if (m.status !== 'SUSPENDED') throw new AppError('CONFLICT', 'Only suspended people can be reactivated.', 409);
+    await this.checkSeatLimit(org.organizationId);
     await this.prisma.membership.update({ where: { id }, data: { status: 'ACTIVE' } });
     await this.audit.log({ organizationId: org.organizationId, actorUserId: auth.userId, action: 'MEMBER_REACTIVATED', entityType: 'membership', entityId: id, before: { status: m.status }, after: { status: 'ACTIVE' } });
     return { data: { id, status: 'ACTIVE' } };

@@ -3,6 +3,7 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/bootstrap';
+import { configureRealtime } from '../src/realtime-adapter';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { MESSAGE_ADAPTER, MessageAdapter } from '../src/adapters/message.adapter';
 import { STORAGE_ADAPTER, StorageAdapter } from '../src/adapters/storage.adapter';
@@ -66,6 +67,7 @@ export async function createApp() {
     .compile();
   const app = moduleRef.createNestApplication();
   configureApp(app);
+  await configureRealtime(app);
   await app.init();
   return { app, messages, prisma: app.get(PrismaService) };
 }

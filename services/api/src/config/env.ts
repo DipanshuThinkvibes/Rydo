@@ -20,6 +20,12 @@ const schema = z.object({
   GOOGLE_MAPS_API_KEY: z.string().optional(),
   /** Background jobs (pg-boss). Off in tests, which call the job code directly. */
   JOBS_ENABLED: z.enum(['true', 'false']).default('true'),
+  /** Set when running more than one API server: live updates then pass between servers through Redis. */
+  REDIS_URL: z.string().url().optional(),
+  /** 'true' behind a reverse proxy (Caddy/Nginx/load balancer), so the real client IP is used. */
+  TRUST_PROXY: z.enum(['true', 'false']).default('false'),
+  /** Max JSON body. Small on purpose: no RYDO request needs more. */
+  BODY_LIMIT: z.string().default('100kb'),
 });
 
 export type Env = z.infer<typeof schema>;

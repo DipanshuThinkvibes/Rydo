@@ -3,7 +3,7 @@ import { Throttle } from '@nestjs/throttler';
 import { autocompleteQuerySchema, encodePolyline, routeQuerySchema, type RoutePreview } from '@rydo/shared';
 import { z } from 'zod';
 import { ZodPipe } from '../common/zod.pipe';
-import { OrgScoped } from '../tenancy/decorators';
+import { OrgOrPlatform } from '../tenancy/decorators';
 import { MAPS_ADAPTER, MapsAdapter } from '../adapters/maps.adapter';
 
 /**
@@ -11,7 +11,7 @@ import { MAPS_ADAPTER, MapsAdapter } from '../adapters/maps.adapter';
  * Pass the same `session` for the typing and the final pick: Google bills that as one search.
  */
 @Controller('maps')
-@OrgScoped()
+@OrgOrPlatform()
 export class MapsController {
   constructor(@Inject(MAPS_ADAPTER) private readonly maps: MapsAdapter) {}
 

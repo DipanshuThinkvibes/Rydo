@@ -1,29 +1,28 @@
 ---
 project: RYDO
 status: active
-last_log: 2026-11-05
+last_log: 2026-11-06
 ---
 
 # Progress
 
 ## Current state
-Phase 0 (product discovery). Owner approved the stack with changes: no Supabase (plain PostgreSQL + PostGIS), Release 1 = RYDO Share on mobile only (Android + iOS), Google Maps, every technology replaceable via adapters, built to scale and to add the web app later. The proposal doc (https://claude.ai/artifact/1y2sJ5bCMaV2jnE9cFsjGx) is updated accordingly, including a redrawn architecture diagram and 11 still-open questions. No code yet.
+Web-first build of Release 1 (RYDO Share, carpool for companies) is complete through Phase 5 on the web: admin portal, rider and driver screens with live Google maps, RYDO owner console (client onboarding, features, seat limits, support view, activity, health), Ops rides map, live trips (simulator, PIN boarding, SOS, share link, ratings), reports + CSV, company activity log, security hardening, load test, and a Docker staging kit with HTTPS and nightly backups. 99+ API e2e tests pass. Ownership model: Thinkvibes runs RYDO; clients manage only their own company.
 
 ## Milestones
-- [x] Project brain, git and Obsidian link set up
-- [x] Source documents reviewed
-- [x] Architecture proposal delivered
-- [x] Stack, first module, first platform and maps provider decided
-- [ ] Open questions 1-4 answered (team, Mac/Apple account, in-app admin OK, sign-in method)
-- [x] Clickable mobile prototype v2 (14 screens, Uber/Rapido-level flows): https://claude.ai/artifact/FSjkGmBZCtRNy61Ajd3ThR
-- [x] Phase 0 deliverables: data model (docs/phase-0/schema.prisma + 01-data-model.md), API list (02-api.md), design system (03-design-system.md)
-- [x] Phase 1 Foundation built 2026-11-05 (pending: real-phone test, CI first run)
-- [ ] Phase 4 live tracking validated on physical devices
+- [x] Project brain, git, source review, architecture proposal, prototype v2
+- [x] Phase 0 data model, API list, design system
+- [x] Phase 1 Foundation (auth, tenancy, admin web)
+- [x] Phase 2 Driver verification
+- [x] Phase 3 Rides, matching, booking + web rider/driver screens + Ops map
+- [x] Owner console (RYDO platform side)
+- [x] Phase 4 Live trips on the web (simulator; real GPS needs phones)
+- [x] Phase 5 Hardening + staging kit (staging server itself not rented yet)
+- [ ] Staging server live (owner picks and pays for a server)
+- [ ] Mobile app on the same APIs, real-phone GPS test
 - [ ] Pilot with one company
 - [ ] Release 1 in App Store + Play Store
 
 ## Start here next time
-Get answers to open questions 1-4 in section 12 of the proposal doc, then start Phase 0 deliverables: Share data model + API list, and clickable flows for Rider, Driver, HR Admin.
-
-
-
+1. Owner decision: rent a staging server (guide: docs/deploy/staging.md) and decide on PostgreSQL row-level security.
+2. Then the mobile app (Expo) on the same APIs: sign-in, Find a ride, My trips with live map, Drive with background GPS (replace the web simulator).

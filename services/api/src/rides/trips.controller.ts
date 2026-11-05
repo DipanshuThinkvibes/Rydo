@@ -5,13 +5,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AppError } from '../common/app-error';
 import { ZodPipe } from '../common/zod.pipe';
 import { Auth, Org, type AuthContext, type OrgContext } from '../common/request-context';
-import { OrgScoped } from '../tenancy/decorators';
+import { OrgScoped, RequireFeature } from '../tenancy/decorators';
 import { MatchingService } from './matching.service';
 import { BookingService } from './booking.service';
 
 /** Rider and driver actions on rides (web now, mobile later). Every query is limited to the caller's company. */
 @Controller()
 @OrgScoped()
+@RequireFeature('share')
 export class TripsController {
   constructor(
     private readonly prisma: PrismaService,
@@ -66,6 +67,7 @@ export class TripsController {
     });
     const drivers = await this.names(rows.map((b) => b.ride.driverMembershipId));
     const geo = await this.points('bookings', rows.map((b) => b.id), true);
+    const rated = new Set((await this.prisma.rating.findMany({ where: { raterMembershipId: org.membershipId, rideId: { in: rows.map((b) => b.rideId) } }, select: { rideId: true } })).map((r) => r.rideId));
     return {
       data: rows.map((b) => ({
         id: b.id, status: b.status, seats: b.seats, pickupLabel: b.pickupLabel, dropLabel: b.dropLabel, lateCancel: b.lateCancel,
@@ -75,6 +77,7 @@ export class TripsController {
         costShareEstimate: b.costShareEst ? Number(b.costShareEst) : null,
         ride: {
           id: b.ride.id, departAt: b.ride.departAt, status: b.ride.status, from: b.ride.originLabel, to: b.ride.destinationLabel, driverName: drivers.get(b.ride.driverMembershipId),
+          driverMembershipId: b.ride.driverMembershipId, ratedDriver: rated.has(b.ride.id),
           vehicle: { make: b.ride.vehicle.make, model: b.ride.vehicle.model, color: b.ride.vehicle.color, plateNumber: b.ride.vehicle.plateNumber },
         },
       })),

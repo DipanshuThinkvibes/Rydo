@@ -6,11 +6,11 @@ import { useSession } from "@/lib/session";
 
 /** Sends people to the page that matters for their role. */
 export default function Home() {
-  const { me, org, isAdmin } = useSession();
+  const { me, org, isAdmin, features, support } = useSession();
   const router = useRouter();
   useEffect(() => {
     if (!me) return;
-    router.replace(isAdmin ? "/employees" : org ? "/ride" : me.user.isPlatformAdmin ? "/platform" : "/account");
-  }, [me, org, isAdmin, router]);
+    router.replace(support ? "/employees" : isAdmin ? "/employees" : org && features.share ? "/ride" : me.user.isPlatformAdmin ? "/platform" : "/account");
+  }, [me, org, isAdmin, features.share, support, router]);
   return <p className="text-muted">Loading…</p>;
 }

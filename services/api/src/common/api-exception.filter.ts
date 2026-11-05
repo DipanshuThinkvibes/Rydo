@@ -11,6 +11,7 @@ const byStatus: Record<number, ErrorCode> = {
   403: 'FORBIDDEN',
   404: 'NOT_FOUND',
   409: 'CONFLICT',
+  413: 'PAYLOAD_TOO_LARGE',
   429: 'RATE_LIMITED',
 };
 
@@ -35,6 +36,10 @@ export class ApiExceptionFilter implements ExceptionFilter {
     } else if (err instanceof ThrottlerException) {
       status = 429;
       body = { error: { code: 'RATE_LIMITED', message: 'Too many requests. Try again shortly.' } };
+    } else if (isBodyParserError(err)) {
+      // Raised by Express before any route runs: too-large or broken JSON. The client's fault, not a crash.
+      status = err.type === 'entity.too.large' ? 413 : 400;
+      body = { error: { code: status === 413 ? 'PAYLOAD_TOO_LARGE' : 'VALIDATION_ERROR', message: status === 413 ? 'That request is too large.' : 'The request body is not valid JSON.' } };
     } else if (err instanceof HttpException) {
       status = err.getStatus();
       body = { error: { code: byStatus[status] ?? 'INTERNAL', message: err.message } };
@@ -43,4 +48,7 @@ export class ApiExceptionFilter implements ExceptionFilter {
     }
     res.status(status).json(body);
   }
+}
+function isBodyParserError(e: unknown): e is { type: string; status: number } {
+  return typeof e === 'object' && e !== null && typeof (e as { type?: unknown }).type === 'string' && (e as { type: string }).type.startsWith('entity.') && typeof (e as { status?: unknown }).status === 'number';
 }

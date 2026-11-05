@@ -15,6 +15,7 @@ export function PlaceSearch({
   leading,
   hideLabel = false,
   autoFocus = false,
+  clearOnPick = false,
 }: {
   label: string;
   onPick: (p: PlaceDetails) => void;
@@ -22,6 +23,8 @@ export function PlaceSearch({
   leading?: React.ReactNode;
   hideLabel?: boolean;
   autoFocus?: boolean;
+  /** Empty the box after a pick (for "add another" lists). */
+  clearOnPick?: boolean;
 }) {
   const id = useId();
   const [query, setQuery] = useState("");
@@ -56,7 +59,7 @@ export function PlaceSearch({
 
   async function pick(s: PlaceSuggestion) {
     setOpen(false);
-    picked.current = `${s.main}, ${s.secondary}`;
+    picked.current = clearOnPick ? "" : `${s.main}, ${s.secondary}`;
     setQuery(picked.current);
     try {
       onPick(await api<PlaceDetails>("GET", `/maps/places/${encodeURIComponent(s.placeId)}?session=${session.current}`));

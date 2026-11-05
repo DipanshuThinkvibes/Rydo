@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { MembershipSummary, OrgRoleName, SetPassword, UpdateMe } from '@rydo/shared';
+import { orgFeatures, type MembershipSummary, type OrgRoleName, type SetPassword, type UpdateMe } from '@rydo/shared';
 import { AppError } from '../common/app-error';
 import { hashPassword, verifyPassword } from '../auth/password';
 import { PrismaService } from '../prisma/prisma.service';
@@ -16,14 +16,14 @@ export class MeService {
         platformRoles: true,
         memberships: {
           where: { status: { not: 'LEFT' } },
-          include: { roles: true, organization: { select: { id: true, name: true, slug: true } } },
+          include: { roles: true, organization: { select: { id: true, name: true, slug: true, features: true } } },
           orderBy: { createdAt: 'asc' },
         },
       },
     });
     const memberships: MembershipSummary[] = user.memberships.map((m) => ({
       id: m.id,
-      organization: m.organization,
+      organization: { id: m.organization.id, name: m.organization.name, slug: m.organization.slug, features: orgFeatures(m.organization.features) },
       status: m.status,
       roles: m.roles.map((r) => r.role as OrgRoleName),
     }));

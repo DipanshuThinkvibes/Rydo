@@ -12,6 +12,8 @@ export interface OrgContext {
   organizationId: string;
   membershipId: string;
   roles: OrgRoleName[];
+  /** RYDO support reading this company (no membership, read-only). */
+  support?: boolean;
 }
 
 export type RydoRequest = Request & { auth?: AuthContext; org?: OrgContext };

@@ -18,7 +18,7 @@ const PRESETS = [
 const timeField = "h-10 w-full rounded-xl border-[1.5px] border-line-strong bg-white px-2.5 text-sm font-bold outline-none focus:border-ink";
 
 export default function FindRidePage() {
-  const { org } = useSession();
+  const { org, features } = useSession();
   const offices = useOffices();
   const [days] = useState(() => Array.from({ length: 10 }, (_, i) => isoDay(i)));
   const [pickup, setPickup] = useState<Place | null>(null);
@@ -169,7 +169,7 @@ export default function FindRidePage() {
             </div>
 
             <div className="flex flex-col divide-y divide-line rounded-2xl bg-surface px-4 py-1">
-              <Toggle label="Women-only rides" hint="Only rides offered for women" checked={womenOnly} onChange={setWomenOnly} />
+              {features.womenOnly && <Toggle label="Women-only rides" hint="Only rides offered for women" checked={womenOnly} onChange={setWomenOnly} />}
               <Toggle label="Auto-rematch" hint="If a driver says no, ask the next best one for me" checked={autoRematch} onChange={setAutoRematch} />
             </div>
 

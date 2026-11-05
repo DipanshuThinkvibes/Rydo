@@ -16,6 +16,8 @@ coverage/
 .env.*
 !.env.example
 !.env.test
+!.env.load
+!.env.staging.example
 *.pem
 *.p8
 *.p12

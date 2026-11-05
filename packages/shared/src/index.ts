@@ -5,3 +5,5 @@ export * from './drivers';
 export * from './maps';
 export * from './rides';
 export * from './polyline';
+export * from './platform';
+export * from './tracking';

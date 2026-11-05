@@ -6,6 +6,7 @@ export const ERROR_CODES = [
   'NOT_FOUND',
   'CONFLICT',
   'RATE_LIMITED',
+  'PAYLOAD_TOO_LARGE',
   'INVALID_CREDENTIALS',
   'OTP_INVALID',
   'OTP_EXPIRED',
@@ -14,6 +15,12 @@ export const ERROR_CODES = [
   'ORG_REQUIRED',
   'MEMBERSHIP_NOT_ACTIVE',
   'MAPS_UNAVAILABLE',
+  'FEATURE_OFF',
+  'SEAT_LIMIT',
+  'SUPPORT_READ_ONLY',
+  'PIN_WRONG',
+  'TOO_EARLY',
+  'RIDE_NOT_LIVE',
   'INTERNAL',
 ] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number];

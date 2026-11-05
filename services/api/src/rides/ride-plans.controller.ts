@@ -1,16 +1,17 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post } from '@nestjs/common';
-import { DEFAULT_ORG_SETTINGS, ridePlanSchema, type OrgSettings, type RidePlanInput } from '@rydo/shared';
+import { DEFAULT_ORG_SETTINGS, orgFeatures, ridePlanSchema, type OrgSettings, type RidePlanInput } from '@rydo/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { AppError } from '../common/app-error';
 import { ZodPipe } from '../common/zod.pipe';
 import { Auth, Org, type AuthContext, type OrgContext } from '../common/request-context';
-import { OrgScoped } from '../tenancy/decorators';
+import { OrgScoped, RequireFeature } from '../tenancy/decorators';
 import { RideGeneratorService } from './ride-generator.service';
 
 /** A verified driver's published rides (mobile app). */
 @Controller()
 @OrgScoped()
+@RequireFeature('share')
 export class RidePlansController {
   constructor(
     private readonly prisma: PrismaService,
@@ -28,7 +29,7 @@ export class RidePlansController {
     if (b.womenOnly) {
       const company = await this.prisma.organization.findUniqueOrThrow({ where: { id: org.organizationId } });
       const settings = { ...DEFAULT_ORG_SETTINGS, ...(company.settings as Partial<OrgSettings>) };
-      if (!settings.womenOnlyEnabled) throw new AppError('VALIDATION_ERROR', 'Your company has turned off women-only rides.', 400, { womenOnly: 'Not available' });
+      if (!settings.womenOnlyEnabled || !orgFeatures(company.features).womenOnly) throw new AppError('VALIDATION_ERROR', 'Your company has turned off women-only rides.', 400, { womenOnly: 'Not available' });
     }
 
     const [row] = await this.prisma.$queryRaw<{ id: string }[]>`

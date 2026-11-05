@@ -11,6 +11,7 @@ import { Avatar, Badge, Button, EmptyState, Notice, PageHeader, Skeleton } from 
 import { Icon } from "@/components/icons";
 import { Pin, Plate } from "@/components/trip-bits";
 import { MapView, type MapMarker, type MapRoute } from "@/components/map/map-view";
+import { RiderLive, Stars, useLiveRide } from "@/components/trip-live";
 
 interface Booking {
   id: string;
@@ -24,7 +25,7 @@ interface Booking {
   pin: string | null;
   lateCancel: boolean;
   costShareEstimate: number | null;
-  ride: { id: string; departAt: string; status: string; from: string; to: string; driverName: string; vehicle: { make: string; model: string; color: string; plateNumber: string } };
+  ride: { id: string; departAt: string; status: string; from: string; to: string; driverName: string; driverMembershipId: string; ratedDriver: boolean; vehicle: { make: string; model: string; color: string; plateNumber: string } };
 }
 interface Req {
   id: string;
@@ -74,11 +75,13 @@ export default function TripsPage() {
     }
   }
 
-  const live = useMemo(() => (bookings ?? []).filter((b) => b.status === "CONFIRMED"), [bookings]);
-  const past = (bookings ?? []).filter((b) => b.status !== "CONFIRMED");
+  const live = useMemo(() => (bookings ?? []).filter((b) => (b.status === "CONFIRMED" || b.status === "BOARDED") && !["COMPLETED", "CANCELLED"].includes(b.ride.status)), [bookings]);
+  const past = (bookings ?? []).filter((b) => !live.includes(b));
+  const [rating, setRating] = useState<string | null>(null);
   const pending = requests.filter((r) => r.status === "PENDING");
   const recent = requests.filter((r) => r.status !== "PENDING" && r.status !== "ACCEPTED").slice(0, 6);
   const selected = live.find((b) => b.id === picked) ?? live[0];
+  const liveState = useLiveRide(selected?.ride.id ?? null);
 
   const routes: MapRoute[] = selected ? [{ id: selected.id, path: toPath(selected.route), active: true }] : [];
   const markers: MapMarker[] = [];
@@ -121,7 +124,7 @@ export default function TripsPage() {
                         <p className="text-sm text-muted">{b.ride.from} → {b.ride.to}</p>
                       </div>
                       <span className="flex flex-col items-end gap-1.5">
-                        <Badge tone="success">confirmed</Badge>
+                        <Badge tone="success">{b.status === "BOARDED" ? "on board" : b.ride.status === "IN_PROGRESS" ? "driver on the way" : "confirmed"}</Badge>
                         {fmtIn(until) && <Badge tone={until < 3_600_000 ? "lime" : "neutral"} dot={until < 3_600_000}>leaves {fmtIn(until)}</Badge>}
                       </span>
                     </div>
@@ -137,7 +140,8 @@ export default function TripsPage() {
                       Meet at <span className="font-extrabold">{b.pickupLabel}</span>
                       {b.costShareEstimate ? <Badge tone="neutral">est. share ₹{Math.round(b.costShareEstimate)}</Badge> : null}
                     </p>
-                    {b.pin && (
+                    {active && <RiderLive rideId={b.ride.id} state={liveState} onRated={() => fetchAll().then(show)} />}
+                    {b.pin && b.status === "CONFIRMED" && (
                       <div className="flex flex-wrap items-center gap-4 rounded-2xl bg-gradient-to-br from-surface to-surface-2 p-4">
                         <Pin pin={b.pin} />
                         <span className="flex max-w-xs items-start gap-2 text-sm text-muted">
@@ -146,7 +150,7 @@ export default function TripsPage() {
                         </span>
                       </div>
                     )}
-                    <Button
+                    {b.status === "CONFIRMED" && <Button
                       variant="ghost"
                       loading={busy === b.id}
                       disabled={!!busy}
@@ -157,7 +161,7 @@ export default function TripsPage() {
                       }}
                     >
                       Cancel booking
-                    </Button>
+                    </Button>}
                   </article>
                 );
               })}
@@ -196,9 +200,20 @@ export default function TripsPage() {
                 <h2 className="text-lg font-extrabold">Recent</h2>
                 <ul className="flex flex-col divide-y divide-line rounded-[22px] bg-white px-4 shadow-soft">
                   {past.map((b) => (
-                    <li key={b.id} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm">
-                      <span className="flex items-center gap-2"><Icon name="ticket" size={16} className="text-muted" />{fmtWhen(b.ride.departAt)} · {b.ride.driverName}</span>
-                      <Badge tone="neutral">{b.status.toLowerCase().replace(/_/g, " ")}{b.lateCancel ? " (late)" : ""}</Badge>
+                    <li key={b.id} className="flex flex-col gap-2 py-3 text-sm">
+                      <span className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="flex items-center gap-2"><Icon name="ticket" size={16} className="text-muted" />{fmtWhen(b.ride.departAt)} · {b.ride.driverName}</span>
+                        <span className="flex items-center gap-2">
+                          {b.status === "COMPLETED" && !b.ride.ratedDriver && rating !== b.id && <Button variant="soft" className="h-8 px-3" onClick={() => setRating(b.id)}>★ Rate</Button>}
+                          <Badge tone={b.status === "COMPLETED" ? "success" : "neutral"}>{b.status.toLowerCase().replace(/_/g, " ")}{b.lateCancel ? " (late)" : ""}</Badge>
+                        </span>
+                      </span>
+                      {rating === b.id && (
+                        <Stars
+                          busy={busy === `rate${b.id}`}
+                          onRate={(stars, tags) => act(`rate${b.id}`, () => api("POST", `/rides/${b.ride.id}/ratings`, { rateeMembershipId: b.ride.driverMembershipId, stars, tags }), "Thanks for rating.").then(() => setRating(null))}
+                        />
+                      )}
                     </li>
                   ))}
                   {recent.map((r) => (
@@ -216,7 +231,7 @@ export default function TripsPage() {
 
       <div className="order-first lg:order-none">
         <div className="lg:sticky lg:top-[84px]">
-          <MapView routes={routes} markers={markers} className="h-64 sm:h-80 lg:h-[calc(100vh-108px)]">
+          <MapView routes={routes} markers={markers} vehicles={liveState.location ? [{ id: "car", at: liveState.location, label: selected?.ride.driverName }] : []} followId={liveState.live?.ride.status === "IN_PROGRESS" ? "car" : null} className="h-64 sm:h-80 lg:h-[calc(100vh-108px)]">
             {selected ? (
               <span className="rounded-full bg-white/95 px-3 py-1.5 text-xs font-extrabold shadow-lift backdrop-blur">{fmtWhen(selected.ride.departAt)} · {selected.ride.driverName}</span>
             ) : bookings !== null ? (

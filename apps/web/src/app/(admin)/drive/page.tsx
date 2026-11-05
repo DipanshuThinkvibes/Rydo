@@ -183,6 +183,7 @@ function DocUpload({ kind, label, vehicleId, current, run }: { kind: Doc["kind"]
 
 function Driving({ profile, onVerifiedRoles }: { profile: Profile; onVerifiedRoles: () => Promise<void> }) {
   const offices = useOffices();
+  const { features } = useSession();
   const vehicles = profile.vehicles;
   const [rides, setRides] = useState<DrivingRide[] | null>(null);
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -362,7 +363,7 @@ function Driving({ profile, onVerifiedRoles }: { profile: Profile; onVerifiedRol
                 <Stepper label="Seats" value={plan.seats} onChange={(n) => setPlan({ ...plan, seats: n })} min={1} max={vehicle?.seatCapacity ?? 1} />
               </div>
             </div>
-            <div className="rounded-2xl bg-surface px-4 py-1">
+            <div className={`rounded-2xl bg-surface px-4 py-1 ${features.womenOnly ? "" : "hidden"}`}>
               <Toggle label="Women riders only" hint="Only women colleagues can book" checked={plan.womenOnly} onChange={(v) => setPlan({ ...plan, womenOnly: v })} />
             </div>
             <Input id="notes" label="Note for riders (optional)" maxLength={200} placeholder="e.g. Pickup from the bus stop only" value={plan.notes} onChange={(e) => setPlan({ ...plan, notes: e.target.value })} />

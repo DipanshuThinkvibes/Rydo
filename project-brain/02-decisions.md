@@ -58,3 +58,18 @@ Format: date - decision - why - rejected alternatives.
 - **Decision:** the owner has no phone for testing now. All features, including rider and driver screens, are built and tested on the web app first. The mobile app (Expo) comes after, on the same APIs.
 - **Why:** lets the owner test every flow end to end from a laptop.
 - **Impact:** the web app is no longer admin-only; employees (riders/drivers) get their own web screens. Background GPS remains mobile-only (Phase 4 tracking on web can only simulate).
+## 2026-11-06 - Ownership model: Thinkvibes runs RYDO, clients manage their own space
+Owner's words: "We are the main product owner for RYDO and we will manage this entirely... if we got clients... we need to setup for them so that they can manage on rydo."
+- Two levels, kept separate everywhere:
+  1. **RYDO platform (us, Thinkvibes):** Super Admin / Support. We run, host and maintain everything; we onboard each client (create the company, its first admin, offices, rules), switch modules on per client, watch health and usage, and help with support.
+  2. **Client company (tenant):** its own Org/HR/Ops admins manage only their own people, drivers, offices, rides and rules. A client never sees another client's data or the platform tools.
+- Phase 1 = RYDO Share (carpool) for companies. Later phases (Enterprise transport, Campus buses, payments, subscriptions) plug into the same platform + tenant split, switched on per client.
+- Consequence for the build: every feature asks two questions - what does the client admin manage, and what does the RYDO platform team need (onboarding, oversight, support, audit). The platform console must grow with each phase, not be an afterthought.
+
+## 2026-11-06 - Phase 5 hardening choices (Claude, within the owner's "build the whole phase" rule)
+- Rate limits count per person (signed-in user; sign-in per IP + email), not per IP: a whole office shares one IP. Sign-in check runs before the limiter.
+- GPS points: one partition per UTC day in schema "gps" (Prisma never sees partitions). Nightly + start-up job makes the next 7 days and drops days older than 30 (90 with SOS).
+- Realtime across several API servers via the Socket.IO Redis adapter, only when REDIS_URL is set. Staging runs 2 API replicas behind Caddy.
+- Row-level security NOT added yet: needs per-request transactions (more DB round trips). Kept for the owner to decide before production; today's wall is the API tenant guard + cross-company tests.
+- npm audit: remaining warnings all need major upgrades (NestJS 12, Prisma 7, Zod 4, Expo); not exploitable as used (no multer fileFilter; 100 KB body cap). Upgrades planned as their own task.
+- Staging = one Docker server (compose), Caddy HTTPS, nightly pg_dump kept 14 days; the server itself is the owner's paid choice.

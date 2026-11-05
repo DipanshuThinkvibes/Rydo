@@ -207,12 +207,20 @@ model Organization {
   timezone     String    @default("Asia/Kolkata")
   // Ride rules, editable by Org Admin on web. Defaults live in code; see 01-data-model.md
   settings     Json      @default("{}")
+  // Set by RYDO (platform owner), never by the client: modules and feature switches. Defaults in @rydo/shared.
+  features     Json      @default("{}")
+  maxEmployees Int?      @map("max_employees")       // seat limit from the client's plan; null = no limit
+  contactName  String?   @map("contact_name")
+  contactEmail String?   @map("contact_email")
+  contactPhone String?   @map("contact_phone")
+  notes        String?                                // internal RYDO notes, never shown to the client
   createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
   updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz
 
   offices     Office[]
   departments Department[]
   memberships Membership[]
+  supportGrants SupportGrant[]
 
   @@map("organizations")
 }
@@ -795,4 +803,45 @@ model AuditLog {
   @@index([organizationId, createdAt])
   @@index([entityType, entityId])
   @@map("audit_logs")
+}
+
+
+/// Time-boxed, read-only access for RYDO support to one client's admin screens. Every grant is audited.
+model SupportGrant {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  reason         String
+  expiresAt      DateTime  @map("expires_at") @db.Timestamptz
+  endedAt        DateTime? @map("ended_at") @db.Timestamptz
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([userId, organizationId, expiresAt])
+  @@map("support_grants")
+}
+
+/// Daily count of paid vendor calls (e.g. Google Maps) for the platform health page. Day is India date.
+model UsageDaily {
+  day      DateTime @db.Date
+  provider String
+  sku      String
+  count    Int      @default(0)
+
+  @@id([day, provider, sku])
+  @@map("usage_daily")
+}
+
+/// Read-only live trip link a rider shares with family. Only a hash of the token is stored.
+model TripShare {
+  id        String   @id @default(uuid()) @db.Uuid
+  rideId    String   @map("ride_id") @db.Uuid
+  bookingId String   @map("booking_id") @db.Uuid
+  tokenHash String   @unique @map("token_hash")
+  expiresAt DateTime @map("expires_at") @db.Timestamptz
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([rideId])
+  @@map("trip_shares")
 }

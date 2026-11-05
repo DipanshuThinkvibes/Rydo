@@ -5,6 +5,7 @@ import { STORAGE_ADAPTER } from './storage.adapter';
 import { S3StorageAdapter } from './s3-storage.adapter';
 import { MAPS_ADAPTER } from './maps.adapter';
 import { GoogleMapsAdapter } from './google-maps.adapter';
+import { CountingMapsAdapter, UsageService } from './counting-maps.adapter';
 import { JOB_QUEUE } from './job-queue';
 import { PgBossJobQueue } from './pg-boss-job-queue';
 
@@ -14,9 +15,12 @@ import { PgBossJobQueue } from './pg-boss-job-queue';
   providers: [
     { provide: MESSAGE_ADAPTER, useClass: SmtpMessageAdapter },
     { provide: STORAGE_ADAPTER, useClass: S3StorageAdapter },
-    { provide: MAPS_ADAPTER, useClass: GoogleMapsAdapter },
+    UsageService,
+    GoogleMapsAdapter,
+    // Google Maps, with every paid call counted for the RYDO health page.
+    { provide: MAPS_ADAPTER, useFactory: (g: GoogleMapsAdapter, u: UsageService) => new CountingMapsAdapter(g, u, 'google'), inject: [GoogleMapsAdapter, UsageService] },
     { provide: JOB_QUEUE, useClass: PgBossJobQueue },
   ],
-  exports: [MESSAGE_ADAPTER, STORAGE_ADAPTER, MAPS_ADAPTER, JOB_QUEUE],
+  exports: [MESSAGE_ADAPTER, STORAGE_ADAPTER, MAPS_ADAPTER, JOB_QUEUE, UsageService],
 })
 export class AdaptersModule {}

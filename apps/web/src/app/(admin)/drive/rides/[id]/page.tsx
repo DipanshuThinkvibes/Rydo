@@ -11,6 +11,7 @@ import { Avatar, Badge, Button, EmptyState, Notice, Ring, Skeleton } from "@/com
 import { Icon } from "@/components/icons";
 import { Plate, Seats } from "@/components/trip-bits";
 import { MapView, type MapMarker } from "@/components/map/map-view";
+import { DriverTrip, useLiveRide } from "@/components/trip-live";
 
 interface Person { name: string; department: string | null; reliability: number; rating: number | null }
 interface Ride {
@@ -39,6 +40,7 @@ export default function ManageRidePage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [hover, setHover] = useState<string | null>(null);
   const now = useNow(1000);
+  const liveState = useLiveRide(id);
 
   const fetchRide = useCallback(() => api<Ride>("GET", `/rides/${id}/manage`), [id]);
   useEffect(() => {
@@ -115,7 +117,9 @@ export default function ManageRidePage() {
         </div>
         {msg && <Notice tone={msg.tone} onClose={() => setMsg(undefined)}>{msg.text}</Notice>}
 
-        <div className="flex flex-col gap-3">
+        <DriverTrip rideId={ride.id} status={ride.status} departAt={ride.departAt} state={liveState} onChanged={() => fetchRide().then(setRide, () => undefined)} />
+
+        {open && <div className="flex flex-col gap-3">
           <h2 className="flex items-center gap-2 text-lg font-extrabold">
             Requests {ride.requests.length > 0 && <Badge tone="warning" dot>{ride.requests.length} waiting</Badge>}
           </h2>
@@ -150,9 +154,9 @@ export default function ManageRidePage() {
               </div>
             </article>
           ))}
-        </div>
+        </div>}
 
-        <div className="flex flex-col gap-3">
+        {open && <div className="flex flex-col gap-3">
           <h2 className="flex items-center gap-3 text-lg font-extrabold">Riders <Seats booked={ride.seatsBooked} total={ride.seatsTotal} /></h2>
           {ride.riders.length === 0 && <EmptyState icon="users" title="No one booked yet">Riders who match your route will send requests here.</EmptyState>}
           {ride.riders.map((r) => (
@@ -165,7 +169,7 @@ export default function ManageRidePage() {
               <Badge tone="success">{r.status.toLowerCase()}</Badge>
             </div>
           ))}
-        </div>
+        </div>}
 
         {open && (
           <Button
@@ -185,7 +189,7 @@ export default function ManageRidePage() {
 
       <div className="order-first lg:order-none">
         <div className="lg:sticky lg:top-[84px]">
-          <MapView routes={path.length ? [{ id: ride.id, path, active: true }] : []} markers={markers} onSelect={setHover} className="h-64 sm:h-80 lg:h-[calc(100vh-108px)]">
+          <MapView routes={path.length ? [{ id: ride.id, path, active: true }] : []} markers={markers} onSelect={setHover} vehicles={liveState.location ? [{ id: "car", at: liveState.location, label: "Your car" }] : []} followId={ride.status === "IN_PROGRESS" ? "car" : null} className="h-64 sm:h-80 lg:h-[calc(100vh-108px)]">
             <span className="flex items-center gap-1.5 rounded-full bg-white/95 px-3 py-1.5 text-xs font-extrabold shadow-lift backdrop-blur"><span className="h-2.5 w-2.5 rounded-full bg-orange" /> request</span>
             <span className="flex items-center gap-1.5 rounded-full bg-white/95 px-3 py-1.5 text-xs font-extrabold shadow-lift backdrop-blur"><span className="h-2.5 w-2.5 rounded-full bg-sky" /> booked rider</span>
           </MapView>

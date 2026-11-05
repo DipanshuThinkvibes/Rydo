@@ -31,6 +31,11 @@ services:
     ports: ["9000:9000", "9001:9001"]
     volumes: [storage-data:/data]
 
+  # Only needed when you run more than one API server (REDIS_URL=redis://localhost:6379).
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+
 volumes:
   db-data:
   storage-data:

@@ -87,7 +87,7 @@ export class BookingService {
       this.prisma.membership.findUniqueOrThrow({ where: { id: org.membershipId } }),
       this.prisma.membership.findUniqueOrThrow({ where: { id: ride.driverMembershipId } }),
     ]);
-    if (driver?.approvalMode === 'AUTO_TEAM' && rider.departmentId && rider.departmentId === drv.departmentId) {
+    if (settings.features.autoAcceptTeam && driver?.approvalMode === 'AUTO_TEAM' && rider.departmentId && rider.departmentId === drv.departmentId) {
       await this.accept(ride.driverMembershipId, row.id, null);
       return { id: row.id, status: 'ACCEPTED' as const, matchScore: match.score };
     }

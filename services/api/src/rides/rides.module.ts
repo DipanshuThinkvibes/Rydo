@@ -6,5 +6,5 @@ import { MatchingService } from './matching.service';
 import { BookingService } from './booking.service';
 import { TripsController } from './trips.controller';
 
-@Module({ controllers: [RidePlansController, AdminRidesController, TripsController], providers: [RideGeneratorService, MatchingService, BookingService], exports: [RideGeneratorService, BookingService] })
+@Module({ controllers: [RidePlansController, AdminRidesController, TripsController], providers: [RideGeneratorService, MatchingService, BookingService], exports: [RideGeneratorService, BookingService, MatchingService] })
 export class RidesModule {}
