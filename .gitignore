@@ -1,0 +1,39 @@
+﻿# Dependencies
+node_modules/
+.pnpm-store/
+
+# Builds
+dist/
+build/
+.next/
+.expo/
+.turbo/
+coverage/
+*.tsbuildinfo
+
+# Environment and secrets - never commit
+.env
+.env.*
+!.env.example
+*.pem
+*.p8
+*.p12
+*.keystore
+*.jks
+google-services.json
+GoogleService-Info.plist
+
+# Editors and OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+npm-debug.log*
+
+# Word lock files
+~$*.docx
