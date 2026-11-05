@@ -18,6 +18,8 @@ Release 1 = RYDO Share (carpool) for company tenants. One PostgreSQL 16 + PostGI
 | Tracking | vehicle_locations, ride_events | Mobile writes, both read |
 | Communication & safety | messages, notifications, sos_events, issue_reports, audit_logs | Both |
 
+Release scope (decided 2026-11-05): `waitlist_entries`, `commute_days` and `preferred_drivers` stay in the schema for design, but their features ship in **Release 1.1**; their migration can wait. Masked calls are not in Release 1 (chat only).
+
 ## 2. Core ideas
 
 **User vs membership.** A `user` is a person (email, name, phone). A `membership` is that person inside one company: status, department, roles, reliability score, preferences. Everything company-specific (rides, bookings, ratings) points to the membership, never directly to the user. This keeps multi-company support free later.

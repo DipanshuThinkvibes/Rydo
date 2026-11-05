@@ -41,3 +41,12 @@ Format: date - decision - why - rejected alternatives.
 - **Ride plan -> ride -> request -> booking**; GPS, chat, events attach to the ride so Enterprise/Campus reuse the same pipeline.
 - **Fixed role enum** in Release 1 (ORG_ADMIN, HR_ADMIN, OPS_ADMIN, RIDER, DRIVER + platform SUPER_ADMIN/SUPPORT); permissions mapped in code.
 - **Web auth** via httpOnly cookies + CSRF; mobile via bearer + rotating refresh token; same auth module.
+
+## 2026-11-05 - Team and sign-in
+- **Team:** owner + 2 developers. Owner does the initial setup alone; the 2 developers join later. Why it matters: repo, README and conventions must let new devs start without hand-holding.
+- **Sign-in (owner left it to Claude):** work email + 6-digit OTP only, no passwords in Release 1. Why: matches the prototype, nothing to store or leak, company email proves employment. Password or SSO can be added later behind AuthService. `users.password_hash` stays nullable.
+## 2026-11-05 - Release 1 scope of the v2 prototype features (owner approved Claude's split)
+- **In Release 1:** ride PIN, driver request pop-up (20 s), auto-request next best match, women-only rides, no-show after 3 min wait, driver auto-accept own team, share live trip link, long-stop "Everything OK?" check.
+- **Release 1.1 (after pilot feedback):** weekly commute planner + auto-book, preferred drivers (tied to planner), waitlist.
+- **Later:** masked calls (needs a paid telephony provider); Release 1 uses in-app chat only.
+- Why: the kept items are small and drive safety/trust; the deferred ones add the most work or running cost and the app works without them.

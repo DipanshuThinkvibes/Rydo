@@ -70,11 +70,11 @@ Legend for "Who": **R** rider, **D** driver, **OA** Org Admin, **HR** HR Admin, 
 | `GET /me/requests` · `POST /requests/:id/cancel` | R | Pending requests |
 | `GET /me/bookings?status=` · `GET /bookings/:id` | R | Booking includes the 4-digit PIN for this rider only |
 | `POST /bookings/:id/cancel` | R | Warns when inside the free-cancel window |
-| `POST /waitlist` · `DELETE /waitlist/:id` | R | Alert when a matching ride appears |
-| `GET /me/commute?week=2026-W45` | R | Weekly planner |
-| `PUT /me/commute/:date` | R | Office / WFH / Leave, times, auto-book |
-| `POST /me/commute/skip-today` | R | Cancels today's bookings and tells the driver |
-| `GET/POST/DELETE /me/preferred-drivers` | R | Preferred drivers get requests first |
+| `POST /waitlist` · `DELETE /waitlist/:id` | R | **Release 1.1.** Alert when a matching ride appears |
+| `GET /me/commute?week=2026-W45` | R | **Release 1.1.** Weekly planner |
+| `PUT /me/commute/:date` | R | **Release 1.1.** Office / WFH / Leave, times, auto-book |
+| `POST /me/commute/skip-today` | R | **Release 1.1.** Cancels today's bookings and tells the driver |
+| `GET/POST/DELETE /me/preferred-drivers` | R | **Release 1.1.** Preferred drivers get requests first |
 
 ### During and after the trip
 
@@ -147,7 +147,7 @@ Connect with the access token; the server joins the socket to rooms it is allowe
 
 | Capability | R | D | HR | OPS | OA | SA |
 | --- | --- | --- | --- | --- | --- | --- |
-| Book rides, commute planner | ✓ | ✓ | ✓* | ✓* | ✓* | |
+| Book rides (commute planner from Release 1.1) | ✓ | ✓ | ✓* | ✓* | ✓* | |
 | Publish rides | | ✓ | | | | |
 | Approve employees, verify drivers | | | ✓ | | ✓ | |
 | View documents | | own | ✓ | | | |
@@ -165,8 +165,8 @@ Run behind a `JobQueue` adapter. Release 1 uses **pg-boss** (a queue stored in t
 | --- | --- |
 | Generate rides from plans (14 days ahead) | Nightly |
 | Expire requests, run auto-rematch | Every request's `expiresAt` |
-| Auto-book commute days | Sunday evening, then hourly for changes |
-| Match waitlist entries | When rides are published or seats free up |
+| Auto-book commute days (Release 1.1) | Sunday evening, then hourly for changes |
+| Match waitlist entries (Release 1.1) | When rides are published or seats free up |
 | Long-stop detector | Every 30 s per active ride |
 | Ride reminders (30 min before) | Per booking |
 | Document expiry → driver EXPIRED | Nightly |

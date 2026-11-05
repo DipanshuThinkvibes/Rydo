@@ -1,4 +1,4 @@
-﻿# Tasks
+# Tasks
 
 ## Now
 - [ ] Owner to answer open questions 1-4 (team + timeline, Mac/Apple account, in-app admin OK, sign-in method)
@@ -6,7 +6,7 @@
 ## Next
 - [ ] Phase 0: Release 1 data model (Share tables) + API endpoint list
 - [ ] Owner review of prototype v2; collect changes
-- [ ] Scope check: are these v2 features in Release 1? ride PIN, auto-request next match, waitlist, women-only rides, RideCheck long-stop prompt, share live trip, masked calls, weekly commute planner + auto-book, driver auto-accept for own team, no-show after 3 min wait
+- [x] Scope check of v2 features done 2026-11-05 (see 02-decisions.md)
 - [ ] Spike: background GPS with expo-location vs Transistor library on physical devices
 - [ ] Legal view on carpool cost sharing
 
