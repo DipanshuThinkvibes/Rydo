@@ -12,6 +12,8 @@ export const updateOrgStatusSchema = z.object({ status: z.enum(['PENDING', 'ACTI
 export const addOrgAdminSchema = z.object({
   email: z.string().trim().toLowerCase().email(),
   name: z.string().trim().min(1).max(100),
+  /** Optional first password so the admin can sign in to the web right away. */
+  password: z.string().min(8).max(200).regex(/[A-Za-z]/).regex(/\d/).optional(),
 });
 export const setRolesSchema = z.object({ roles: z.array(z.enum(ORG_ROLES)).min(1) });
 export const memberListQuerySchema = z.object({

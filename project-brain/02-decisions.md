@@ -50,3 +50,7 @@ Format: date - decision - why - rejected alternatives.
 - **Release 1.1 (after pilot feedback):** weekly commute planner + auto-book, preferred drivers (tied to planner), waitlist.
 - **Later:** masked calls (needs a paid telephony provider); Release 1 uses in-app chat only.
 - Why: the kept items are small and drive safety/trust; the deferred ones add the most work or running cost and the app works without them.
+## 2026-11-05 - Password sign-in added (changes "OTP only")
+- **Decision:** owner asked for password sign-in on the web instead of OTP. Web sign-in now defaults to email + password; "sign in with an email code" stays as a link. API: POST /auth/password/login, POST /me/password; Super Admin can give a first password when adding an Org Admin. Mobile still uses OTP for now.
+- **How:** scrypt from Node crypto (no native add-on; npm 11 blocks install scripts), one vague "Email or password is wrong." for every failure, 10 tries/min throttle. Seed gives demo admins the local-only password SEED_DEV_PASSWORD (default Rydo@2026).
+- **Open:** forgot-password flow (email code -> set new password) not built yet; HR-approved employees have no password until they set one.

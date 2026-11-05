@@ -15,6 +15,23 @@ export const otpVerifySchema = z.object({
 });
 export type OtpVerify = z.infer<typeof otpVerifySchema>;
 
+const password = z.string().min(8, 'At least 8 characters').max(200).regex(/[A-Za-z]/, 'Add a letter').regex(/\d/, 'Add a number');
+
+/** Request body for POST /auth/password/login */
+export const passwordLoginSchema = z.object({
+  email: z.string().trim().toLowerCase().email().max(254),
+  password: z.string().min(1, 'Enter your password').max(200),
+  client: z.enum(['MOBILE', 'WEB']),
+});
+export type PasswordLogin = z.infer<typeof passwordLoginSchema>;
+
+/** Request body for POST /me/password */
+export const setPasswordSchema = z.object({
+  currentPassword: z.string().max(200).optional(),
+  newPassword: password,
+});
+export type SetPassword = z.infer<typeof setPasswordSchema>;
+
 /** Request body for POST /auth/refresh (mobile; web sends the cookie) */
 export const refreshSchema = z.object({ refreshToken: z.string().min(20).optional() });
 

@@ -1,11 +1,12 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { ClientType } from '@prisma/client';
-import type { AuthResult, OtpVerify } from '@rydo/shared';
+import type { AuthResult, OtpVerify, PasswordLogin } from '@rydo/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppError } from '../common/app-error';
 import { MeService } from '../me/me.service';
 import { OtpService } from './otp.service';
 import { TokensService } from './tokens.service';
+import { DUMMY_HASH, verifyPassword } from './password';
 
 const domainOf = (email: string) => email.split('@')[1];
 const nameFromEmail = (email: string) =>
@@ -35,6 +36,16 @@ export class AuthService {
       throw new AppError('COMPANY_NOT_ON_RYDO', "Your company isn't on RYDO yet. Use your work email or ask your HR team.", HttpStatus.BAD_REQUEST);
     }
     await this.otp.send(email);
+  }
+
+  /** Email + password. One vague error for every failure so nobody can probe which emails exist. */
+  async passwordLogin(dto: PasswordLogin, userAgent?: string): Promise<AuthResult> {
+    const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    const ok = await verifyPassword(dto.password, user?.passwordHash ?? DUMMY_HASH);
+    if (!user || !user.passwordHash || !ok) throw new AppError('INVALID_CREDENTIALS', 'Email or password is wrong.', 401);
+    if (user.status === 'DISABLED') throw new AppError('FORBIDDEN', 'This account is disabled.', 403);
+    const tokens = await this.tokens.issue(user.id, dto.client as ClientType, userAgent);
+    return { ...(await this.me.summary(user.id)), accessToken: tokens.accessToken, refreshToken: tokens.refreshToken };
   }
 
   async verifyCode(dto: OtpVerify, userAgent?: string): Promise<AuthResult> {

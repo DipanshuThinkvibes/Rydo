@@ -7,6 +7,7 @@ import { AppError } from '../common/app-error';
 import { ZodPipe } from '../common/zod.pipe';
 import { Auth, type AuthContext } from '../common/request-context';
 import { PlatformAdmin } from '../tenancy/decorators';
+import { hashPassword } from '../auth/password';
 
 /** RYDO Super Admin: onboard and manage companies. */
 @Controller('admin/platform/organizations')
@@ -49,8 +50,9 @@ export class PlatformOrgsController {
   async addAdmin(@Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body(new ZodPipe(addOrgAdminSchema)) body: z.infer<typeof addOrgAdminSchema>) {
     const org = await this.prisma.organization.findUnique({ where: { id } });
     if (!org) throw new AppError('NOT_FOUND', 'Company not found.', 404);
+    const passwordHash = body.password ? await hashPassword(body.password) : undefined;
     const membership = await this.prisma.$transaction(async (tx) => {
-      const user = await tx.user.upsert({ where: { email: body.email }, update: {}, create: { email: body.email, name: body.name } });
+      const user = await tx.user.upsert({ where: { email: body.email }, update: passwordHash ? { passwordHash } : {}, create: { email: body.email, name: body.name, passwordHash } });
       const m = await tx.membership.upsert({
         where: { organizationId_userId: { organizationId: id, userId: user.id } },
         update: { status: 'ACTIVE', decidedAt: new Date() },

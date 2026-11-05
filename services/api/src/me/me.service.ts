@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import type { MembershipSummary, OrgRoleName, UpdateMe } from '@rydo/shared';
+import type { MembershipSummary, OrgRoleName, SetPassword, UpdateMe } from '@rydo/shared';
+import { AppError } from '../common/app-error';
+import { hashPassword, verifyPassword } from '../auth/password';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -29,6 +31,16 @@ export class MeService {
       user: { id: user.id, email: user.email, name: user.name, isPlatformAdmin: user.platformRoles.some((p) => p.role === 'SUPER_ADMIN') },
       memberships,
     };
+  }
+
+  /** Set a first password, or change it (then the current one is required). */
+  async setPassword(userId: string, dto: SetPassword) {
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    if (user.passwordHash && !(dto.currentPassword && (await verifyPassword(dto.currentPassword, user.passwordHash)))) {
+      throw new AppError('INVALID_CREDENTIALS', 'Your current password is wrong.', 400, { currentPassword: 'Wrong password' });
+    }
+    await this.prisma.user.update({ where: { id: userId }, data: { passwordHash: await hashPassword(dto.newPassword) } });
+    return { passwordSet: true };
   }
 
   async update(userId: string, data: UpdateMe) {

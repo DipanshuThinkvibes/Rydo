@@ -88,6 +88,35 @@ describe('Auth (email OTP)', () => {
     expect(res.body.error.code).toBe('UNAUTHENTICATED');
   });
 
+  it('signs in with a password once one is set', async () => {
+    const email = 'pass.user@acme.test';
+    const first = await signIn(app, messages, email);
+    const weak = await api(app).post('/api/v1/me/password').set('Authorization', `Bearer ${first.accessToken}`).send({ newPassword: 'short' }).expect(400);
+    expect(weak.body.error.fields.newPassword).toBeDefined();
+    await api(app).post('/api/v1/me/password').set('Authorization', `Bearer ${first.accessToken}`).send({ newPassword: 'Commute2026' }).expect(200);
+
+    const ok = await api(app).post('/api/v1/auth/password/login').send({ email, password: 'Commute2026', client: 'MOBILE' }).expect(200);
+    expect(ok.body.data.accessToken).toBeTruthy();
+
+    const row = await prisma.user.findUniqueOrThrow({ where: { email } });
+    expect(row.passwordHash).toMatch(/^scrypt\$/);
+    expect(row.passwordHash).not.toContain('Commute2026');
+
+    // Changing it needs the current password
+    await api(app).post('/api/v1/me/password').set('Authorization', `Bearer ${first.accessToken}`).send({ newPassword: 'Another2026' }).expect(400);
+  });
+
+  it('gives the same vague error for a wrong password, an unknown email and an account without a password', async () => {
+    for (const body of [
+      { email: 'pass.user@acme.test', password: 'Wrong2026' },
+      { email: 'nobody@acme.test', password: 'Commute2026' },
+      { email: 'new.joiner@acme.test', password: 'Commute2026' },
+    ]) {
+      const res = await api(app).post('/api/v1/auth/password/login').send({ ...body, client: 'MOBILE' }).expect(401);
+      expect(res.body.error).toMatchObject({ code: 'INVALID_CREDENTIALS', message: 'Email or password is wrong.' });
+    }
+  });
+
   it('web sign-in uses httpOnly cookies and enforces CSRF on changes', async () => {
     const email = 'web.admin@acme.test';
     await api(app).post('/api/v1/auth/otp/request').send({ email }).expect(200);
