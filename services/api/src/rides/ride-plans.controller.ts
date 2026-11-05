@@ -79,7 +79,8 @@ export class RidePlansController {
     const rows = await this.prisma.$queryRaw<object[]>`
       SELECT r.id, r.direction, r.origin_label AS "originLabel", r.destination_label AS "destinationLabel", r.depart_at AS "departAt",
         r.seats_total AS "seatsTotal", r.seats_booked AS "seatsBooked", r.status, r.distance_meters AS "distanceMeters", r.duration_seconds AS "durationSeconds",
-        (SELECT count(*)::int FROM ride_requests q WHERE q.ride_id = r.id AND q.status = 'PENDING' AND q.expires_at > now()) AS "pendingRequests"
+        (SELECT count(*)::int FROM ride_requests q WHERE q.ride_id = r.id AND q.status = 'PENDING' AND q.expires_at > now()) AS "pendingRequests",
+        ST_AsEncodedPolyline(ST_Simplify(r.route_line::geometry, 0.0001)) AS route
       FROM rides r WHERE r.driver_membership_id = ${org.membershipId}::uuid AND r.depart_at > now() - interval '12 hours' AND r.status <> 'CANCELLED'
       ORDER BY r.depart_at LIMIT 50`;
     return { data: rows };

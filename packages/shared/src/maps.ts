@@ -14,6 +14,19 @@ export const autocompleteQuerySchema = z.object({
   lng: z.coerce.number().min(-180).max(180).optional(),
 });
 
+/** Route preview between two points, e.g. while a driver publishes a ride. */
+export const routeQuerySchema = z.object({
+  fromLat: z.coerce.number().min(-90).max(90),
+  fromLng: z.coerce.number().min(-180).max(180),
+  toLat: z.coerce.number().min(-90).max(90),
+  toLng: z.coerce.number().min(-180).max(180),
+});
+export interface RoutePreview {
+  route: string;
+  distanceMeters: number;
+  durationSeconds: number;
+}
+
 export interface PlaceSuggestion {
   placeId: string;
   main: string;

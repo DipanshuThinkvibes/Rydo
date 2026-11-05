@@ -1,6 +1,7 @@
 import { INestApplication } from '@nestjs/common';
 import { OrgRole } from '@prisma/client';
 import { api, createApp, FakeMessages, resetDb, signIn } from './helpers';
+import { decodePolyline } from '@rydo/shared';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { RideGeneratorService } from '../src/rides/ride-generator.service';
 import { DocumentExpiryService } from '../src/drivers/document-expiry.service';
@@ -61,6 +62,15 @@ describe('Ride plans and generation', () => {
     await api(app).get('/api/v1/maps/autocomplete?q=Bellandur&session=abcdefgh1234').set({ Authorization: `Bearer ${tokens.rahul}` }).expect(400);
   });
 
+  it('previews a road route as an encoded line', async () => {
+    const res = await api(app).get('/api/v1/maps/route?fromLat=12.9116&fromLng=77.6474&toLat=12.9259&toLng=77.6766').set(as('rahul', 'A')).expect(200);
+    const path = decodePolyline(res.body.data.route);
+    expect(path[0].lat).toBeCloseTo(12.9116, 4);
+    expect(path[path.length - 1].lng).toBeCloseTo(77.6766, 4);
+    expect(res.body.data.distanceMeters).toBeGreaterThan(1000);
+    await api(app).get('/api/v1/maps/route?fromLat=500&fromLng=1&toLat=1&toLng=1').set(as('rahul', 'A')).expect(400);
+  });
+
   it('only verified drivers can publish', async () => {
     const res = await api(app).post('/api/v1/ride-plans').set(as('neha', 'A')).send(plan('neha')).expect(403);
     expect(res.body.error.message).toMatch(/verified/);
@@ -97,6 +107,7 @@ describe('Ride plans and generation', () => {
   it('the driver sees upcoming rides and plans', async () => {
     const driving = (await api(app).get('/api/v1/rides/driving').set(as('rahul', 'A')).expect(200)).body.data;
     expect(driving.length).toBeGreaterThan(0);
+    expect(decodePolyline(driving[0].route).length).toBeGreaterThan(1);
     const mine = (await api(app).get('/api/v1/ride-plans/mine').set(as('rahul', 'A')).expect(200)).body.data;
     expect(mine[0]).toMatchObject({ id: planId, departTime: '08:30', returnTime: '18:30', active: true });
   });

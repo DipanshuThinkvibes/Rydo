@@ -46,10 +46,14 @@ export interface RideMatch {
   seatsLeft: number;
   womenOnly: boolean;
   alreadyRequested: boolean;
+  /** My own open request on this ride, if any (ACCEPTED = I'm booked). */
+  requestStatus: 'PENDING' | 'ACCEPTED' | null;
   driver: { membershipId: string; name: string; rating: number | null; ratingCount: number };
   vehicle: { type: 'CAR' | 'BIKE'; make: string; model: string; color: string; plateNumber: string; hasAc: boolean };
   from: string;
   to: string;
+  /** The driver's road route as an encoded polyline (simplified for maps). */
+  route: string | null;
 }
 
 export const rideRequestSchema = z.object({

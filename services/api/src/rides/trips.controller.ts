@@ -65,9 +65,11 @@ export class TripsController {
       take: 30,
     });
     const drivers = await this.names(rows.map((b) => b.ride.driverMembershipId));
+    const geo = await this.points('bookings', rows.map((b) => b.id), true);
     return {
       data: rows.map((b) => ({
         id: b.id, status: b.status, seats: b.seats, pickupLabel: b.pickupLabel, dropLabel: b.dropLabel, lateCancel: b.lateCancel,
+        pickup: geo.get(b.id)?.pickup ?? null, drop: geo.get(b.id)?.drop ?? null, route: geo.get(b.id)?.route ?? null,
         // The PIN is only for the rider, and only while the booking is live.
         pin: b.status === 'CONFIRMED' ? b.pin : null,
         costShareEstimate: b.costShareEst ? Number(b.costShareEst) : null,
@@ -96,13 +98,19 @@ export class TripsController {
     });
     if (!ride) throw new AppError('NOT_FOUND', 'Ride not found.', 404);
     const people = await this.people([...ride.bookings.map((b) => b.riderMembershipId), ...ride.requests.map((r) => r.riderMembershipId)]);
+    const [bGeo, rGeo, [line]] = await Promise.all([
+      this.points('bookings', ride.bookings.map((b) => b.id)),
+      this.points('ride_requests', ride.requests.map((r) => r.id)),
+      this.prisma.$queryRaw<{ route: string | null }[]>`SELECT ST_AsEncodedPolyline(ST_Simplify(route_line::geometry, 0.00003)) AS route FROM rides WHERE id = ${ride.id}::uuid`,
+    ]);
     return {
       data: {
         id: ride.id, status: ride.status, departAt: ride.departAt, from: ride.originLabel, to: ride.destinationLabel, direction: ride.direction,
         seatsTotal: ride.seatsTotal, seatsBooked: ride.seatsBooked, distanceMeters: ride.distanceMeters, durationSeconds: ride.durationSeconds,
+        route: line?.route ?? null,
         vehicle: { make: ride.vehicle.make, model: ride.vehicle.model, plateNumber: ride.vehicle.plateNumber },
-        riders: ride.bookings.map((b) => ({ bookingId: b.id, status: b.status, seats: b.seats, pickupLabel: b.pickupLabel, dropLabel: b.dropLabel, ...people.get(b.riderMembershipId) })),
-        requests: ride.requests.map((r) => ({ requestId: r.id, seats: r.seats, pickupLabel: r.pickupLabel, dropLabel: r.dropLabel, matchScore: r.matchScore, reasons: r.matchReasons, expiresAt: r.expiresAt, ...people.get(r.riderMembershipId) })),
+        riders: ride.bookings.map((b) => ({ bookingId: b.id, status: b.status, seats: b.seats, pickupLabel: b.pickupLabel, dropLabel: b.dropLabel, pickup: bGeo.get(b.id)?.pickup ?? null, drop: bGeo.get(b.id)?.drop ?? null, ...people.get(b.riderMembershipId) })),
+        requests: ride.requests.map((r) => ({ requestId: r.id, seats: r.seats, pickupLabel: r.pickupLabel, dropLabel: r.dropLabel, matchScore: r.matchScore, reasons: r.matchReasons, createdAt: r.createdAt, expiresAt: r.expiresAt, pickup: rGeo.get(r.id)?.pickup ?? null, drop: rGeo.get(r.id)?.drop ?? null, ...people.get(r.riderMembershipId) })),
       },
     };
   }
@@ -127,6 +135,22 @@ export class TripsController {
   }
 
   // ── helpers ──
+
+  /** Pickup/drop map points for bookings or requests (Prisma cannot read PostGIS columns), plus the ride route if asked. */
+  private async points(table: 'bookings' | 'ride_requests', ids: string[], withRoute = false) {
+    type P = { id: string; pLat: number; pLng: number; dLat: number; dLng: number; route: string | null };
+    if (!ids.length) return new Map<string, { pickup: { lat: number; lng: number }; drop: { lat: number; lng: number }; route: string | null }>();
+    const rows =
+      table === 'bookings'
+        ? await this.prisma.$queryRaw<P[]>`
+            SELECT x.id, ST_Y(x.pickup::geometry) AS "pLat", ST_X(x.pickup::geometry) AS "pLng", ST_Y(x."drop"::geometry) AS "dLat", ST_X(x."drop"::geometry) AS "dLng",
+              CASE WHEN ${withRoute} THEN ST_AsEncodedPolyline(ST_Simplify(r.route_line::geometry, 0.00003)) END AS route
+            FROM bookings x JOIN rides r ON r.id = x.ride_id WHERE x.id = ANY(${ids}::uuid[])`
+        : await this.prisma.$queryRaw<P[]>`
+            SELECT x.id, ST_Y(x.pickup::geometry) AS "pLat", ST_X(x.pickup::geometry) AS "pLng", ST_Y(x."drop"::geometry) AS "dLat", ST_X(x."drop"::geometry) AS "dLng", NULL::text AS route
+            FROM ride_requests x WHERE x.id = ANY(${ids}::uuid[])`;
+    return new Map(rows.map((p) => [p.id, { pickup: { lat: p.pLat, lng: p.pLng }, drop: { lat: p.dLat, lng: p.dLng }, route: p.route }]));
+  }
 
   private async names(ids: string[]) {
     const ms = await this.prisma.membership.findMany({ where: { id: { in: [...new Set(ids)] } }, include: { user: { select: { name: true } } } });

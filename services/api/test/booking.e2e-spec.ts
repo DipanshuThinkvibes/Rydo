@@ -1,5 +1,6 @@
 import { INestApplication } from '@nestjs/common';
 import { Gender, OrgRole } from '@prisma/client';
+import { decodePolyline } from '@rydo/shared';
 import { api, createApp, FakeMessages, resetDb, signIn } from './helpers';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { BookingService } from '../src/rides/booking.service';
@@ -87,6 +88,7 @@ describe('Matching and booking', () => {
       expect(rahul.reasons[0]).toMatch(/m from the route|right by/);
       expect(rahul.driver.name).toBe('rahul person');
       expect(rahul.pickupDistanceMeters).toBeGreaterThan(50);
+      expect(decodePolyline(rahul.route).length).toBeGreaterThan(1);
     });
 
     it('finds nothing far from the route or in the wrong direction', async () => {
@@ -127,6 +129,8 @@ describe('Matching and booking', () => {
       const manage = (await api(app).get(`/api/v1/rides/${rahulRide}/manage`).set(as('rahul')).expect(200)).body.data;
       expect(manage.requests[0]).toMatchObject({ requestId: priyaRequest, name: 'priya person', pickupLabel: '27th Main bus stop' });
       expect(manage.requests[0]).not.toHaveProperty('email');
+      expect(manage.requests[0].pickup.lat).toBeCloseTo(NEAR.lat, 4);
+      expect(decodePolyline(manage.route).length).toBeGreaterThan(1);
     });
 
     it('accepting creates a booking with a 4-digit PIN that only the rider sees', async () => {
@@ -134,6 +138,8 @@ describe('Matching and booking', () => {
       const bookings = (await api(app).get('/api/v1/me/bookings').set(as('priya')).expect(200)).body.data;
       expect(bookings[0]).toMatchObject({ id: res.body.data.bookingId, status: 'CONFIRMED' });
       expect(bookings[0].pin).toMatch(/^\d{4}$/);
+      expect(bookings[0].drop.lng).toBeCloseTo(OFFICE.lng, 4);
+      expect(bookings[0].route).toEqual(expect.any(String));
       expect((await prisma.ride.findUniqueOrThrow({ where: { id: rahulRide } })).seatsBooked).toBe(1);
       expect(messages.sent.some((m) => m.to === 'priya@a.test' && /accepted your ride/.test(m.subject))).toBe(true);
       const manage = (await api(app).get(`/api/v1/rides/${rahulRide}/manage`).set(as('rahul'))).body.data;

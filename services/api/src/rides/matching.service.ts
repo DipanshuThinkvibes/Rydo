@@ -26,8 +26,9 @@ interface Row {
   hasAc: boolean;
   rating: number | null;
   ratingCount: number;
-  already: boolean;
+  requestStatus: 'PENDING' | 'ACCEPTED' | null;
   timezone: string;
+  route: string | null;
 }
 
 /**
@@ -70,8 +71,9 @@ export class MatchingService {
         v.type::text AS type, v.make, v.model, v.color, v.plate_number AS "plateNumber", v.has_ac AS "hasAc",
         (SELECT avg(stars)::float FROM ratings WHERE ratee_membership_id = m.id) AS rating,
         (SELECT count(*)::int FROM ratings WHERE ratee_membership_id = m.id) AS "ratingCount",
-        EXISTS (SELECT 1 FROM ride_requests x WHERE x.ride_id = r.id AND x.rider_membership_id = ${org.membershipId}::uuid AND x.status IN ('PENDING', 'ACCEPTED')) AS already,
-        o.timezone
+        (SELECT x.status::text FROM ride_requests x WHERE x.ride_id = r.id AND x.rider_membership_id = ${org.membershipId}::uuid AND x.status IN ('PENDING', 'ACCEPTED') ORDER BY x.created_at DESC LIMIT 1) AS "requestStatus",
+        o.timezone,
+        ST_AsEncodedPolyline(ST_Simplify(r.route_line::geometry, 0.00003)) AS route
       FROM rides r
       CROSS JOIN q
       JOIN organizations o ON o.id = r.organization_id
@@ -138,11 +140,13 @@ export class MatchingService {
       dropDistanceMeters: Math.round(r.dropM),
       seatsLeft: r.seatsLeft,
       womenOnly: r.womenOnly,
-      alreadyRequested: r.already,
+      alreadyRequested: r.requestStatus !== null,
+      requestStatus: r.requestStatus,
       driver: { membershipId: r.driverMembershipId, name: r.driverName, rating, ratingCount: r.ratingCount },
       vehicle: { type: r.type, make: r.make, model: r.model, color: r.color, plateNumber: r.plateNumber, hasAc: r.hasAc },
       from: r.originLabel,
       to: r.destinationLabel,
+      route: r.route,
     };
   }
 }

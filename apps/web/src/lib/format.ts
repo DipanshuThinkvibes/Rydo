@@ -20,3 +20,23 @@ export function nextWorkday() {
 }
 
 export const initials = (name: string) => name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
+/** "in 2 h 5 min", "in 12 min", "now", or "" once it is well past. */
+export function fmtIn(ms: number) {
+  if (ms < -60_000) return "";
+  if (ms < 60_000) return "now";
+  const m = Math.round(ms / 60_000);
+  if (m < 60) return `in ${m} min`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `in ${h} h${m % 60 ? ` ${m % 60} min` : ""}`;
+  const d = Math.round(h / 24);
+  return `in ${d} ${d === 1 ? "day" : "days"}`;
+}
+
+/** Short day label for a YYYY-MM-DD in India time: Today, Tomorrow, or "Mon 9". */
+export function dayChip(iso: string) {
+  if (iso === isoDay(0)) return { top: "Today", bottom: fmtDayNum(iso) };
+  if (iso === isoDay(1)) return { top: "Tomorrow", bottom: fmtDayNum(iso) };
+  const d = new Date(`${iso}T12:00:00+05:30`);
+  return { top: new Intl.DateTimeFormat("en-IN", { weekday: "short", timeZone: TZ }).format(d), bottom: fmtDayNum(iso) };
+}
+const fmtDayNum = (iso: string) => new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", timeZone: TZ }).format(new Date(`${iso}T12:00:00+05:30`));

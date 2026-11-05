@@ -1,6 +1,6 @@
 import { Controller, Get, Inject, Param, Query } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { autocompleteQuerySchema } from '@rydo/shared';
+import { autocompleteQuerySchema, encodePolyline, routeQuerySchema, type RoutePreview } from '@rydo/shared';
 import { z } from 'zod';
 import { ZodPipe } from '../common/zod.pipe';
 import { OrgScoped } from '../tenancy/decorators';
@@ -25,5 +25,13 @@ export class MapsController {
   @Get('places/:placeId')
   async place(@Param('placeId') placeId: string, @Query('session') session = '') {
     return { data: await this.maps.place(placeId.slice(0, 300), session.slice(0, 64)) };
+  }
+
+  /** Road route preview (driver publishing a ride). Returned as an encoded polyline. */
+  @Get('route')
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  async route(@Query(new ZodPipe(routeQuerySchema)) q: z.infer<typeof routeQuerySchema>): Promise<{ data: RoutePreview }> {
+    const r = await this.maps.route({ lat: q.fromLat, lng: q.fromLng }, { lat: q.toLat, lng: q.toLng });
+    return { data: { route: encodePolyline(r.path), distanceMeters: r.distanceMeters, durationSeconds: r.durationSeconds } };
   }
 }

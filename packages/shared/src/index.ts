@@ -4,3 +4,4 @@ export * from './errors';export * from './admin';
 export * from './drivers';
 export * from './maps';
 export * from './rides';
+export * from './polyline';
