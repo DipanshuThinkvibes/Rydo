@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { ADMIN_ROLES, type MembershipSummary } from "@rydo/shared";
+import { ADMIN_ROLES, type MembershipSummary, type OrgRoleName } from "@rydo/shared";
 import { api, selectedOrg } from "./api";
 
 interface Me {
@@ -12,9 +12,14 @@ interface Me {
 interface Session {
   loading: boolean;
   me: Me | null;
-  /** Active companies where this person holds an admin role. */
-  adminOrgs: MembershipSummary[];
+  /** Companies where this person is approved (any role). */
+  orgs: MembershipSummary[];
+  /** Companies where they still wait for HR. */
+  pending: MembershipSummary[];
   org: MembershipSummary | null;
+  /** True when the caller has any of these roles in the selected company. */
+  can: (...roles: OrgRoleName[]) => boolean;
+  isAdmin: boolean;
   chooseOrg: (orgId: string) => void;
   reload: () => Promise<void>;
   signOut: () => Promise<void>;
@@ -25,41 +30,36 @@ const Ctx = createContext<Session | null>(null);
 export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [me, setMe] = useState<Me | null>(null);
   const [loading, setLoading] = useState(true);
-  const [orgId, setOrgId] = useState<string | null>(null);
+  const [orgId, setOrgId] = useState<string | null>(() => selectedOrg.get());
 
-  const reload = useCallback(async () => {
-    try {
-      setMe(await api<Me>("GET", "/me"));
-    } catch {
-      setMe(null);
-    } finally {
-      setLoading(false);
-    }
+  const settle = useCallback((value: Me | null) => {
+    setMe(value);
+    setLoading(false);
   }, []);
+  const reload = useCallback(() => api<Me>("GET", "/me").then(settle, () => settle(null)), [settle]);
 
   useEffect(() => {
-    setOrgId(selectedOrg.get());
-    reload();
-  }, [reload]);
+    api<Me>("GET", "/me").then(settle, () => settle(null));
+  }, [settle]);
 
-  const adminOrgs = useMemo(
-    () => (me?.memberships ?? []).filter((m) => m.status === "ACTIVE" && m.roles.some((r) => ADMIN_ROLES.includes(r))),
-    [me],
-  );
-  const org = adminOrgs.find((m) => m.organization.id === orgId) ?? adminOrgs[0] ?? null;
+  const orgs = useMemo(() => (me?.memberships ?? []).filter((m) => m.status === "ACTIVE"), [me]);
+  const pending = useMemo(() => (me?.memberships ?? []).filter((m) => m.status === "PENDING"), [me]);
+  const org = orgs.find((m) => m.organization.id === orgId) ?? orgs[0] ?? null;
 
+  // Remember the company in use (also when it fell back to the first one).
   useEffect(() => {
-    if (org && org.organization.id !== orgId) {
-      selectedOrg.set(org.organization.id);
-      setOrgId(org.organization.id);
-    }
-  }, [org, orgId]);
+    if (org) selectedOrg.set(org.organization.id);
+  }, [org]);
 
+  const can = (...roles: OrgRoleName[]) => !!org && roles.some((r) => org.roles.includes(r));
   const value: Session = {
     loading,
     me,
-    adminOrgs,
+    orgs,
+    pending,
     org,
+    can,
+    isAdmin: can(...ADMIN_ROLES),
     chooseOrg: (id) => {
       selectedOrg.set(id);
       setOrgId(id);

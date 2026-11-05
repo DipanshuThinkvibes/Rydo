@@ -6,7 +6,7 @@ import "./globals.css";
 const manrope = Manrope({ variable: "--font-manrope", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "RYDO Admin",
+  title: "RYDO",
   description: "Manage your company's RYDO carpool: approvals, drivers, live rides and safety.",
 };
 

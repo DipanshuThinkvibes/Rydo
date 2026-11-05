@@ -22,10 +22,11 @@ export default function PlatformPage() {
   const [message, setMessage] = useState<string>();
   const [busy, setBusy] = useState(false);
 
-  const load = useCallback(async () => setRows(await api<Company[]>("GET", "/admin/platform/organizations")), []);
+  const fetchRows = useCallback(() => api<Company[]>("GET", "/admin/platform/organizations"), []);
+  const load = useCallback(() => fetchRows().then(setRows), [fetchRows]);
   useEffect(() => {
-    if (me?.user.isPlatformAdmin) load();
-  }, [me, load]);
+    if (me?.user.isPlatformAdmin) fetchRows().then(setRows, () => undefined);
+  }, [me, fetchRows]);
 
   if (!me?.user.isPlatformAdmin) return <p className="text-muted">Only RYDO Super Admins can see companies.</p>;
 
@@ -63,7 +64,7 @@ export default function PlatformPage() {
     <section className="flex max-w-4xl flex-col gap-6">
       <div>
         <h1 className="text-2xl font-extrabold">Companies on RYDO</h1>
-        <p className="text-sm text-muted">Employees sign up with an email from one of the company's domains.</p>
+        <p className="text-sm text-muted">Employees sign up with an email from one of the company&apos;s domains.</p>
       </div>
       <form onSubmit={create} className="grid gap-4 rounded-[18px] border border-line bg-white p-5 sm:grid-cols-2">
         <Input id="name" label="Company name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} error={fields.name} />

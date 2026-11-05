@@ -25,6 +25,14 @@ export const passwordLoginSchema = z.object({
 });
 export type PasswordLogin = z.infer<typeof passwordLoginSchema>;
 
+/** Request body for POST /auth/password/reset (code comes from POST /auth/otp/request) */
+export const passwordResetSchema = z.object({
+  email: z.string().trim().toLowerCase().email().max(254),
+  code: z.string().regex(/^\d{6}$/, 'Enter the 6-digit code'),
+  newPassword: password,
+});
+export type PasswordReset = z.infer<typeof passwordResetSchema>;
+
 /** Request body for POST /me/password */
 export const setPasswordSchema = z.object({
   currentPassword: z.string().max(200).optional(),

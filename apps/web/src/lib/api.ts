@@ -19,14 +19,15 @@ function csrfToken() {
 }
 
 async function send(method: string, path: string, body?: unknown) {
-  const headers: Record<string, string> = { "content-type": "application/json" };
+  const isForm = body instanceof FormData;
+  const headers: Record<string, string> = isForm ? {} : { "content-type": "application/json" };
   if (method !== "GET") {
     const csrf = csrfToken();
     if (csrf) headers["x-csrf-token"] = csrf;
   }
   const org = selectedOrg.get();
   if (org) headers[ORG_HEADER] = org;
-  return fetch(`/api/v1${path}`, { method, headers, credentials: "same-origin", body: body === undefined ? undefined : JSON.stringify(body) });
+  return fetch(`/api/v1${path}`, { method, headers, credentials: "same-origin", body: body === undefined ? undefined : isForm ? body : JSON.stringify(body) });
 }
 
 /** Calls the RYDO API. Refreshes the session once on 401, then throws RequestError with the API's code. */

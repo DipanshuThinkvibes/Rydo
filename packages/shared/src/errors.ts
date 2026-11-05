@@ -13,6 +13,7 @@ export const ERROR_CODES = [
   'COMPANY_NOT_ON_RYDO',
   'ORG_REQUIRED',
   'MEMBERSHIP_NOT_ACTIVE',
+  'MAPS_UNAVAILABLE',
   'INTERNAL',
 ] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number];

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, RequestError } from "@/lib/api";
 import { useSession } from "@/lib/session";
@@ -65,9 +66,9 @@ export default function SignInPage() {
     <main className="flex flex-1 items-center justify-center p-4">
       <div className="w-full max-w-md rounded-[28px] bg-white p-8 shadow-[0_10px_30px_rgba(11,20,38,.08)]">
         <Logo />
-        <h1 className="mt-8 text-2xl font-extrabold">{mode === "code" ? "Enter the code" : "Admin sign in"}</h1>
+        <h1 className="mt-8 text-2xl font-extrabold">{mode === "code" ? "Enter the code" : "Sign in to RYDO"}</h1>
         <p className="mt-1.5 text-sm text-muted">
-          {mode === "code" ? `We sent a 6-digit code to ${email}.` : "For HR, operations and company admins. Riders and drivers use the RYDO app."}
+          {mode === "code" ? `We sent a 6-digit code to ${email}.` : "Use your work email. Riders, drivers and admins all sign in here."}
         </p>
         <form className="mt-6 flex flex-col gap-4" onSubmit={submit}>
           {mode !== "code" && (
@@ -87,6 +88,11 @@ export default function SignInPage() {
           <Button type="submit" disabled={busy}>
             {busy ? "Please wait…" : mode === "email" ? "Send code" : "Sign in"}
           </Button>
+          {mode === "password" && (
+            <Link href="/forgot-password" className="text-center text-sm font-bold text-muted underline">
+              Forgot password?
+            </Link>
+          )}
           <button type="button" className="min-h-11 text-sm font-bold underline" onClick={() => switchTo(mode === "password" ? "email" : "password")}>
             {mode === "password" ? "Sign in with an email code instead" : "Sign in with a password instead"}
           </button>

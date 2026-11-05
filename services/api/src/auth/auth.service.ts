@@ -1,12 +1,12 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { ClientType } from '@prisma/client';
-import type { AuthResult, OtpVerify, PasswordLogin } from '@rydo/shared';
+import type { AuthResult, OtpVerify, PasswordLogin, PasswordReset } from '@rydo/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppError } from '../common/app-error';
 import { MeService } from '../me/me.service';
 import { OtpService } from './otp.service';
 import { TokensService } from './tokens.service';
-import { DUMMY_HASH, verifyPassword } from './password';
+import { DUMMY_HASH, hashPassword, verifyPassword } from './password';
 
 const domainOf = (email: string) => email.split('@')[1];
 const nameFromEmail = (email: string) =>
@@ -46,6 +46,17 @@ export class AuthService {
     if (user.status === 'DISABLED') throw new AppError('FORBIDDEN', 'This account is disabled.', 403);
     const tokens = await this.tokens.issue(user.id, dto.client as ClientType, userAgent);
     return { ...(await this.me.summary(user.id)), accessToken: tokens.accessToken, refreshToken: tokens.refreshToken };
+  }
+
+  /** Forgot password: the emailed code proves the inbox, then every old session is signed out. */
+  async resetPassword(dto: PasswordReset) {
+    await this.otp.verify(dto.email, dto.code);
+    const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    if (!user) throw new AppError('INVALID_CREDENTIALS', 'No RYDO account uses this email yet.', 400);
+    await this.prisma.$transaction([
+      this.prisma.user.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(dto.newPassword) } }),
+      this.prisma.session.updateMany({ where: { userId: user.id, revokedAt: null }, data: { revokedAt: new Date() } }),
+    ]);
   }
 
   async verifyCode(dto: OtpVerify, userAgent?: string): Promise<AuthResult> {

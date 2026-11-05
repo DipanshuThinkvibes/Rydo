@@ -1,1 +1,10 @@
-{ "extends": "./tsconfig.json", "include": ["src"], "exclude": ["node_modules", "dist", "test", "prisma"] }
+{
+  "extends": "./tsconfig.json",
+  "include": ["src"],
+  "exclude": ["node_modules", "dist", "test", "prisma"],
+  "watchOptions": {
+    "watchFile": "dynamicPriorityPolling",
+    "watchDirectory": "dynamicPriorityPolling",
+    "excludeDirectories": ["**/node_modules", "../../node_modules", "dist"]
+  }
+}

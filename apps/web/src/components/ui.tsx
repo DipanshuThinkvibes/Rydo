@@ -33,6 +33,40 @@ export function Input({ label, error, id, ...props }: InputHTMLAttributes<HTMLIn
   );
 }
 
+export function Select({ label, id, children, ...props }: React.SelectHTMLAttributes<HTMLSelectElement> & { label: string }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor={id} className="text-sm font-bold">
+        {label}
+      </label>
+      <select id={id} {...props} className="h-12 rounded-2xl border-[1.5px] border-line-strong bg-surface px-3 text-base font-semibold outline-none focus:border-ink focus:bg-white">
+        {children}
+      </select>
+    </div>
+  );
+}
+
+export function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+  return <div className={`rounded-[18px] border border-line bg-white p-5 ${className}`}>{children}</div>;
+}
+
+export function PageHeader({ title, sub }: { title: string; sub?: string }) {
+  return (
+    <div>
+      <h1 className="text-2xl font-extrabold">{title}</h1>
+      {sub && <p className="text-sm text-muted">{sub}</p>}
+    </div>
+  );
+}
+
+export function Notice({ tone, children }: { tone: "error" | "ok"; children: React.ReactNode }) {
+  return (
+    <p role={tone === "error" ? "alert" : "status"} className={`text-sm font-semibold ${tone === "error" ? "text-danger" : "text-success"}`}>
+      {children}
+    </p>
+  );
+}
+
 export function Badge({ tone, children }: { tone: "success" | "warning" | "neutral"; children: React.ReactNode }) {
   const tones = { success: "bg-success-bg text-success", warning: "bg-warning-bg text-warning", neutral: "bg-surface-2 text-ink" };
   return <span className={`inline-flex h-6 items-center rounded-full px-2.5 text-xs font-extrabold ${tones[tone]}`}>{children}</span>;

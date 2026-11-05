@@ -5,12 +5,47 @@
  */
 import { PrismaClient } from '@prisma/client';
 import { hashPassword } from '../src/auth/password';
+import { CreateBucketCommand, HeadBucketCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+
+/** A tiny one-page PDF with a few lines of text, used as a stand-in for scanned documents. */
+function samplePdf(lines: string[]) {
+  const text = lines.map((l, i) => `BT /F1 ${i === 0 ? 20 : 13} Tf 60 ${740 - i * 30} Td (${l.replace(/[()\\]/g, '')}) Tj ET`).join('\n');
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>',
+    `<< /Length ${Buffer.byteLength(text)} >>\nstream\n${text}\nendstream`,
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+  ];
+  let pdf = '%PDF-1.4\n';
+  const offsets: number[] = [];
+  objects.forEach((o, i) => {
+    offsets.push(Buffer.byteLength(pdf));
+    pdf += `${i + 1} 0 obj\n${o}\nendobj\n`;
+  });
+  const xref = Buffer.byteLength(pdf);
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.map((o) => `${String(o).padStart(10, '0')} 00000 n \n`).join('')}`;
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(pdf);
+}
+
+const s3 = new S3Client({
+  region: process.env.S3_REGION ?? 'ap-south-1',
+  endpoint: process.env.S3_ENDPOINT,
+  forcePathStyle: !!process.env.S3_ENDPOINT,
+  credentials: { accessKeyId: process.env.S3_ACCESS_KEY ?? '', secretAccessKey: process.env.S3_SECRET_KEY ?? '' },
+});
+const bucket = process.env.S3_BUCKET ?? 'rydo-documents';
+async function putSample(key: string, lines: string[]) {
+  await s3.send(new HeadBucketCommand({ Bucket: bucket })).catch(() => s3.send(new CreateBucketCommand({ Bucket: bucket })));
+  await s3.send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: samplePdf(lines), ContentType: 'application/pdf' }));
+}
 
 const prisma = new PrismaClient();
 
 async function main() {
   const superEmail = (process.env.SEED_SUPER_ADMIN_EMAIL ?? 'admin@rydo.local').toLowerCase();
-  // Local-only password for the admin accounts below (web sign-in). Never set on existing passwords.
+  // Local-only password for every demo account below (web sign-in). Never overwrites a password someone set.
   const devPassword = process.env.SEED_DEV_PASSWORD ?? 'Rydo@2026';
   const passwordHash = await hashPassword(devPassword);
   const withPassword = async (email: string) => prisma.user.updateMany({ where: { email, passwordHash: null }, data: { passwordHash } });
@@ -25,25 +60,55 @@ async function main() {
     create: { name: 'Acme Tech', slug: 'acme', emailDomains: ['acme.test'], status: 'ACTIVE' },
   });
 
-  const people: { email: string; name: string; status: 'ACTIVE' | 'PENDING'; roles: ('ORG_ADMIN' | 'HR_ADMIN' | 'RIDER' | 'DRIVER')[] }[] = [
+  const people: { email: string; name: string; status: 'ACTIVE' | 'PENDING'; roles: ('ORG_ADMIN' | 'HR_ADMIN' | 'RIDER' | 'DRIVER')[]; gender?: 'FEMALE' | 'MALE' }[] = [
     { email: 'hr@acme.test', name: 'Meera Iyer', status: 'ACTIVE', roles: ['ORG_ADMIN', 'HR_ADMIN', 'RIDER'] },
-    { email: 'rahul@acme.test', name: 'Rahul M.', status: 'ACTIVE', roles: ['RIDER', 'DRIVER'] },
-    { email: 'priya@acme.test', name: 'Priya S.', status: 'ACTIVE', roles: ['RIDER'] },
+    { email: 'rahul@acme.test', name: 'Rahul M.', status: 'ACTIVE', roles: ['RIDER'], gender: 'MALE' },
+    { email: 'sneha@acme.test', name: 'Sneha R.', status: 'ACTIVE', roles: ['RIDER', 'DRIVER'], gender: 'FEMALE' },
+    { email: 'priya@acme.test', name: 'Priya S.', status: 'ACTIVE', roles: ['RIDER'], gender: 'FEMALE' },
+    { email: 'arjun@acme.test', name: 'Arjun T.', status: 'ACTIVE', roles: ['RIDER'], gender: 'MALE' },
     { email: 'neha@acme.test', name: 'Neha Joshi', status: 'PENDING', roles: ['RIDER'] },
     { email: 'karthik@acme.test', name: 'Karthik S.', status: 'PENDING', roles: ['RIDER'] },
   ];
   for (const p of people) {
-    const user = await prisma.user.upsert({ where: { email: p.email }, update: {}, create: { email: p.email, name: p.name } });
+    const user = await prisma.user.upsert({ where: { email: p.email }, update: p.gender ? { gender: p.gender } : {}, create: { email: p.email, name: p.name, gender: p.gender } });
     const m = await prisma.membership.upsert({
       where: { organizationId_userId: { organizationId: acme.id, userId: user.id } },
       update: {},
       create: { organizationId: acme.id, userId: user.id, status: p.status },
     });
-    if (p.roles.includes('ORG_ADMIN') || p.roles.includes('HR_ADMIN')) await withPassword(p.email);
+    await withPassword(p.email);
     for (const role of p.roles) {
       await prisma.membershipRole.upsert({ where: { membershipId_role: { membershipId: m.id, role } }, update: {}, create: { membershipId: m.id, role } });
     }
   }
+  // Demo drivers for the HR review page: Rahul waits for verification, Sneha is verified but her license expires soon.
+  const day = 86_400_000;
+  const drivers = [
+    { email: 'rahul@acme.test', status: 'PENDING' as const, car: { make: 'Honda', model: 'City', color: 'White', plateNumber: 'KA 01 AB 1234', seatCapacity: 3 }, licenseExpiry: new Date(Date.now() + 900 * day), rcExpiry: new Date(Date.now() + 2000 * day) },
+    { email: 'sneha@acme.test', status: 'VERIFIED' as const, car: { make: 'Hyundai', model: 'i20', color: 'Grey', plateNumber: 'KA 03 MN 4521', seatCapacity: 3 }, licenseExpiry: new Date(Date.now() + 20 * day), rcExpiry: new Date(Date.now() + 1500 * day) },
+  ];
+  for (const d of drivers) {
+    const m = await prisma.membership.findFirstOrThrow({ where: { organizationId: acme.id, user: { email: d.email } }, include: { user: true } });
+    if (await prisma.driverProfile.findUnique({ where: { membershipId: m.id } })) continue;
+    const profile = await prisma.driverProfile.create({ data: { membershipId: m.id, status: d.status, verifiedAt: d.status === 'VERIFIED' ? new Date() : null } });
+    const vehicle = await prisma.vehicle.create({ data: { organizationId: acme.id, driverProfileId: profile.id, type: 'CAR', hasAc: true, isDefault: true, ...d.car } });
+    const docStatus = d.status === 'VERIFIED' ? 'APPROVED' : 'PENDING';
+    const licenseKey = `orgs/${acme.id}/drivers/${profile.id}/driving_license-sample.pdf`;
+    const rcKey = `orgs/${acme.id}/drivers/${profile.id}/vehicle_rc-sample.pdf`;
+    try {
+      await putSample(licenseKey, ['SAMPLE DRIVING LICENSE', `Name: ${m.user.name}`, 'DL No: KA0120190001234', `Valid till: ${d.licenseExpiry.toISOString().slice(0, 10)}`, 'Demo document - not real']);
+      await putSample(rcKey, ['SAMPLE REGISTRATION CERTIFICATE', `Owner: ${m.user.name}`, `Reg No: ${d.car.plateNumber}`, `${d.car.make} ${d.car.model}, ${d.car.color}`, 'Demo document - not real']);
+    } catch (e) {
+      console.warn(`Could not upload sample documents (is storage running?): ${(e as Error).message}`);
+    }
+    await prisma.document.createMany({
+      data: [
+        { organizationId: acme.id, driverProfileId: profile.id, kind: 'DRIVING_LICENSE', storageKey: licenseKey, number: 'KA0120190001234', expiresAt: d.licenseExpiry, status: docStatus },
+        { organizationId: acme.id, driverProfileId: profile.id, vehicleId: vehicle.id, kind: 'VEHICLE_RC', storageKey: rcKey, number: `RC-${d.car.plateNumber.replace(/ /g, '')}`, expiresAt: d.rcExpiry, status: docStatus },
+      ],
+    });
+  }
+
   console.log(`Seeded: super admin ${superEmail}, company "Acme Tech" (acme.test) with ${people.length} people. Admin web password: ${devPassword}`);
 }
 

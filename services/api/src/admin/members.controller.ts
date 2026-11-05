@@ -1,6 +1,6 @@
 import { Body, Controller, Get, HttpCode, Inject, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
 import { z } from 'zod';
-import { memberListQuerySchema, setRolesSchema, type OrgRoleName } from '@rydo/shared';
+import { memberListQuerySchema, setRolesSchema, updateMemberSchema, type OrgRoleName } from '@rydo/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { AppError } from '../common/app-error';
@@ -22,7 +22,11 @@ export class MembersController {
   @OrgScoped('ORG_ADMIN', 'HR_ADMIN')
   async list(@Org() org: OrgContext, @Query(new ZodPipe(memberListQuerySchema)) q: z.infer<typeof memberListQuerySchema>) {
     const rows = await this.prisma.membership.findMany({
-      where: { organizationId: org.organizationId, ...(q.status ? { status: q.status } : {}) },
+      where: {
+        organizationId: org.organizationId,
+        ...(q.status ? { status: q.status } : {}),
+        ...(q.q ? { user: { OR: [{ name: { contains: q.q, mode: 'insensitive' } }, { email: { contains: q.q, mode: 'insensitive' } }] } } : {}),
+      },
       include: { user: { select: { name: true, email: true } }, roles: true, department: { select: { name: true } } },
       orderBy: { createdAt: 'desc' },
       take: 200,
@@ -33,6 +37,7 @@ export class MembersController {
         name: m.user.name,
         email: m.user.email,
         department: m.department?.name ?? null,
+        departmentId: m.departmentId,
         status: m.status,
         roles: m.roles.map((r) => r.role),
         joinedAt: m.createdAt,
@@ -75,6 +80,47 @@ export class MembersController {
   @OrgScoped('ORG_ADMIN', 'HR_ADMIN')
   reject(@Auth() auth: AuthContext, @Org() org: OrgContext, @Param('id', ParseUUIDPipe) id: string) {
     return this.decide(auth, org, id, 'REJECTED');
+  }
+
+  @Patch(':id')
+  @OrgScoped('ORG_ADMIN', 'HR_ADMIN')
+  async update(@Auth() auth: AuthContext, @Org() org: OrgContext, @Param('id', ParseUUIDPipe) id: string, @Body(new ZodPipe(updateMemberSchema)) body: z.infer<typeof updateMemberSchema>) {
+    const m = await this.inMyCompany(org, id);
+    if (body.departmentId) {
+      const dept = await this.prisma.department.findFirst({ where: { id: body.departmentId, organizationId: org.organizationId } });
+      if (!dept) throw new AppError('NOT_FOUND', 'Department not found.', 404);
+    }
+    await this.prisma.membership.update({ where: { id }, data: { departmentId: body.departmentId } });
+    await this.audit.log({ organizationId: org.organizationId, actorUserId: auth.userId, action: 'MEMBER_DEPARTMENT_CHANGED', entityType: 'membership', entityId: id, before: { departmentId: m.departmentId }, after: body });
+    return { data: { id, departmentId: body.departmentId } };
+  }
+
+  /** Suspended people keep their history but lose access to the company at once. */
+  @Post(':id/suspend')
+  @HttpCode(200)
+  @OrgScoped('ORG_ADMIN', 'HR_ADMIN')
+  async suspend(@Auth() auth: AuthContext, @Org() org: OrgContext, @Param('id', ParseUUIDPipe) id: string) {
+    const m = await this.inMyCompany(org, id);
+    if (id === org.membershipId) throw new AppError('CONFLICT', "You can't suspend yourself.", 409);
+    if (m.status !== 'ACTIVE') throw new AppError('CONFLICT', `Only active people can be suspended (this one is ${m.status.toLowerCase()}).`, 409);
+    if (m.roles.some((r) => r.role === 'ORG_ADMIN')) {
+      const admins = await this.prisma.membershipRole.count({ where: { role: 'ORG_ADMIN', membership: { organizationId: org.organizationId, status: 'ACTIVE' } } });
+      if (admins <= 1) throw new AppError('CONFLICT', 'A company needs at least one Org Admin.', 409);
+    }
+    await this.prisma.membership.update({ where: { id }, data: { status: 'SUSPENDED' } });
+    await this.audit.log({ organizationId: org.organizationId, actorUserId: auth.userId, action: 'MEMBER_SUSPENDED', entityType: 'membership', entityId: id, before: { status: m.status }, after: { status: 'SUSPENDED' } });
+    return { data: { id, status: 'SUSPENDED' } };
+  }
+
+  @Post(':id/reactivate')
+  @HttpCode(200)
+  @OrgScoped('ORG_ADMIN', 'HR_ADMIN')
+  async reactivate(@Auth() auth: AuthContext, @Org() org: OrgContext, @Param('id', ParseUUIDPipe) id: string) {
+    const m = await this.inMyCompany(org, id);
+    if (m.status !== 'SUSPENDED') throw new AppError('CONFLICT', 'Only suspended people can be reactivated.', 409);
+    await this.prisma.membership.update({ where: { id }, data: { status: 'ACTIVE' } });
+    await this.audit.log({ organizationId: org.organizationId, actorUserId: auth.userId, action: 'MEMBER_REACTIVATED', entityType: 'membership', entityId: id, before: { status: m.status }, after: { status: 'ACTIVE' } });
+    return { data: { id, status: 'ACTIVE' } };
   }
 
   @Patch(':id/roles')

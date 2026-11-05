@@ -18,6 +18,8 @@ const schema = z.object({
   S3_SECRET_KEY: z.string().default(''),
   S3_BUCKET: z.string().default('rydo-documents'),
   GOOGLE_MAPS_API_KEY: z.string().optional(),
+  /** Background jobs (pg-boss). Off in tests, which call the job code directly. */
+  JOBS_ENABLED: z.enum(['true', 'false']).default('true'),
 });
 
 export type Env = z.infer<typeof schema>;

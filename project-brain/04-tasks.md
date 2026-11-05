@@ -23,3 +23,11 @@
 - [x] Update proposal with owner decisions: no Supabase, Share-only, mobile-first, Google Maps, replaceable tech (2026-10-29)
 
 
+
+## Build plan (web-first, agreed direction 2026-11-05)
+1. Phase 1 wrap-up (web): forgot password; Org Admin settings (name, logo, email domains, ride rules); offices and departments; role management screen; employee search.
+2. Phase 2 Verification: API for driver profile, vehicles, document upload (signed URLs); web HR review queue (view license/RC, verify, ask re-upload, expiry alerts).
+3. Phase 3 Rides: ride plans + nightly ride generation (pg-boss), Google Maps adapter, PostGIS matching, requests/bookings with seat locking and ride PIN; web Ops ride list + ride detail. Needs Google Maps API key.
+4. Phase 4 Live: Socket.IO tracking, web live map, SOS alerts, long-stop check. Mobile background GPS needs real phones.
+5. Phase 5 Hardening + staging: reports/CSV, audit log viewer, RLS, load + security tests, deploy to a staging server, backups.
+6. Mobile catch-up on the same APIs, device testing, pilot.

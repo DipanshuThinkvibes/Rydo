@@ -1,11 +1,16 @@
-/** Maps, places and routing. Google Maps implementation arrives in Phase 3; nothing else may call a maps vendor. */
-export interface LatLng {
-  lat: number;
-  lng: number;
+import type { LatLng, PlaceDetails, PlaceSuggestion } from '@rydo/shared';
+
+export interface RouteResult {
+  distanceMeters: number;
+  durationSeconds: number;
+  /** The road path, decoded, first point = origin. */
+  path: LatLng[];
 }
+
+/** Maps, places and routing. Only adapters may call a maps vendor. */
 export interface MapsAdapter {
-  autocomplete(query: string, sessionToken: string, near?: LatLng): Promise<{ placeId: string; label: string }[]>;
-  place(placeId: string, sessionToken: string): Promise<{ label: string; location: LatLng }>;
-  route(origin: LatLng, destination: LatLng, stops?: LatLng[]): Promise<{ distanceMeters: number; durationSeconds: number; polyline: LatLng[] }>;
+  autocomplete(query: string, sessionToken: string, near?: LatLng): Promise<PlaceSuggestion[]>;
+  place(placeId: string, sessionToken: string): Promise<PlaceDetails>;
+  route(origin: LatLng, destination: LatLng, stops?: LatLng[]): Promise<RouteResult>;
 }
 export const MAPS_ADAPTER = Symbol('MAPS_ADAPTER');

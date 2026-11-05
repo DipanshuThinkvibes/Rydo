@@ -54,3 +54,7 @@ Format: date - decision - why - rejected alternatives.
 - **Decision:** owner asked for password sign-in on the web instead of OTP. Web sign-in now defaults to email + password; "sign in with an email code" stays as a link. API: POST /auth/password/login, POST /me/password; Super Admin can give a first password when adding an Org Admin. Mobile still uses OTP for now.
 - **How:** scrypt from Node crypto (no native add-on; npm 11 blocks install scripts), one vague "Email or password is wrong." for every failure, 10 tries/min throttle. Seed gives demo admins the local-only password SEED_DEV_PASSWORD (default Rydo@2026).
 - **Open:** forgot-password flow (email code -> set new password) not built yet; HR-approved employees have no password until they set one.
+## 2026-11-05 - Build everything on the web first, mobile app after (supersedes "web = admins only")
+- **Decision:** the owner has no phone for testing now. All features, including rider and driver screens, are built and tested on the web app first. The mobile app (Expo) comes after, on the same APIs.
+- **Why:** lets the owner test every flow end to end from a laptop.
+- **Impact:** the web app is no longer admin-only; employees (riders/drivers) get their own web screens. Background GPS remains mobile-only (Phase 4 tracking on web can only simulate).

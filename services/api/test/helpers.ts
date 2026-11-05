@@ -5,6 +5,9 @@ import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/bootstrap';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { MESSAGE_ADAPTER, MessageAdapter } from '../src/adapters/message.adapter';
+import { STORAGE_ADAPTER, StorageAdapter } from '../src/adapters/storage.adapter';
+import { MAPS_ADAPTER, MapsAdapter } from '../src/adapters/maps.adapter';
+import type { LatLng } from '@rydo/shared';
 
 /** Captures emails instead of sending them, so tests can read OTP codes. */
 export class FakeMessages implements MessageAdapter {
@@ -18,11 +21,48 @@ export class FakeMessages implements MessageAdapter {
   }
 }
 
+/** In-memory file store, so tests (and CI) need no S3 server. */
+export class FakeStorage implements StorageAdapter {
+  files = new Map<string, { body: Buffer; contentType: string }>();
+  async put(key: string, body: Buffer, contentType: string) {
+    this.files.set(key, { body, contentType });
+  }
+  async signedUploadUrl(key: string) {
+    return `https://files.test/upload/${key}`;
+  }
+  async signedReadUrl(key: string) {
+    return `https://files.test/${key}`;
+  }
+}
+
+/** Straight-line "roads" so tests need no Google key. */
+export class FakeMaps implements MapsAdapter {
+  calls = 0;
+  async autocomplete(query: string) {
+    return [{ placeId: 'fake-1', main: query, secondary: 'Bengaluru, Karnataka' }];
+  }
+  async place(placeId: string) {
+    return { placeId, label: 'Fake place', address: 'Fake address, Bengaluru', lat: 12.93, lng: 77.62 };
+  }
+  async route(a: LatLng, b: LatLng) {
+    this.calls++;
+    const r = 6371000, rad = (d: number) => (d * Math.PI) / 180;
+    const h = Math.sin(rad(b.lat - a.lat) / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(rad(b.lng - a.lng) / 2) ** 2;
+    const distanceMeters = Math.round(2 * r * Math.asin(Math.sqrt(h)));
+    const mid = { lat: (a.lat + b.lat) / 2, lng: (a.lng + b.lng) / 2 };
+    return { distanceMeters, durationSeconds: Math.round(distanceMeters / 8), path: [a, mid, b] };
+  }
+}
+
 export async function createApp() {
   const messages = new FakeMessages();
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(MESSAGE_ADAPTER)
     .useValue(messages)
+    .overrideProvider(STORAGE_ADAPTER)
+    .useValue(new FakeStorage())
+    .overrideProvider(MAPS_ADAPTER)
+    .useValue(new FakeMaps())
     .compile();
   const app = moduleRef.createNestApplication();
   configureApp(app);

@@ -1,7 +1,7 @@
 import { Body, Controller, HttpCode, Post, Req, Res } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
-import { otpRequestSchema, otpVerifySchema, passwordLoginSchema, refreshSchema, type AuthResult, type OtpRequest, type OtpVerify, type PasswordLogin } from '@rydo/shared';
+import { otpRequestSchema, otpVerifySchema, passwordLoginSchema, passwordResetSchema, refreshSchema, type AuthResult, type OtpRequest, type OtpVerify, type PasswordLogin, type PasswordReset } from '@rydo/shared';
 import { ZodPipe } from '../common/zod.pipe';
 import { AppError } from '../common/app-error';
 import { Auth, type AuthContext, type RydoRequest } from '../common/request-context';
@@ -52,6 +52,15 @@ export class AuthController {
   @HttpCode(200)
   async passwordLogin(@Body(new ZodPipe(passwordLoginSchema)) body: PasswordLogin, @Req() req: RydoRequest, @Res({ passthrough: true }) res: Response) {
     return this.respond(body.client, await this.auth.passwordLogin(body, req.headers['user-agent']), res);
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('password/reset')
+  @HttpCode(200)
+  async resetPassword(@Body(new ZodPipe(passwordResetSchema)) body: PasswordReset) {
+    await this.auth.resetPassword(body);
+    return { data: { passwordSet: true } };
   }
 
   @Public()
