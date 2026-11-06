@@ -6,6 +6,8 @@ import { BookingService } from '../rides/booking.service';
 import { DriversModule } from '../drivers/drivers.module';
 import { DocumentExpiryService } from '../drivers/document-expiry.service';
 import { TripService } from '../tracking/trip.service';
+import { WaitlistService } from '../commute/waitlist.service';
+import { CommuteService } from '../commute/commute.service';
 
 const TZ = 'Asia/Kolkata';
 
@@ -20,10 +22,18 @@ export class JobsRegistry implements OnApplicationBootstrap {
     private readonly expiry: DocumentExpiryService,
     private readonly booking: BookingService,
     private readonly trips: TripService,
+    private readonly waitlist: WaitlistService,
+    private readonly commute: CommuteService,
   ) {}
 
   async onApplicationBootstrap() {
-    await this.jobs.work('rides.generate', async () => this.log.log(`Generated ${await this.rides.generateAll()} rides`));
+    await this.jobs.work('rides.generate', async () => {
+      this.log.log(`Generated ${await this.rides.generateAll()} rides`);
+      this.log.log(`Waitlist: ${await this.waitlist.checkAll()} matched after generation`);
+    });
+    // Evening: book the next two days for everyone with auto-book on (commute planner).
+    await this.jobs.work('commute.autobook', async () => this.log.log(`Commute planner: ${await this.commute.planAll(2)} legs handled`));
+    await this.jobs.schedule('commute.autobook', '0 19 * * *', TZ);
     await this.jobs.schedule('rides.generate', '30 0 * * *', TZ);
     await this.jobs.work('documents.expiry', async () => this.log.log(`Document expiry: ${JSON.stringify(await this.expiry.run())}`));
     await this.jobs.schedule('documents.expiry', '0 1 * * *', TZ);

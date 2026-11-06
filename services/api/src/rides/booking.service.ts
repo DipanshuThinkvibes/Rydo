@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { randomInt } from 'crypto';
 import type { RideRequestInput } from '@rydo/shared';
 import { PrismaService } from '../prisma/prisma.service';
@@ -7,6 +7,7 @@ import { AppError } from '../common/app-error';
 import { NotificationsService } from '../notifications/notifications.service';
 import { JOB_QUEUE, JobQueue } from '../adapters/job-queue';
 import { MatchingService } from './matching.service';
+import { WaitlistService } from '../commute/waitlist.service';
 
 interface OrgRef {
   organizationId: string;
@@ -40,6 +41,7 @@ export class BookingService {
     private readonly notify: NotificationsService,
     private readonly matching: MatchingService,
     @Inject(JOB_QUEUE) private readonly jobs: JobQueue,
+    @Inject(forwardRef(() => WaitlistService)) private readonly waitlist: WaitlistService,
   ) {}
 
   // ── Rider asks for seats ──
@@ -228,9 +230,11 @@ export class BookingService {
       await tx.$executeRaw`UPDATE rides SET seats_booked = seats_booked - ${b.seats}, status = CASE WHEN status = 'FULL' THEN 'SCHEDULED'::"RideStatus" ELSE status END, updated_at = now() WHERE id = ${ride.id}::uuid`;
       if (late) await this.lowerReliability(tx, org.membershipId);
       await this.audit.log({ organizationId: org.organizationId, actorUserId, action: 'BOOKING_CANCELLED', entityType: 'booking', entityId: b.id, after: { late, reason } }, tx);
-      return { late, driverMembershipId: ride.driverMembershipId };
+      return { late, driverMembershipId: ride.driverMembershipId, rideId: ride.id };
     });
     await this.notify.notifyMembership(result.driverMembershipId, { type: 'BOOKING_CANCELLED', title: `${await name(this.prisma, org.membershipId)} cancelled their seat`, body: reason ?? 'A seat is free again on your ride.', data: { bookingId }, email: true });
+    // A seat is free again: offer it to people on the waitlist (first come, first served).
+    await this.waitlist.check(org.organizationId, { onlyRideIds: [result.rideId] }).catch((e) => this.log.warn(`waitlist after cancel: ${(e as Error).message}`));
     return { late: result.late };
   }
 

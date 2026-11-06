@@ -7,6 +7,7 @@ import { ZodPipe } from '../common/zod.pipe';
 import { Auth, Org, type AuthContext, type OrgContext } from '../common/request-context';
 import { OrgScoped, RequireFeature } from '../tenancy/decorators';
 import { RideGeneratorService } from './ride-generator.service';
+import { WaitlistService } from '../commute/waitlist.service';
 
 /** A verified driver's published rides (mobile app). */
 @Controller()
@@ -17,6 +18,7 @@ export class RidePlansController {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly generator: RideGeneratorService,
+    private readonly waitlist: WaitlistService,
   ) {}
 
   @Post('ride-plans')
@@ -42,6 +44,8 @@ export class RidePlansController {
         ${b.seats}, ${b.womenOnly}, ${b.notes ?? null}, true, now(), now())
       RETURNING id`;
     const rides = await this.generator.generateForPlan(row.id);
+    // New seats: people waiting for this route and time get them first.
+    await this.waitlist.check(org.organizationId).catch(() => undefined);
     await this.audit.log({ organizationId: org.organizationId, actorUserId: auth.userId, action: 'RIDE_PLAN_PUBLISHED', entityType: 'ride_plan', entityId: row.id, after: b });
     return { data: { id: row.id, ridesCreated: rides } };
   }

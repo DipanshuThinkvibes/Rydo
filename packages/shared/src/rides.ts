@@ -48,6 +48,8 @@ export interface RideMatch {
   alreadyRequested: boolean;
   /** My own open request on this ride, if any (ACCEPTED = I'm booked). */
   requestStatus: 'PENDING' | 'ACCEPTED' | null;
+  /** The rider saved this driver as a preferred driver. */
+  preferred: boolean;
   driver: { membershipId: string; name: string; rating: number | null; ratingCount: number };
   vehicle: { type: 'CAR' | 'BIKE'; make: string; model: string; color: string; plateNumber: string; hasAc: boolean };
   from: string;

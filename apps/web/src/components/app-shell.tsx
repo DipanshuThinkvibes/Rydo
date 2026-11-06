@@ -17,6 +17,7 @@ const groups: { title?: string; items: NavItem[] }[] = [
     items: [
       { href: "/ride", label: "Find a ride", icon: "search", member: true },
       { href: "/trips", label: "My trips", icon: "ticket", member: true },
+      { href: "/commute", label: "My week", icon: "calendar", member: true },
       { href: "/drive", label: "Drive", icon: "wheel", member: true },
     ],
   },

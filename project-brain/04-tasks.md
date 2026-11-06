@@ -10,7 +10,6 @@
 - [ ] Off-server backup copies + uptime monitor on staging
 - [ ] Major upgrades to clear npm audit warnings: NestJS 12, Prisma 7 (prisma.config.ts), Zod 4, Expo 52+
 - [ ] Faster hot paths if needed: /me does several queries; one API process handles ~190-360 req/s (run 2+ processes)
-- [ ] Release 1.1: commute planner, preferred drivers, waitlist
 - [ ] Legal view on carpool cost sharing
 
 ## Later
@@ -18,6 +17,7 @@
 - [ ] Masked calls; Enterprise module; Campus module; payments and subscriptions (switched on per client in the owner console)
 
 ## Done (recent)
+- [x] Release 1.1: preferred drivers, waitlist, commute planner (My week) (2026-11-06)
 - [x] Phase 5: GPS day partitions, Redis option, reports + CSV, company activity log, per-person rate limits, security tests, load test, Docker staging kit + backups (2026-11-06)
 - [x] Phase 4: live trips, Socket.IO, simulator, SOS, long stop, off-route, share link, ratings (2026-11-06)
 - [x] Owner console + Ops rides map (2026-11-06)

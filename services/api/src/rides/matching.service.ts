@@ -29,6 +29,7 @@ interface Row {
   requestStatus: 'PENDING' | 'ACCEPTED' | null;
   timezone: string;
   route: string | null;
+  preferred: boolean;
 }
 
 /**
@@ -78,7 +79,8 @@ export class MatchingService {
         (SELECT count(*)::int FROM ratings WHERE ratee_membership_id = m.id) AS "ratingCount",
         (SELECT x.status::text FROM ride_requests x WHERE x.ride_id = r.id AND x.rider_membership_id = ${org.membershipId}::uuid AND x.status IN ('PENDING', 'ACCEPTED') ORDER BY x.created_at DESC LIMIT 1) AS "requestStatus",
         o.timezone,
-        ST_AsEncodedPolyline(ST_Simplify(r.route_line::geometry, 0.00003)) AS route
+        ST_AsEncodedPolyline(ST_Simplify(r.route_line::geometry, 0.00003)) AS route,
+        EXISTS (SELECT 1 FROM preferred_drivers pd WHERE pd.rider_membership_id = ${org.membershipId}::uuid AND pd.driver_membership_id = m.id) AS preferred
       FROM rides r
       CROSS JOIN q
       JOIN organizations o ON o.id = r.organization_id
@@ -123,7 +125,8 @@ export class MatchingService {
       rating: rating ? clamp((rating - 1) / 4) : 0.8,
       type: s.vehicleType ? 1 : 0.9,
     };
-    const score = Math.round(100 * (W.pickup * parts.pickup + W.time * parts.time + W.drop * parts.drop + W.rating * parts.rating + W.type * parts.type));
+    // A driver the rider saved as preferred gets +10 (capped at 100), so they come first among similar rides.
+    const score = Math.min(100, Math.round(100 * (W.pickup * parts.pickup + W.time * parts.time + W.drop * parts.drop + W.rating * parts.rating + W.type * parts.type)) + (r.preferred ? 10 : 0));
 
     const time = (d: Date) => new Intl.DateTimeFormat('en-IN', { hour: 'numeric', minute: '2-digit', timeZone: r.timezone }).format(d);
     const reasons = [
@@ -133,6 +136,7 @@ export class MatchingService {
       rating ? `Rated ${rating.toFixed(1)} (${r.ratingCount} rides)` : 'New driver, verified by HR',
     ];
     if (r.womenOnly) reasons.push('Women-only ride');
+    if (r.preferred) reasons.unshift('Your preferred driver');
 
     return {
       rideId: r.id,
@@ -152,6 +156,7 @@ export class MatchingService {
       from: r.originLabel,
       to: r.destinationLabel,
       route: r.route,
+      preferred: r.preferred,
     };
   }
 }

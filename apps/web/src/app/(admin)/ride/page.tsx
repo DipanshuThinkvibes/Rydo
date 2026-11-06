@@ -35,12 +35,50 @@ export default function FindRidePage() {
   const [msg, setMsg] = useState<{ tone: "ok" | "error"; text: string }>();
   const [busy, setBusy] = useState(false);
   const [requesting, setRequesting] = useState<string | null>(null);
+  const [fav, setFav] = useState<Record<string, boolean>>({});
+  const [autoAsk, setAutoAsk] = useState(true);
+  const [waiting, setWaiting] = useState<"idle" | "busy" | "done">("idle");
+
+  async function toggleFav(m: RideMatch) {
+    const on = !(fav[m.driver.membershipId] ?? m.preferred);
+    setFav((f) => ({ ...f, [m.driver.membershipId]: on }));
+    try {
+      if (on) await api("POST", "/me/preferred-drivers", { driverMembershipId: m.driver.membershipId });
+      else await api("DELETE", `/me/preferred-drivers/${m.driver.membershipId}`);
+      setMsg({ tone: "ok", text: on ? `${m.driver.name.replace(/\.$/, "")} is now a preferred driver. Their rides show first.` : "Removed from preferred drivers." });
+    } catch (err) {
+      setFav((f) => ({ ...f, [m.driver.membershipId]: !on }));
+      setMsg({ tone: "error", text: err instanceof RequestError ? err.message : "That didn't work." });
+    }
+  }
+
+  async function joinWaitlist() {
+    if (!pickup || !drop) return;
+    setWaiting("busy");
+    try {
+      const w = await api<{ status: string }>("POST", "/me/waitlist", { pickup, drop, date, fromTime: from, toTime: to, seats, vehicleType: vehicleType || undefined, womenOnly, autoRequest: autoAsk });
+      setWaiting("done");
+      setMsg({
+        tone: "ok",
+        text:
+          w.status === "MATCHED"
+            ? "A seat just opened, and we sent the request for you. See My trips."
+            : autoAsk
+              ? "You're on the waitlist. When a seat opens we'll ask the driver for you."
+              : "You're on the waitlist. We'll tell you when a seat opens.",
+      });
+    } catch (err) {
+      setWaiting("idle");
+      setMsg({ tone: "error", text: err instanceof RequestError ? err.message : "That didn't work." });
+    }
+  }
   const [selected, setSelected] = useState<string | null>(null);
   const [hovered, setHovered] = useState<string | null>(null);
   const [spin, setSpin] = useState(0);
 
   async function search(e: React.FormEvent) {
     e.preventDefault();
+    setWaiting("idle");
     if (!pickup || !drop) return setMsg({ tone: "error", text: "Choose both pickup and drop." });
     setBusy(true);
     setMsg(undefined);
@@ -196,7 +234,13 @@ export default function FindRidePage() {
                 {results.length} {results.length === 1 ? "ride matches" : "rides match"} · {fmtDay(`${date}T12:00:00+05:30`)}
               </p>
             )}
-            {results.length === 0 && <EmptyState icon="search" title="No rides match yet">Try a wider time window or another day. New rides are published every day.</EmptyState>}
+            {results.length === 0 && <EmptyState icon="search" title="No rides match yet">Try a wider time window or another day, or join the waitlist below.</EmptyState>}
+            <div className="flex animate-rise flex-col gap-3 rounded-[22px] border-[1.5px] border-dashed border-line-strong bg-white/70 p-4">
+              <p className="flex items-center gap-2 font-extrabold"><Icon name="clock" size={18} /> {results.length ? "Nothing quite right?" : "Join the waitlist"}</p>
+              <p className="text-sm text-muted">When a seat opens on this route and time (a cancellation or a new ride), you get it first.</p>
+              <div className="rounded-2xl bg-surface px-4 py-1"><Toggle label="Send the seat request for me" hint="Off: just tell me" checked={autoAsk} onChange={setAutoAsk} /></div>
+              <Button variant="ghost" className="self-start" loading={waiting === "busy"} disabled={waiting === "done"} onClick={joinWaitlist}>{waiting === "done" ? "On the waitlist" : "Join waitlist"}</Button>
+            </div>
             {results.map((m, i) => {
               const state = requested[m.rideId] ?? m.requestStatus ?? undefined;
               const active = m.rideId === activeId;
@@ -221,6 +265,14 @@ export default function FindRidePage() {
                         {m.vehicle.color} {m.vehicle.make} {m.vehicle.model} <Plate plate={m.vehicle.plateNumber} />
                       </span>
                     </span>
+                    {(() => {
+                      const on = fav[m.driver.membershipId] ?? m.preferred;
+                      return (
+                        <button type="button" onClick={(e) => (e.stopPropagation(), toggleFav(m))} aria-pressed={on} aria-label={on ? "Remove preferred driver" : "Save as preferred driver"} title={on ? "Preferred driver" : "Save as preferred driver"} className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-lg transition-transform hover:scale-110 ${on ? "bg-red-50 text-danger" : "bg-surface-2 text-muted"}`}>
+                          {on ? "♥" : "♡"}
+                        </button>
+                      );
+                    })()}
                     <Ring value={m.score / 100} tone={i === 0 ? "lime" : "ink"}>
                       <span className="text-sm font-extrabold">{m.score}<span className="text-[10px]">%</span></span>
                     </Ring>
