@@ -27,6 +27,8 @@ services:
       RUSTFS_VOLUMES: /data
       RUSTFS_ACCESS_KEY: rydo
       RUSTFS_SECRET_KEY: rydo-secret
+      # Must match S3_REGION in services/api/.env, or creating the bucket fails (RustFS 1.0.5+).
+      RUSTFS_REGION: ap-south-1
       RUSTFS_CONSOLE_ENABLE: "true"
     ports: ["9000:9000", "9001:9001"]
     volumes: [storage-data:/data]
