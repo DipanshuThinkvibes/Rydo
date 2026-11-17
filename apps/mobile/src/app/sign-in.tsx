@@ -1,17 +1,39 @@
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { AuthResult } from '@rydo/shared';
 import { colors } from '@rydo/ui-tokens';
 import { api, RequestError } from '@/lib/api';
 import { useSession } from '@/lib/session';
-import { Button, Field, s } from '@/components/ui';
+import { Button, Field, Logo, Notice, s } from '@/components/ui';
+
+/** Same three ways in as the web sign-in: password (default), email a code, enter the code. */
+type Mode = 'password' | 'email' | 'code';
+
+/** The dashed pickup route from the web hero, built from plain views. */
+function RouteArt() {
+  return (
+    <View style={{ height: 96, justifyContent: 'center' }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+        <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: colors.white, borderWidth: 4, borderColor: colors.ink }} />
+        {Array.from({ length: 9 }).map((_, i) => (
+          <View key={i} style={{ width: 14, height: 5, borderRadius: 3, backgroundColor: colors.lime, opacity: 0.35 + i * 0.08 }} />
+        ))}
+        <View style={{ width: 22, height: 22, borderRadius: 6, backgroundColor: colors.ink, borderWidth: 3, borderColor: colors.lime }} />
+      </View>
+      <View style={{ position: 'absolute', top: 10, left: 90, height: 28, paddingHorizontal: 16, borderRadius: 14, backgroundColor: colors.lime, justifyContent: 'center' }}>
+        <Text style={{ fontSize: 13, fontWeight: '800', color: colors.ink }}>Pickup</Text>
+      </View>
+    </View>
+  );
+}
 
 export default function SignIn() {
   const { signedIn } = useSession();
-  const [step, setStep] = useState<'email' | 'code'>('email');
+  const [mode, setMode] = useState<Mode>('password');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -28,44 +50,75 @@ export default function SignIn() {
     }
   }
 
+  const finish = async (result: AuthResult) => {
+    await signedIn(result);
+    router.replace('/');
+  };
+
+  function submit() {
+    if (mode === 'password') {
+      run(async () => finish(await api<AuthResult>('POST', '/auth/password/login', { email, password, client: 'MOBILE' })));
+    } else if (mode === 'email') {
+      run(async () => {
+        await api('POST', '/auth/otp/request', { email });
+        setMode('code');
+      });
+    } else {
+      run(async () => finish(await api<AuthResult>('POST', '/auth/otp/verify', { email, code, client: 'MOBILE' })));
+    }
+  }
+
+  const switchTo = (m: Mode) => {
+    setMode(m);
+    setError(undefined);
+    setCode('');
+  };
+
+  const ready = mode === 'password' ? !!email && !!password : mode === 'email' ? !!email : code.length === 6;
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.ink }}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
-          <View style={{ padding: 24, paddingTop: 40, gap: 14, flex: 1, justifyContent: 'flex-end' }}>
-            <Text style={{ color: colors.lime, fontSize: 22, fontWeight: '800', letterSpacing: 4 }}>RYDO</Text>
-            <Text style={{ color: colors.white, fontSize: 36, fontWeight: '800', lineHeight: 40 }}>Your office commute, shared.</Text>
-            <Text style={{ color: colors.mutedOnDark, fontSize: 16, lineHeight: 24 }}>Ride with verified colleagues going your way.</Text>
+          {/* Dark hero, like the web side panel */}
+          <View style={{ flex: 1, minHeight: 250, padding: 24, paddingTop: 28, gap: 14, justifyContent: 'space-between', overflow: 'hidden' }}>
+            <View pointerEvents="none" style={{ position: 'absolute', right: -90, top: -90, width: 280, height: 280, borderRadius: 140, backgroundColor: colors.lime, opacity: 0.12 }} />
+            <View pointerEvents="none" style={{ position: 'absolute', left: -80, bottom: -100, width: 260, height: 260, borderRadius: 130, backgroundColor: '#2563EB', opacity: 0.18 }} />
+            <Logo light />
+            <RouteArt />
+            <View style={{ gap: 8 }}>
+              <Text style={{ color: colors.white, fontSize: 34, fontWeight: '800', lineHeight: 38 }}>Ride to work{'\n'}with your team.</Text>
+              <Text style={{ color: colors.mutedOnDark, fontSize: 15, lineHeight: 22 }}>Colleagues already driving your way, verified by HR. Share the seat, split the cost.</Text>
+            </View>
           </View>
-          <View style={{ backgroundColor: colors.white, borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 24, paddingBottom: 40, gap: 16 }}>
-            {step === 'email' ? (
-              <>
-                <Text style={s.h1}>Sign in with your work email</Text>
-                <Field label="Work email" value={email} onChangeText={setEmail} placeholder="you@company.com" keyboardType="email-address" autoCapitalize="none" autoComplete="email" textContentType="emailAddress" />
-                {error ? <Text style={s.error} accessibilityRole="alert">{error}</Text> : null}
-                <Button label="Send code" loading={busy} disabled={!email} onPress={() => run(async () => { await api('POST', '/auth/otp/request', { email }); setStep('code'); })} />
-                <Text style={{ ...s.body, fontSize: 13 }}>After you verify, your HR team approves your account before your first ride.</Text>
-              </>
-            ) : (
-              <>
-                <Text style={s.h1}>Enter the code</Text>
-                <Text style={s.body}>6 digits sent to {email}</Text>
-                <Field label="6-digit code" value={code} onChangeText={(t) => setCode(t.replace(/\D/g, '').slice(0, 6))} keyboardType="number-pad" autoComplete="one-time-code" textContentType="oneTimeCode" maxLength={6} />
-                {error ? <Text style={s.error} accessibilityRole="alert">{error}</Text> : null}
-                <Button
-                  label="Verify"
-                  loading={busy}
-                  disabled={code.length !== 6}
-                  onPress={() =>
-                    run(async () => {
-                      await signedIn(await api<AuthResult>('POST', '/auth/otp/verify', { email, code, client: 'MOBILE' }));
-                      router.replace('/');
-                    })
-                  }
-                />
-                <Button label="Change email" variant="ghost" onPress={() => { setStep('email'); setCode(''); setError(undefined); }} />
-              </>
+
+          {/* White sheet with the form, like the web sign-in card */}
+          <View style={{ backgroundColor: colors.white, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: 40, gap: 16 }}>
+            <View style={{ gap: 6 }}>
+              <Text style={s.h1}>{mode === 'code' ? 'Enter the code' : 'Sign in to RYDO'}</Text>
+              <Text style={s.body}>{mode === 'code' ? `We sent a 6-digit code to ${email}.` : 'Use your work email. Riders, drivers and admins all sign in here.'}</Text>
+            </View>
+
+            {mode !== 'code' && (
+              <Field label="Work email" value={email} onChangeText={setEmail} placeholder="you@company.com" keyboardType="email-address" autoCapitalize="none" autoCorrect={false} autoComplete="email" textContentType="emailAddress" />
             )}
+            {mode === 'password' && (
+              <Field label="Password" value={password} onChangeText={setPassword} secureTextEntry autoCapitalize="none" autoComplete="current-password" textContentType="password" onSubmitEditing={() => ready && submit()} />
+            )}
+            {mode === 'code' && (
+              <Field label="6-digit code" value={code} onChangeText={(t) => setCode(t.replace(/\D/g, '').slice(0, 6))} keyboardType="number-pad" autoComplete="one-time-code" textContentType="oneTimeCode" maxLength={6} />
+            )}
+
+            {error ? <Notice tone="error">{error}</Notice> : null}
+
+            <Button label={mode === 'email' ? 'Send code' : 'Sign in'} loading={busy} disabled={!ready} onPress={submit} />
+
+            <Pressable accessibilityRole="button" onPress={() => switchTo(mode === 'password' ? 'email' : 'password')} style={{ minHeight: 44, alignItems: 'center', justifyContent: 'center' }}>
+              <Text style={{ fontSize: 14, fontWeight: '700', color: colors.ink, textDecorationLine: 'underline' }}>
+                {mode === 'password' ? 'Sign in with an email code instead' : 'Sign in with a password instead'}
+              </Text>
+            </Pressable>
+            <Text style={{ ...s.body, fontSize: 13, textAlign: 'center' }}>After you verify, your HR team approves your account before your first ride.</Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
