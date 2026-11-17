@@ -1,8 +1,21 @@
+import Constants from 'expo-constants';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import type { ApiError, AuthResult, ErrorCode } from '@rydo/shared';
 
-const BASE = (process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:4000') + '/api/v1';
+// On a physical phone "localhost" is the phone itself. When the configured URL is local
+// (or unset), use the dev machine's LAN address that Expo already gave this device.
+function resolveApiUrl() {
+  const configured = process.env.EXPO_PUBLIC_API_URL?.replace(/\/$/, '');
+  if (configured && !/localhost|127\.0\.0\.1/.test(configured)) return configured;
+  if (Platform.OS !== 'web') {
+    const host = Constants.expoConfig?.hostUri?.split(':')[0];
+    if (host) return `http://${host}:4000`;
+  }
+  return configured || 'http://localhost:4000';
+}
+
+const BASE = resolveApiUrl() + '/api/v1';
 const KEY = { access: 'rydo.access', refresh: 'rydo.refresh' };
 
 // SecureStore keeps tokens in the iOS Keychain / Android Keystore. Web preview falls back to memory.
