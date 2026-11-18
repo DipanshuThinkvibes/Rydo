@@ -73,3 +73,8 @@ Owner's words: "We are the main product owner for RYDO and we will manage this e
 - Row-level security NOT added yet: needs per-request transactions (more DB round trips). Kept for the owner to decide before production; today's wall is the API tenant guard + cross-company tests.
 - npm audit: remaining warnings all need major upgrades (NestJS 12, Prisma 7, Zod 4, Expo); not exploitable as used (no multer fileFilter; 100 KB body cap). Upgrades planned as their own task.
 - Staging = one Docker server (compose), Caddy HTTPS, nightly pg_dump kept 14 days; the server itself is the owner's paid choice.
+
+## 2026-11-17 - Phase 1 gap APIs: free product, private chat, anonymous surveys
+- **Decision:** No payment or pricing model for now: nothing was added for payments, settlements or plans; everything is free. Ride chat is private to the driver and one confirmed rider (admins cannot read it). Survey results are anonymous. Push goes through a PushAdapter (Firebase over HTTPS, a logger when not configured). Announcement history lives in the activity log.
+- **Why:** Owner asked for all documented features except payments and pricing. Privacy: the specification allows admin access to chat only with an operational need, which is not defined yet. No package install was possible, so Firebase is called directly.
+- **Rejected:** Letting admins read chats by default; storing announcements in a new table; adding the Firebase Admin package.

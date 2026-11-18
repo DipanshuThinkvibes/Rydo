@@ -8,3 +8,4 @@ export * from './polyline';
 export * from './platform';
 export * from './tracking';
 export * from './commute';
+export * from './engagement';

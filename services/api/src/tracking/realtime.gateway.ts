@@ -1,7 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { ConnectedSocket, MessageBody, OnGatewayConnection, SubscribeMessage, WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
 import type { Server, Socket } from 'socket.io';
-import { REALTIME_PATH } from '@rydo/shared';
+import { REALTIME_PATH, chatRoom } from '@rydo/shared';
 import { TokensService } from '../auth/tokens.service';
 import { COOKIE } from '../auth/cookies';
 import { env } from '../config/env';
@@ -42,6 +42,28 @@ export class RealtimeGateway implements OnGatewayConnection, RealtimePublisher {
       socket.emit('rydo.error', { code: 'UNAUTHENTICATED' });
       socket.disconnect(true);
     }
+  }
+
+  /** Private chat room for one driver and one rider on one ride (never the shared ride room). */
+  @SubscribeMessage('chat.subscribe')
+  async chatSubscribe(@ConnectedSocket() socket: Socket, @MessageBody() body: { rideId?: string; riderMembershipId?: string }) {
+    const userId = socket.data.userId as string | undefined;
+    if (!userId || !body || typeof body.rideId !== 'string' || typeof body.riderMembershipId !== 'string') return { ok: false };
+    try {
+      if (await this.access.chatThreadForUser(userId, body.rideId, body.riderMembershipId)) {
+        await socket.join(chatRoom(body.rideId, body.riderMembershipId));
+        return { ok: true };
+      }
+    } catch (e) {
+      this.log.warn(`chat.subscribe failed: ${(e as Error).message}`);
+    }
+    return { ok: false };
+  }
+
+  @SubscribeMessage('chat.unsubscribe')
+  async chatUnsubscribe(@ConnectedSocket() socket: Socket, @MessageBody() body: { rideId?: string; riderMembershipId?: string }) {
+    if (typeof body?.rideId === 'string' && typeof body?.riderMembershipId === 'string') await socket.leave(chatRoom(body.rideId, body.riderMembershipId));
+    return { ok: true };
   }
 
   @SubscribeMessage('subscribe')

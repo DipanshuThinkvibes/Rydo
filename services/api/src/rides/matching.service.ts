@@ -19,6 +19,7 @@ interface Row {
   driverMembershipId: string;
   driverName: string;
   type: 'CAR' | 'BIKE';
+  carType: 'HATCHBACK' | 'SEDAN' | 'SUV' | null;
   make: string;
   model: string;
   color: string;
@@ -74,7 +75,7 @@ export class MatchingService {
         ((${s.date}::date + ${s.fromTime}::time) AT TIME ZONE o.timezone) AS "wantFrom",
         ((${s.date}::date + ${s.toTime}::time) AT TIME ZONE o.timezone) AS "wantTo",
         m.id AS "driverMembershipId", u.name AS "driverName",
-        v.type::text AS type, v.make, v.model, v.color, v.plate_number AS "plateNumber", v.has_ac AS "hasAc",
+        v.type::text AS type, v.car_type::text AS "carType", v.make, v.model, v.color, v.plate_number AS "plateNumber", v.has_ac AS "hasAc",
         (SELECT avg(stars)::float FROM ratings WHERE ratee_membership_id = m.id) AS rating,
         (SELECT count(*)::int FROM ratings WHERE ratee_membership_id = m.id) AS "ratingCount",
         (SELECT x.status::text FROM ride_requests x WHERE x.ride_id = r.id AND x.rider_membership_id = ${org.membershipId}::uuid AND x.status IN ('PENDING', 'ACCEPTED') ORDER BY x.created_at DESC LIMIT 1) AS "requestStatus",
@@ -98,6 +99,8 @@ export class MatchingService {
         AND ST_DWithin(r.route_line, q.p, ${radius}) AND ST_DWithin(r.route_line, q.d, ${radius})
         AND ST_LineLocatePoint(r.route_line::geometry, q.p::geometry) < ST_LineLocatePoint(r.route_line::geometry, q.d::geometry)
         AND (${s.vehicleType ?? null}::text IS NULL OR v.type::text = ${s.vehicleType ?? null}::text)
+        AND (${s.carTypes ?? null}::text[] IS NULL OR v.car_type::text = ANY(${s.carTypes ?? null}::text[]))
+        AND (${s.ac ?? null}::boolean IS NULL OR v.has_ac = ${s.ac ?? null}::boolean)
         AND (NOT r.women_only OR ${female})
         AND (NOT ${s.womenOnly} OR r.women_only)
         AND NOT EXISTS (SELECT 1 FROM user_blocks b WHERE (b.blocker_id = ${org.membershipId}::uuid AND b.blocked_id = m.id) OR (b.blocker_id = m.id AND b.blocked_id = ${org.membershipId}::uuid))
@@ -152,7 +155,7 @@ export class MatchingService {
       alreadyRequested: r.requestStatus !== null,
       requestStatus: r.requestStatus,
       driver: { membershipId: r.driverMembershipId, name: r.driverName, rating, ratingCount: r.ratingCount },
-      vehicle: { type: r.type, make: r.make, model: r.model, color: r.color, plateNumber: r.plateNumber, hasAc: r.hasAc },
+      vehicle: { type: r.type, carType: r.carType, make: r.make, model: r.model, color: r.color, plateNumber: r.plateNumber, hasAc: r.hasAc },
       from: r.originLabel,
       to: r.destinationLabel,
       route: r.route,

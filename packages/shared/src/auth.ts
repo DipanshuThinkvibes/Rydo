@@ -47,6 +47,8 @@ export const refreshSchema = z.object({ refreshToken: z.string().min(20).optiona
 export const updateMeSchema = z.object({
   name: z.string().trim().min(1).max(100).optional(),
   gender: z.enum(['FEMALE', 'MALE', 'OTHER', 'UNDISCLOSED']).optional(),
+  /** Never shown to other people. null clears it. */
+  phone: z.string().trim().regex(/^\+?[0-9 ()-]{7,20}$/, 'Enter a valid phone number').nullable().optional(),
 });
 export type UpdateMe = z.infer<typeof updateMeSchema>;
 
