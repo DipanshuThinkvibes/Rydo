@@ -1,0 +1,97 @@
+import type { Place, PlaceDetails, PlaceSuggestion, RideMatch, RideSearch, SavedPlace } from '@rydo/shared';
+import { api } from './api';
+import { addMinutes, isoDay, nowHHMM } from './format';
+import type { Office } from './types';
+
+// ── Places ──
+
+let officeCache: Office[] | null = null;
+/** The company's offices (cached for the session; every employee may read them). */
+export async function getOffices(force = false) {
+  if (!officeCache || force) officeCache = await api<Office[]>('GET', '/admin/offices');
+  return officeCache;
+}
+export const officePlace = (o: Office): Place => ({ label: o.name, lat: o.lat, lng: o.lng });
+
+// ── Saved addresses (/me/places): many homes / offices, one default each ──
+
+export const getPlaces = () => api<SavedPlace[]>('GET', '/me/places');
+export const savedPlace = (p: SavedPlace): Place => ({ label: p.name, lat: p.lat, lng: p.lng });
+export const defaultOf = (places: SavedPlace[] | undefined, label: SavedPlace['label']) =>
+  places?.find((p) => p.label === label && p.isDefault) ?? places?.find((p) => p.label === label) ?? null;
+
+/** Default home; default saved office, else the company's default office. */
+export function commuteEnds(places: SavedPlace[] | undefined, offices: Office[] | undefined) {
+  const home = defaultOf(places, 'HOME');
+  const myOffice = defaultOf(places, 'OFFICE');
+  const company = offices?.find((o) => o.isDefault) ?? offices?.[0];
+  return {
+    home: home ? savedPlace(home) : null,
+    office: myOffice ? savedPlace(myOffice) : company ? officePlace(company) : null,
+  };
+}
+
+/** One Google billing session for typing + the final pick. */
+export const newPlaceSession = () => `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+
+export const autocomplete = (q: string, session: string) => api<PlaceSuggestion[]>('GET', `/maps/autocomplete?q=${encodeURIComponent(q)}&session=${session}`);
+
+export async function placeFromSuggestion(s: PlaceSuggestion, session: string): Promise<Place> {
+  const d = await api<PlaceDetails>('GET', `/maps/places/${encodeURIComponent(s.placeId)}?session=${session}`);
+  return { label: d.label || s.main, lat: d.lat, lng: d.lng };
+}
+
+// ── Ride search draft: shared by Plan your ride → Results → Request ──
+
+export interface Draft {
+  pickup: Place | null;
+  drop: Place | null;
+  leaveNow: boolean;
+  date: string;
+  /** When the rider wants to leave (HH:mm). */
+  time: string;
+  seats: number;
+  womenOnly: boolean;
+  ac: boolean;
+  /** Only these car types; empty = any. */
+  carTypes: ('HATCHBACK' | 'SEDAN' | 'SUV')[];
+}
+
+function nextQuarter() {
+  const t = nowHHMM(20);
+  const [h, m] = t.split(':').map(Number);
+  const q = Math.ceil(m / 15) * 15;
+  return addMinutes(`${String(h).padStart(2, '0')}:00`, q);
+}
+
+const fresh = (): Draft => ({ pickup: null, drop: null, leaveNow: false, date: isoDay(1), time: '08:30', seats: 1, womenOnly: false, ac: false, carTypes: [] });
+
+export const draft: { value: Draft; search: RideSearch | null; results: RideMatch[]; chosen: RideMatch | null } = {
+  value: fresh(),
+  search: null,
+  results: [],
+  chosen: null,
+};
+
+export function updateDraft(p: Partial<Draft>) {
+  draft.value = { ...draft.value, ...p };
+}
+
+/** The search body for the API: a window from 15 min before to 45 min after the wanted time. */
+export function searchBody(d: Draft): RideSearch | null {
+  if (!d.pickup || !d.drop) return null;
+  const date = d.leaveNow ? isoDay(0) : d.date;
+  const time = d.leaveNow ? nextQuarter() : d.time;
+  const from = d.leaveNow ? nowHHMM() : addMinutes(time, -15);
+  return {
+    pickup: d.pickup,
+    drop: d.drop,
+    date,
+    fromTime: from,
+    toTime: addMinutes(time, d.leaveNow ? 60 : 45),
+    seats: d.seats,
+    womenOnly: d.womenOnly,
+    ...(d.ac ? { ac: true } : {}),
+    ...(d.carTypes.length ? { carTypes: d.carTypes } : {}),
+  };
+}

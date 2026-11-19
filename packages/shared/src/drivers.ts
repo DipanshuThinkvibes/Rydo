@@ -20,6 +20,8 @@ const plate = z
 export const vehicleSchema = z
   .object({
     type: z.enum(['CAR', 'BIKE']),
+    /** Hatchback / Sedan / SUV. Optional, cars only. */
+    carType: z.enum(['HATCHBACK', 'SEDAN', 'SUV']).optional(),
     make: z.string().trim().min(2).max(40),
     model: z.string().trim().min(1).max(40),
     color: z.string().trim().min(3).max(30),
@@ -28,7 +30,8 @@ export const vehicleSchema = z
     hasAc: z.boolean().default(true),
     isDefault: z.boolean().default(true),
   })
-  .refine((v) => v.type === 'CAR' || v.seatCapacity === 1, { message: 'A bike carries one passenger', path: ['seatCapacity'] });
+  .refine((v) => v.type === 'CAR' || v.seatCapacity === 1, { message: 'A bike carries one passenger', path: ['seatCapacity'] })
+  .refine((v) => v.type === 'CAR' || !v.carType, { message: 'Only cars have a car type', path: ['carType'] });
 export type VehicleInput = z.infer<typeof vehicleSchema>;
 
 /** Form fields sent with a document photo (multipart). */

@@ -2,11 +2,12 @@ import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import type { AuthResult } from '@rydo/shared';
+import type { AuthResult, GoogleSignInResult } from '@rydo/shared';
 import { colors } from '@rydo/ui-tokens';
 import { api, RequestError } from '@/lib/api';
 import { useSession } from '@/lib/session';
 import { Button, Field, Logo, Notice, s } from '@/components/ui';
+import { GoogleButton, googleSignInAvailable } from '@/components/google-button';
 
 /** Same three ways in as the web sign-in: password (default), email a code, enter the code. */
 type Mode = 'password' | 'email' | 'code';
@@ -68,6 +69,17 @@ export default function SignIn() {
     }
   }
 
+  /** Continue with Google: known people go straight in; new employees fill in the sign-up form. */
+  const withGoogle = (idToken: string) =>
+    run(async () => {
+      const r = await api<GoogleSignInResult>('POST', '/auth/google', { idToken, client: 'MOBILE' });
+      if (r.needsSignup) {
+        router.push({ pathname: '/signup', params: { email: r.email, name: r.name, companyId: r.companyId, company: r.companyName, googleIdToken: idToken } });
+        return;
+      }
+      await finish(r);
+    });
+
   const switchTo = (m: Mode) => {
     setMode(m);
     setError(undefined);
@@ -118,7 +130,21 @@ export default function SignIn() {
                 {mode === 'password' ? 'Sign in with an email code instead' : 'Sign in with a password instead'}
               </Text>
             </Pressable>
-            <Text style={{ ...s.body, fontSize: 13, textAlign: 'center' }}>After you verify, your HR team approves your account before your first ride.</Text>
+            {googleSignInAvailable && mode !== 'code' ? (
+              <>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <View style={{ flex: 1, height: 1, backgroundColor: colors.line }} />
+                  <Text style={{ ...s.body, fontSize: 13 }}>or</Text>
+                  <View style={{ flex: 1, height: 1, backgroundColor: colors.line }} />
+                </View>
+                <GoogleButton busy={busy} onIdToken={withGoogle} onError={setError} />
+              </>
+            ) : null}
+
+            <Pressable accessibilityRole="button" onPress={() => router.push('/signup')} style={{ minHeight: 48, borderRadius: 16, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' }}>
+              <Text style={{ fontSize: 15, fontWeight: '800', color: colors.ink }}>New to RYDO? Create an account</Text>
+            </Pressable>
+            <Text style={{ ...s.body, fontSize: 13, textAlign: 'center' }}>Your HR team approves new accounts before the first ride.</Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

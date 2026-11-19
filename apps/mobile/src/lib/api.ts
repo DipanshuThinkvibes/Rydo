@@ -1,7 +1,7 @@
 import Constants from 'expo-constants';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
-import type { ApiError, AuthResult, ErrorCode } from '@rydo/shared';
+import { ORG_HEADER, type ApiError, type AuthResult, type ErrorCode } from '@rydo/shared';
 
 // On a physical phone "localhost" is the phone itself. When the configured URL is local
 // (or unset), use the dev machine's LAN address that Expo already gave this device.
@@ -32,6 +32,10 @@ export class RequestError extends Error {
   }
 }
 
+/** Friendly text for any failed call. */
+export const errText = (e: unknown, fallback = "That didn't work. Try again.") =>
+  e instanceof RequestError ? e.message : e instanceof TypeError ? "Can't reach RYDO. Check your connection." : fallback;
+
 export const tokens = {
   save: async (t: Pick<AuthResult, 'accessToken' | 'refreshToken'>) => {
     if (t.accessToken) await store.set(KEY.access, t.accessToken);
@@ -44,11 +48,20 @@ export const tokens = {
   hasSession: async () => !!(await store.get(KEY.refresh)),
 };
 
+/** The company every company route acts on (sent as the x-org-id header). Set by the session. */
+let currentOrg: string | null = null;
+export const setApiOrg = (id: string | null) => {
+  currentOrg = id;
+};
+
 async function send(method: string, path: string, body?: unknown) {
-  const headers: Record<string, string> = { 'content-type': 'application/json' };
+  const isForm = body instanceof FormData;
+  // For FormData the phone sets the multipart boundary itself.
+  const headers: Record<string, string> = isForm ? {} : { 'content-type': 'application/json' };
   const access = await store.get(KEY.access);
   if (access) headers.authorization = `Bearer ${access}`;
-  return fetch(BASE + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+  if (currentOrg) headers[ORG_HEADER] = currentOrg;
+  return fetch(BASE + path, { method, headers, body: body === undefined ? undefined : isForm ? body : JSON.stringify(body) });
 }
 
 async function refresh() {
@@ -60,8 +73,10 @@ async function refresh() {
   return true;
 }
 
-/** Calls the RYDO API with the stored token; refreshes once on 401. */
-export async function api<T>(method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE', path: string, body?: unknown): Promise<T> {
+type Method = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
+
+/** Same as api(), but also returns `meta` (counts, paging). */
+export async function apiWithMeta<T, M = Record<string, unknown>>(method: Method, path: string, body?: unknown): Promise<{ data: T; meta: M }> {
   let res = await send(method, path, body);
   if (res.status === 401 && !path.startsWith('/auth/') && (await refresh())) res = await send(method, path, body);
   const json = await res.json().catch(() => ({}));
@@ -69,5 +84,10 @@ export async function api<T>(method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE'
     const e = (json as ApiError).error ?? { code: 'INTERNAL', message: 'Something went wrong' };
     throw new RequestError(e.code, e.message, res.status);
   }
-  return (json as { data: T }).data;
+  return { data: (json as { data: T }).data, meta: ((json as { meta?: M }).meta ?? {}) as M };
+}
+
+/** Calls the RYDO API with the stored token; refreshes once on 401. */
+export async function api<T>(method: Method, path: string, body?: unknown): Promise<T> {
+  return (await apiWithMeta<T>(method, path, body)).data;
 }

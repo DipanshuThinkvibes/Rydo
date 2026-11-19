@@ -12,6 +12,6 @@ import { AdminTripController, PublicTripController, TripController } from './tri
   imports: [AuthModule, RidesModule],
   controllers: [TripController, AdminTripController, PublicTripController],
   providers: [TripAccessService, TripService, RealtimeGateway, { provide: REALTIME, useExisting: RealtimeGateway }],
-  exports: [TripService, REALTIME],
+  exports: [TripService, TripAccessService, REALTIME],
 })
 export class TrackingModule {}

@@ -8,6 +8,8 @@ import { PrismaService } from '../src/prisma/prisma.service';
 import { MESSAGE_ADAPTER, MessageAdapter } from '../src/adapters/message.adapter';
 import { STORAGE_ADAPTER, StorageAdapter } from '../src/adapters/storage.adapter';
 import { MAPS_ADAPTER, MapsAdapter } from '../src/adapters/maps.adapter';
+import { IDENTITY_ADAPTER, type GoogleIdentity, type IdentityAdapter } from '../src/adapters/identity.adapter';
+import { AppError } from '../src/common/app-error';
 import type { LatLng } from '@rydo/shared';
 
 /** Captures emails instead of sending them, so tests can read OTP codes. */
@@ -64,6 +66,8 @@ export async function createApp() {
     .useValue(new FakeStorage())
     .overrideProvider(MAPS_ADAPTER)
     .useValue(new FakeMaps())
+    .overrideProvider(IDENTITY_ADAPTER)
+    .useValue(new FakeIdentity())
     .compile();
   const app = moduleRef.createNestApplication();
   configureApp(app);
@@ -77,6 +81,16 @@ export async function resetDb(prisma: PrismaService) {
     SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename NOT IN ('_prisma_migrations', 'spatial_ref_sys')`;
   if (tables.length) await prisma.$executeRawUnsafe(`TRUNCATE ${tables.map((t) => `"${t.tablename}"`).join(', ')} CASCADE`);
 }
+
+/** Google sign-in without Google: the token "google:<email>:<sub>[:unverified]" stands for that account. */
+export class FakeIdentity implements IdentityAdapter {
+  async verifyGoogleIdToken(idToken: string): Promise<GoogleIdentity> {
+    const [kind, email, sub, flag] = idToken.split(':');
+    if (kind !== 'google' || !email || !sub) throw new AppError('INVALID_CREDENTIALS', 'Google sign-in failed.', 401);
+    return { sub, email: email.toLowerCase(), emailVerified: flag !== 'unverified', name: 'Google Person' };
+  }
+}
+export const googleToken = (email: string, sub: string, unverified = false) => `google:${email}:${sub}${unverified ? ':unverified' : ''}`;
 
 export const api = (app: INestApplication) => request(app.getHttpServer());
 

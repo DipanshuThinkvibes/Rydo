@@ -73,3 +73,23 @@ Owner's words: "We are the main product owner for RYDO and we will manage this e
 - Row-level security NOT added yet: needs per-request transactions (more DB round trips). Kept for the owner to decide before production; today's wall is the API tenant guard + cross-company tests.
 - npm audit: remaining warnings all need major upgrades (NestJS 12, Prisma 7, Zod 4, Expo); not exploitable as used (no multer fileFilter; 100 KB body cap). Upgrades planned as their own task.
 - Staging = one Docker server (compose), Caddy HTTPS, nightly pg_dump kept 14 days; the server itself is the owner's paid choice.
+
+## 2026-11-17 - Phase 1 gap APIs: free product, private chat, anonymous surveys
+- **Decision:** No payment or pricing model for now: nothing was added for payments, settlements or plans; everything is free. Ride chat is private to the driver and one confirmed rider (admins cannot read it). Survey results are anonymous. Push goes through a PushAdapter (Firebase over HTTPS, a logger when not configured). Announcement history lives in the activity log.
+- **Why:** Owner asked for all documented features except payments and pricing. Privacy: the specification allows admin access to chat only with an operational need, which is not defined yet. No package install was possible, so Firebase is called directly.
+- **Rejected:** Letting admins read chats by default; storing announcements in a new table; adding the Firebase Admin package.
+
+## 2026-11-18 - Mobile screens follow the RYDO Share prototype, without new packages for now
+- **Decision:** All 14 screens of RYDO_Share_Mobile_Prototype.pdf are built in apps/mobile on the existing APIs. Maps and icons are drawn with plain views (one map component, same props, so react-native-maps can replace it in one file); live data is polled (ride 4-5 s, chat 4 s); driver location is simulated until expo-location is added. Prototype items with no API (Quiet ride, No smoking, Call, "N colleagues driving now", detour minutes) are left out rather than faked.
+- **Why:** Package installs were blocked in this session, and adding socket.io-client to the mobile package without updating the lock file would break `npm ci` in CI. Masked calls are deliberately "Later" (2026-11-05).
+- **Rejected:** Static Google map images (would put a Maps key in the app and bill per view); fake numbers for features the API does not have.
+
+## 2026-11-18 - Saved addresses with one default per kind (Anjali)
+- **Decision:** People keep many saved addresses (HOME / OFFICE / OTHER, up to 20) in the existing `saved_places` table, with one default per kind (`is_default`). The default home and office drive "To office / To home" ride search and the commute planner; `/me/home` keeps working and now means "the default home".
+- **Why:** Owner asked for multiple editable home and office addresses with a default, searched from the Home screen. Reusing `saved_places` keeps it additive (one column).
+- **Rejected:** A partial unique index for the default (Prisma cannot describe it, so `migrate dev` would fight it); the single default is kept in a transaction instead.
+
+## 2026-11-19 - Self sign-up keeps Aadhaar masked; Google checked through an adapter (Anjali)
+- **Decision:** Employees sign up themselves (domain must belong to a company on RYDO) with employee ID, manager, contact number and an ID proof; HR approves as before. Aadhaar numbers are stored as `XXXX XXXX 1234`; PAN, passport, driving licence and voter ID numbers in full. The ID photo is private (HR only, 5-minute link, every view audited). "Continue with Google" checks the Google ID token via the `IdentityAdapter` (tokeninfo over HTTPS) against `GOOGLE_OAUTH_CLIENT_IDS`.
+- **Why:** UIDAI rules restrict storing full Aadhaar numbers; a masked number plus the photo is enough for HR to check. No package installs were possible, and the adapter rule keeps Google replaceable.
+- **Rejected:** Storing full Aadhaar numbers; skipping email proof for Google users whose Google email is unverified.

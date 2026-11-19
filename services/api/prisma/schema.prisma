@@ -264,6 +264,7 @@ model User {
   photoKey     String?    @map("photo_key")
   gender       Gender     @default(UNDISCLOSED)       // used only for women-only rides
   passwordHash String?    @map("password_hash")       // null = OTP-only sign-in (decision pending)
+  googleSub    String?    @unique @map("google_sub")  // "Continue with Google" account id
   status       UserStatus @default(ACTIVE)
   createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz
   updatedAt    DateTime   @updatedAt @map("updated_at") @db.Timestamptz
@@ -338,6 +339,16 @@ model Membership {
   userId           String           @map("user_id") @db.Uuid
   departmentId     String?          @map("department_id") @db.Uuid
   employeeCode     String?          @map("employee_code")
+  // Self sign-up details, checked by HR before approval. Aadhaar numbers are stored masked (last 4 digits).
+  managerName         String?   @map("manager_name")
+  managerEmployeeCode String?   @map("manager_employee_code")
+  idProofType         String?   @map("id_proof_type")
+  idProofNumber       String?   @map("id_proof_number")
+  idProofKey          String?   @map("id_proof_key")
+  signedUpAt          DateTime? @map("signed_up_at") @db.Timestamptz
+  jobTitle            String?   @map("job_title")
+  officeId            String?   @map("office_id") @db.Uuid // checked in code to belong to the same company
+  managerEmail        String?   @map("manager_email")
   status           MembershipStatus @default(PENDING)
   decidedById      String?          @map("decided_by_id") @db.Uuid   // HR admin membership
   decidedAt        DateTime?        @map("decided_at") @db.Timestamptz
@@ -378,6 +389,8 @@ model SavedPlace {
   name         String
   address      String
   location     Unsupported("geography(Point,4326)")
+  /// One default per person and label (the app's Home / Office for ride search).
+  isDefault    Boolean                              @default(false) @map("is_default")
   createdAt    DateTime                             @default(now()) @map("created_at") @db.Timestamptz
 
   membership Membership @relation(fields: [membershipId], references: [id])
@@ -391,6 +404,7 @@ model EmergencyContact {
   userId    String   @map("user_id") @db.Uuid
   name      String
   phone     String
+  email     String?
   relation  String?
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
 
@@ -437,6 +451,7 @@ model Vehicle {
   organizationId  String      @map("organization_id") @db.Uuid
   driverProfileId String      @map("driver_profile_id") @db.Uuid
   type            VehicleType
+  carType         CarType?    @map("car_type")          // Hatchback / Sedan / SUV (cars only)
   make            String
   model           String
   color           String
@@ -723,12 +738,15 @@ model Message {
   organizationId     String    @map("organization_id") @db.Uuid
   rideId             String    @map("ride_id") @db.Uuid
   senderMembershipId String    @map("sender_membership_id") @db.Uuid
+  /// The rider this one-to-one chat is with (the other person is the ride's driver).
+  riderMembershipId  String    @map("rider_membership_id") @db.Uuid
   body               String    @db.VarChar(1000)
+  readAt             DateTime? @map("read_at") @db.Timestamptz
   createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz
 
   ride Ride @relation(fields: [rideId], references: [id])
 
-  @@index([rideId, createdAt])
+  @@index([rideId, riderMembershipId, createdAt])
   @@map("messages")
 }
 
@@ -844,4 +862,83 @@ model TripShare {
 
   @@index([rideId])
   @@map("trip_shares")
+}
+
+enum CarType {
+  HATCHBACK
+  SEDAN
+  SUV
+}
+
+enum FeedbackCategory {
+  USABILITY      // app usability and interface
+  MATCHING       // ride matching and suggestion accuracy
+  COMMUNICATION  // chat and notifications
+  COST_SHARING   // cost-sharing information (no payments yet)
+  GENERAL        // general comments / feature suggestions
+}
+
+enum FeedbackStatus {
+  NEW
+  REVIEWED
+  CLOSED
+}
+
+enum SurveyStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+}
+
+/// Always-available feedback form (separate from issue reports and ride ratings).
+model Feedback {
+  id             String           @id @default(uuid()) @db.Uuid
+  organizationId String           @map("organization_id") @db.Uuid
+  membershipId   String           @map("membership_id") @db.Uuid
+  category       FeedbackCategory
+  rating         Int?                                   // optional 1..5 satisfaction
+  comment        String           @db.VarChar(1000)
+  status         FeedbackStatus   @default(NEW)
+  adminNote      String?          @map("admin_note")
+  reviewedById   String?          @map("reviewed_by_id") @db.Uuid
+  reviewedAt     DateTime?        @map("reviewed_at") @db.Timestamptz
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([organizationId, status, createdAt])
+  @@map("feedback")
+}
+
+/// Admin-pushed survey. questions: [{ id, type: RATING|CHOICE|TEXT, text, options? }]; audience: { roles?, departmentIds? }.
+model Survey {
+  id                    String       @id @default(uuid()) @db.Uuid
+  organizationId        String       @map("organization_id") @db.Uuid
+  createdByMembershipId String       @map("created_by_membership_id") @db.Uuid
+  title                 String
+  description           String?
+  questions             Json
+  audience              Json         @default("{}")
+  status                SurveyStatus @default(DRAFT)
+  publishedAt           DateTime?    @map("published_at") @db.Timestamptz
+  closesAt              DateTime?    @map("closes_at") @db.Timestamptz
+  audienceSize          Int          @default(0) @map("audience_size")   // people notified at publish; response rate = responses / this
+  createdAt             DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt             DateTime     @updatedAt @map("updated_at") @db.Timestamptz
+
+  responses SurveyResponse[]
+
+  @@index([organizationId, status])
+  @@map("surveys")
+}
+
+model SurveyResponse {
+  id           String   @id @default(uuid()) @db.Uuid
+  surveyId     String   @map("survey_id") @db.Uuid
+  membershipId String   @map("membership_id") @db.Uuid
+  answers      Json
+  submittedAt  DateTime @default(now()) @map("submitted_at") @db.Timestamptz
+
+  survey Survey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+
+  @@unique([surveyId, membershipId])
+  @@map("survey_responses")
 }

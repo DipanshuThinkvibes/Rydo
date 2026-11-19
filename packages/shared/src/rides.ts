@@ -30,6 +30,10 @@ export const rideSearchSchema = z.object({
   toTime: hhmm,
   seats: z.number().int().min(1).max(4).default(1),
   vehicleType: z.enum(['CAR', 'BIKE']).optional(),
+  /** Only these car types (Hatchback / Sedan / SUV). Rides whose car type is not set never match a car-type filter. */
+  carTypes: z.array(z.enum(['HATCHBACK', 'SEDAN', 'SUV'])).min(1).max(3).optional(),
+  /** true = AC only, false = non-AC only, left out = either. */
+  ac: z.boolean().optional(),
   womenOnly: z.boolean().default(false),
 });
 export type RideSearch = z.infer<typeof rideSearchSchema>;
@@ -51,7 +55,7 @@ export interface RideMatch {
   /** The rider saved this driver as a preferred driver. */
   preferred: boolean;
   driver: { membershipId: string; name: string; rating: number | null; ratingCount: number };
-  vehicle: { type: 'CAR' | 'BIKE'; make: string; model: string; color: string; plateNumber: string; hasAc: boolean };
+  vehicle: { type: 'CAR' | 'BIKE'; carType: 'HATCHBACK' | 'SEDAN' | 'SUV' | null; make: string; model: string; color: string; plateNumber: string; hasAc: boolean };
   from: string;
   to: string;
   /** The driver's road route as an encoded polyline (simplified for maps). */

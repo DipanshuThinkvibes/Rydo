@@ -8,6 +8,7 @@ import { ZodPipe } from '../common/zod.pipe';
 import { Auth, Org, type AuthContext, type OrgContext } from '../common/request-context';
 import { OrgScoped } from '../tenancy/decorators';
 import { MESSAGE_ADAPTER, MessageAdapter } from '../adapters/message.adapter';
+import { STORAGE_ADAPTER, type StorageAdapter } from '../adapters/storage.adapter';
 
 /** Company employees: HR approval queue and role management. Always filtered by the caller's company. */
 @Controller('admin/members')
@@ -16,6 +17,7 @@ export class MembersController {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     @Inject(MESSAGE_ADAPTER) private readonly messages: MessageAdapter,
+    @Inject(STORAGE_ADAPTER) private readonly storage: StorageAdapter,
   ) {}
 
   @Get()
@@ -27,10 +29,14 @@ export class MembersController {
         ...(q.status ? { status: q.status } : {}),
         ...(q.q ? { user: { OR: [{ name: { contains: q.q, mode: 'insensitive' } }, { email: { contains: q.q, mode: 'insensitive' } }] } } : {}),
       },
-      include: { user: { select: { name: true, email: true } }, roles: true, department: { select: { name: true } } },
+      include: { user: { select: { name: true, email: true, phone: true } }, roles: true, department: { select: { name: true } } },
       orderBy: { createdAt: 'desc' },
       take: 200,
     });
+    const officeIds = [...new Set(rows.map((m) => m.officeId).filter((x): x is string => !!x))];
+    const offices = new Map(
+      (officeIds.length ? await this.prisma.office.findMany({ where: { id: { in: officeIds }, organizationId: org.organizationId }, select: { id: true, name: true } }) : []).map((o) => [o.id, o.name]),
+    );
     return {
       data: rows.map((m) => ({
         id: m.id,
@@ -41,8 +47,30 @@ export class MembersController {
         status: m.status,
         roles: m.roles.map((r) => r.role),
         joinedAt: m.createdAt,
+        // Sign-up details for HR's check (Aadhaar is stored masked).
+        employeeId: m.employeeCode,
+        phone: m.user.phone,
+        managerName: m.managerName,
+        managerEmployeeId: m.managerEmployeeCode,
+        managerEmail: m.managerEmail,
+        jobTitle: m.jobTitle,
+        office: m.officeId ? (offices.get(m.officeId) ?? null) : null,
+        idProofType: m.idProofType,
+        idProofNumber: m.idProofNumber,
+        hasIdProof: !!m.idProofKey,
+        signedUpAt: m.signedUpAt,
       })),
     };
+  }
+
+  /** Short-lived link to an employee's ID proof photo. Every view is written to the activity log. */
+  @Get(':id/id-proof-url')
+  @OrgScoped('ORG_ADMIN', 'HR_ADMIN')
+  async idProofUrl(@Auth() auth: AuthContext, @Org() org: OrgContext, @Param('id', ParseUUIDPipe) id: string) {
+    const m = await this.inMyCompany(org, id);
+    if (!m.idProofKey) throw new AppError('NOT_FOUND', 'No ID proof uploaded.', 404);
+    await this.audit.log({ organizationId: org.organizationId, actorUserId: auth.userId, action: 'ID_PROOF_VIEWED', entityType: 'membership', entityId: id });
+    return { data: { url: await this.storage.signedReadUrl(m.idProofKey, 300), expiresInSec: 300 } };
   }
 
   /** Loads a membership only if it belongs to the caller's company; otherwise it does not exist for them. */

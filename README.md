@@ -35,7 +35,7 @@ npm 11 blocks package install scripts by default; that is why `prisma generate` 
 ```bash
 npm run dev -w @rydo/api       # http://localhost:4000/api/v1/health
 npm run dev -w @rydo/web       # http://localhost:3000
-npm run start -w @rydo/mobile  # Expo: press a (Android), i (iOS), w (web)
+npm run start -w @rydo/mobile  # Expo on :8081 (web app keeps :3000): press a (Android), i (iOS), w (web)
 ```
 
 Sign in with any seeded email (for example `hr@acme.test`). Codes never leave your machine: open the Mailpit inbox at http://localhost:8025 to read them.

@@ -1,7 +1,25 @@
-import { Body, Controller, HttpCode, Post, Req, Res } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Query, Req, Res, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
-import { otpRequestSchema, otpVerifySchema, passwordLoginSchema, passwordResetSchema, refreshSchema, type AuthResult, type OtpRequest, type OtpVerify, type PasswordLogin, type PasswordReset } from '@rydo/shared';
+import {
+  googleSignInSchema,
+  otpRequestSchema,
+  otpVerifySchema,
+  passwordLoginSchema,
+  passwordResetSchema,
+  refreshSchema,
+  companySearchSchema,
+  signupCheckSchema,
+  signupSchema,
+  type AuthResult,
+  type OtpRequest,
+  type OtpVerify,
+  type PasswordLogin,
+  type PasswordReset,
+  type SignupInput,
+} from '@rydo/shared';
+import type { z } from 'zod';
 import { ZodPipe } from '../common/zod.pipe';
 import { AppError } from '../common/app-error';
 import { Auth, type AuthContext, type RydoRequest } from '../common/request-context';
@@ -11,6 +29,8 @@ import { Public } from './public.decorator';
 import { AuthService } from './auth.service';
 import { TokensService } from './tokens.service';
 import { MeService } from '../me/me.service';
+import { DOC_MAX_BYTES } from '../drivers/documents';
+import { SignupService, type UploadedIdProof } from './signup.service';
 
 const REFRESH_PATH = '/api/v1/auth';
 
@@ -26,6 +46,7 @@ export class AuthController {
     private readonly auth: AuthService,
     private readonly tokens: TokensService,
     private readonly me: MeService,
+    private readonly signups: SignupService,
   ) {}
 
   @Public()
@@ -69,6 +90,54 @@ export class AuthController {
   @HttpCode(200)
   async verify(@Body(new ZodPipe(otpVerifySchema)) body: OtpVerify, @Req() req: RydoRequest, @Res({ passthrough: true }) res: Response) {
     return this.respond(body.client, await this.auth.verifyCode(body, req.headers['user-agent']), res);
+  }
+
+  // ── Self sign-up ──
+
+  /** "Find your company" on the sign-up screen. */
+  @Public()
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  @Get('companies')
+  async companies(@Query(new ZodPipe(companySearchSchema)) q: z.infer<typeof companySearchSchema>) {
+    return { data: await this.signups.searchCompanies(q.q) };
+  }
+
+  /** Departments and offices for the sign-up form. */
+  @Public()
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  @Get('companies/:id/options')
+  async companyOptions(@Param('id', ParseUUIDPipe) id: string) {
+    return { data: await this.signups.options(id) };
+  }
+
+  /** Is this work email's company on RYDO? (Same answer the code request gives; no account details.) */
+  @Public()
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @Post('signup/check')
+  @HttpCode(200)
+  async signupCheck(@Body(new ZodPipe(signupCheckSchema)) body: z.infer<typeof signupCheckSchema>) {
+    return { data: await this.signups.check(body.email) };
+  }
+
+  /** Multipart: the form fields plus an optional ID photo as `idProof`. Returns a session; the member waits for HR approval. */
+  @Public()
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('signup')
+  @HttpCode(200)
+  @UseInterceptors(FileInterceptor('idProof', { limits: { fileSize: DOC_MAX_BYTES } }))
+  async signup(@Body(new ZodPipe(signupSchema)) body: SignupInput, @UploadedFile() file: UploadedIdProof | undefined, @Req() req: RydoRequest, @Res({ passthrough: true }) res: Response) {
+    return this.respond(body.client, await this.signups.signup(body, file, req.headers['user-agent']), res);
+  }
+
+  /** Continue with Google. Either a session, or { needsSignup, email, name, companyName } for a new employee. */
+  @Public()
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('google')
+  @HttpCode(200)
+  async google(@Body(new ZodPipe(googleSignInSchema)) body: z.infer<typeof googleSignInSchema>, @Req() req: RydoRequest, @Res({ passthrough: true }) res: Response) {
+    const r = await this.signups.google(body.idToken, body.client, req.headers['user-agent']);
+    if (r.needsSignup) return { data: r };
+    return this.respond(body.client, r, res);
   }
 
   @Public()

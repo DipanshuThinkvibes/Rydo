@@ -35,6 +35,19 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "RYDO uses your photos only when you upload your driving license or vehicle RC.",
+          "cameraPermission": "RYDO uses the camera only to photograph your driving license or vehicle RC."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "RYDO shows where you are on the map, uses it as your pickup, and shares your car's position with your riders while you drive."
+        }
       ]
     ],
     "experiments": {

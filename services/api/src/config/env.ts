@@ -18,6 +18,12 @@ const schema = z.object({
   S3_SECRET_KEY: z.string().default(''),
   S3_BUCKET: z.string().default('rydo-documents'),
   GOOGLE_MAPS_API_KEY: z.string().optional(),
+  /** "Continue with Google": comma-separated OAuth client ids (web, Android, iOS). Empty = Google sign-in off. */
+  GOOGLE_OAUTH_CLIENT_IDS: z.string().optional(),
+  /** Firebase Cloud Messaging (push). Leave all three empty to run without push. From the Firebase service-account JSON. */
+  FCM_PROJECT_ID: z.string().optional(),
+  FCM_CLIENT_EMAIL: z.string().optional(),
+  FCM_PRIVATE_KEY: z.string().optional(),
   /** Background jobs (pg-boss). Off in tests, which call the job code directly. */
   JOBS_ENABLED: z.enum(['true', 'false']).default('true'),
   /** Set when running more than one API server: live updates then pass between servers through Redis. */
