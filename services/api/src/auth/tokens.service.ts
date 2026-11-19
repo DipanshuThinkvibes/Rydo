@@ -54,7 +54,14 @@ export class TokensService {
     await this.prisma.session.updateMany({ where: { id: sessionId, revokedAt: null }, data: { revokedAt: new Date() } });
   }
 
-  verifyAccess(token: string) {
-    return this.jwt.verifyAsync<AccessPayload>(token);
+  /**
+   * Checks the signature and expiry, then that the session behind it is still alive. Without the second check a
+   * logged-out (or revoked) token would keep working until it expires. One lookup by primary key per request.
+   */
+  async verifyAccess(token: string) {
+    const payload = await this.jwt.verifyAsync<AccessPayload>(token);
+    const session = await this.prisma.session.findUnique({ where: { id: payload.sid }, select: { revokedAt: true, expiresAt: true } });
+    if (!session || session.revokedAt || session.expiresAt < new Date()) throw new Error('session ended');
+    return payload;
   }
 }

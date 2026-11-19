@@ -12,7 +12,9 @@ const PUBLIC = new Set([
   'POST /api/v1/auth/password/login',
   'POST /api/v1/auth/password/reset',
   'POST /api/v1/auth/refresh',
+  'POST /api/v1/auth/google',
   'GET /api/v1/public/trips/:token',
+  'POST /api/v1/public/contact',
 ]);
 
 describe('Route audit', () => {
@@ -66,7 +68,7 @@ describe('Route audit', () => {
 
   it('never lets a person of another company reach this company: our id with their token is refused everywhere', async () => {
     const leaks: string[] = [];
-    for (const r of routes.filter((x) => !PUBLIC.has(`${x.method} ${x.path}`) && !x.path.includes('/platform') && x.path !== '/api/v1/me' && !x.path.startsWith('/api/v1/auth/') && !x.path.startsWith('/api/v1/me/devices') && !x.path.startsWith('/api/v1/me/emergency') && !x.path.startsWith('/api/v1/me/photo') && !x.path.startsWith('/api/v1/me/notifications') && !x.path.startsWith('/api/v1/me/memberships') && !x.path.startsWith('/api/v1/me/password') && !x.path.startsWith('/api/v1/maps'))) {
+    for (const r of routes.filter((x) => !PUBLIC.has(`${x.method} ${x.path}`) && !x.path.includes('/platform') && x.path !== '/api/v1/me' && !x.path.startsWith('/api/v1/auth/') && !x.path.startsWith('/api/v1/me/devices') && !x.path.startsWith('/api/v1/me/registration') && !x.path.startsWith('/api/v1/me/email') && !x.path.startsWith('/api/v1/me/emergency') && !x.path.startsWith('/api/v1/me/photo') && !x.path.startsWith('/api/v1/me/notifications') && !x.path.startsWith('/api/v1/me/memberships') && !x.path.startsWith('/api/v1/me/password') && !x.path.startsWith('/api/v1/maps'))) {
       const res = await call(r, { ...w.as('outsiderRider', w.other), 'x-org-id': w.org });
       if (res.status < 400) leaks.push(`${r.method} ${r.path} -> ${res.status}`);
     }

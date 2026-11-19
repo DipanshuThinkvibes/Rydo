@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { ID_PROOFS, type IdType } from "@/lib/validators";
 import { ORG_ROLES, type OrgRoleName } from "@rydo/shared";
 import { api, RequestError } from "@/lib/api";
 import { useSession } from "@/lib/session";
@@ -14,6 +15,8 @@ interface Member {
   departmentId: string | null;
   status: "PENDING" | "ACTIVE" | "REJECTED" | "SUSPENDED" | "LEFT";
   roles: OrgRoleName[];
+  /** What the person wrote when they signed up (waiting employees). */
+  registration: { employeeId: string; designation: string; department: string; office: string; phone: string; idType: string; idLast4: string; managerName: string; managerEmail: string; submittedAt: string } | null;
 }
 interface Department {
   id: string;
@@ -145,6 +148,16 @@ export default function EmployeesPage() {
                     </>
                   )}
                 </div>
+                {m.status === "PENDING" && m.registration && (
+                  <dl className="grid gap-x-6 gap-y-2 border-t border-line bg-surface px-4 py-3 text-sm sm:grid-cols-2 lg:grid-cols-3" aria-label={`Sign-up details of ${m.name}`}>
+                    <div><dt className="text-xs font-bold uppercase tracking-wider text-muted">Employee ID</dt><dd className="font-bold">{m.registration.employeeId}</dd></div>
+                    <div><dt className="text-xs font-bold uppercase tracking-wider text-muted">Job title</dt><dd className="font-bold">{m.registration.designation}</dd></div>
+                    <div><dt className="text-xs font-bold uppercase tracking-wider text-muted">Department</dt><dd className="font-bold">{m.registration.department}</dd></div>
+                    <div><dt className="text-xs font-bold uppercase tracking-wider text-muted">Office</dt><dd className="font-bold">{m.registration.office}</dd></div>
+                    <div><dt className="text-xs font-bold uppercase tracking-wider text-muted">Reporting manager</dt><dd className="font-bold">{m.registration.managerName} <span className="font-normal text-muted">({m.registration.managerEmail})</span></dd></div>
+                    <div><dt className="text-xs font-bold uppercase tracking-wider text-muted">Phone · ID proof</dt><dd className="font-bold">+91 {m.registration.phone} · {ID_PROOFS[m.registration.idType as IdType]?.label ?? m.registration.idType} ending {m.registration.idLast4}</dd></div>
+                  </dl>
+                )}
                 {isOpen && (
                   <MemberPanel
                     member={m}

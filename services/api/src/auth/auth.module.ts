@@ -11,6 +11,6 @@ import { TokensService } from './tokens.service';
   imports: [JwtModule.registerAsync({ useFactory: () => ({ secret: env().JWT_SECRET }) }), MeModule],
   controllers: [AuthController],
   providers: [AuthService, OtpService, TokensService],
-  exports: [TokensService],
+  exports: [TokensService, OtpService],
 })
 export class AuthModule {}

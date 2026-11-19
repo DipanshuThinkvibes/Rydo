@@ -12,7 +12,7 @@ import { Icon } from "@/components/icons";
 import { PlaceField, Plate, Seats, useOffices } from "@/components/trip-bits";
 import { MapView, type MapMarker, type MapRoute } from "@/components/map/map-view";
 
-interface Vehicle { id: string; type: "CAR" | "BIKE"; make: string; model: string; color: string; plateNumber: string; seatCapacity: number; hasAc: boolean; isDefault: boolean }
+interface Vehicle { id: string; type: "CAR" | "BIKE"; carType?: "HATCHBACK" | "SEDAN" | "SUV" | null; make: string; model: string; color: string; plateNumber: string; seatCapacity: number; hasAc: boolean; isDefault: boolean }
 interface Doc { id: string; kind: "DRIVING_LICENSE" | "VEHICLE_RC"; number: string | null; expiresAt: string | null; status: "PENDING" | "APPROVED" | "REJECTED"; rejectReason: string | null; vehicleId: string | null }
 interface Profile { id: string; status: "PENDING" | "VERIFIED" | "REJECTED" | "EXPIRED"; vehicles: Vehicle[]; documents: Doc[] }
 interface DrivingRide { id: string; direction: string; originLabel: string; destinationLabel: string; departAt: string; seatsTotal: number; seatsBooked: number; status: string; distanceMeters: number | null; durationSeconds: number | null; pendingRequests: number; route: string | null }
@@ -110,9 +110,9 @@ function Onboarding({ profile, run }: { profile: Profile; run: (fn: () => Promis
 }
 
 function VehicleForm({ run }: { run: (fn: () => Promise<unknown>, ok?: string) => Promise<boolean> }) {
-  const [v, setV] = useState({ type: "CAR" as "CAR" | "BIKE", make: "", model: "", color: "", plateNumber: "", seatCapacity: 3, hasAc: true });
+  const [v, setV] = useState({ type: "CAR" as "CAR" | "BIKE", carType: "" as "" | "HATCHBACK" | "SEDAN" | "SUV", make: "", model: "", color: "", plateNumber: "", seatCapacity: 3, hasAc: true });
   return (
-    <form className="grid gap-3 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); run(() => api("POST", "/driver/vehicles", { ...v, seatCapacity: v.type === "BIKE" ? 1 : v.seatCapacity }), "Vehicle added."); }}>
+    <form className="grid gap-3 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); run(() => api("POST", "/driver/vehicles", { ...v, carType: v.type === "CAR" && v.carType ? v.carType : undefined, seatCapacity: v.type === "BIKE" ? 1 : v.seatCapacity }), "Vehicle added."); }}>
       <div className="flex gap-2 sm:col-span-2">
         {(["CAR", "BIKE"] as const).map((t) => (
           <button key={t} type="button" aria-pressed={v.type === t} onClick={() => setV({ ...v, type: t })} className={`h-10 rounded-full border-[1.5px] px-4 text-sm font-extrabold ${v.type === t ? "border-ink bg-ink text-white" : "border-line-strong"}`}>{t === "CAR" ? "Car" : "Bike"}</button>
@@ -122,6 +122,17 @@ function VehicleForm({ run }: { run: (fn: () => Promise<unknown>, ok?: string) =
       <Input id="v-model" label="Model" required placeholder="City" value={v.model} onChange={(e) => setV({ ...v, model: e.target.value })} />
       <Input id="v-color" label="Colour" required placeholder="White" value={v.color} onChange={(e) => setV({ ...v, color: e.target.value })} />
       <Input id="v-plate" label="Number plate" required placeholder="KA 01 AB 1234" value={v.plateNumber} onChange={(e) => setV({ ...v, plateNumber: e.target.value })} />
+      {v.type === "CAR" && (
+        <label className="flex flex-col gap-1.5 text-sm font-bold">
+          Car type
+          <select className={field} value={v.carType} onChange={(e) => setV({ ...v, carType: e.target.value as typeof v.carType })}>
+            <option value="">Not set</option>
+            <option value="HATCHBACK">Hatchback</option>
+            <option value="SEDAN">Sedan</option>
+            <option value="SUV">SUV</option>
+          </select>
+        </label>
+      )}
       {v.type === "CAR" && (
         <label className="flex flex-col gap-1.5 text-sm font-bold">
           Passenger seats

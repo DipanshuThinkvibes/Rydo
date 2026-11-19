@@ -87,3 +87,29 @@ body {
 .rydo-car { display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 999px; background: #c8f560; border: 3px solid #0b1426; box-shadow: 0 6px 18px rgba(11, 20, 38, 0.35); translate: 0 50%; }
 .rydo-car.is-alert { background: #fecaca; border-color: #dc2626; box-shadow: 0 0 0 7px rgba(220, 38, 38, 0.35); }
 .rydo-pin--sos { display: flex; align-items: center; justify-content: center; padding: 4px 9px; border-radius: 999px; background: #dc2626; color: #fff; font-size: 12px; font-weight: 800; border: 2.5px solid #fff; box-shadow: 0 0 0 6px rgba(220, 38, 38, 0.3); translate: 0 50%; }
+
+/* ---------- Dark mode ----------
+   Utilities use the light values directly (@theme inline), so dark mode re-maps the few surface classes.
+   Dark navy panels (bg-ink: sidebar, footer, hero panels) stay dark in both themes. */
+:root[data-theme="dark"] { color-scheme: dark; }
+[data-theme="dark"] body { background: #0a1020; color: #e8edf7; }
+[data-theme="dark"] .bg-white { background-color: #121b31; }
+[data-theme="dark"] .bg-white\/90, [data-theme="dark"] .bg-white\/85, [data-theme="dark"] .bg-white\/80, [data-theme="dark"] .bg-white\/60 { background-color: rgba(10, 16, 32, 0.82); }
+[data-theme="dark"] .bg-surface { background-color: #0a1020; }
+[data-theme="dark"] .bg-surface-2, [data-theme="dark"] .hover\:bg-surface-2:hover { background-color: #1a243d; }
+[data-theme="dark"] .border-line, [data-theme="dark"] .border-line\/80, [data-theme="dark"] .border-line\/60 { border-color: #222d47; }
+[data-theme="dark"] .border-line-strong { border-color: #2f3b59; }
+[data-theme="dark"] .text-ink { color: #eef2fb; }
+[data-theme="dark"] .text-muted { color: #9aa7bf; }
+[data-theme="dark"] .bg-success-bg { background-color: #0f3a24; }
+[data-theme="dark"] .text-success { color: #6ee7a0; }
+[data-theme="dark"] .bg-warning-bg { background-color: #3b2a0c; }
+[data-theme="dark"] .text-warning { color: #fcd34d; }
+[data-theme="dark"] .focus\:bg-white:focus { background-color: #121b31; }
+[data-theme="dark"] input, [data-theme="dark"] select, [data-theme="dark"] textarea { color: #eef2fb; }
+[data-theme="dark"] input::placeholder, [data-theme="dark"] textarea::placeholder { color: #6f7d99; }
+/* lime buttons and chips keep dark text; primary dark buttons become lime so they stand out */
+[data-theme="dark"] .bg-lime, [data-theme="dark"] .bg-lime .text-ink, [data-theme="dark"] .bg-lime.text-ink { color: #0b1426; }
+[data-theme="dark"] :is(button, a).bg-ink { background-color: #c8f560; color: #0b1426; }
+[data-theme="dark"] :is(button, a).bg-ink:hover, [data-theme="dark"] :is(button, a).hover\:bg-ink-2:hover { background-color: #b5e84a; }
+[data-theme="dark"] .skeleton { background: linear-gradient(90deg, #121b31 0%, #1a243d 50%, #121b31 100%); background-size: 800px 100%; }

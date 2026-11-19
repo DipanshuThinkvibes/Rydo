@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { api, RequestError } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { Button, Input, Logo } from "@/components/ui";
+import { GoogleButton, OrDivider } from "@/components/google-button";
+import { googleAuth } from "@/lib/google-auth";
 
 type Mode = "password" | "email" | "code";
 
@@ -116,6 +118,26 @@ export default function SignInPage() {
             {mode === "password" ? "Sign in with an email code instead" : "Sign in with a password instead"}
           </button>
         </form>
+        {mode !== "code" && (
+          <div className="mt-5 flex flex-col gap-4">
+            <OrDivider />
+            <GoogleButton
+              text="signin_with"
+              disabled={busy}
+              onError={(m) => setError(m)}
+              onCredential={(token) =>
+                run(async () => {
+                  await googleAuth(token, "login");
+                  await reload();
+                  router.replace("/");
+                })
+              }
+            />
+          </div>
+        )}
+        <p className="mt-5 border-t border-line pt-4 text-center text-sm text-muted">
+          New to RYDO? <Link href="/sign-up" className="font-extrabold text-ink underline">Sign up</Link> · <Link href="/contact" className="font-extrabold text-ink underline">Bring RYDO to your company</Link>
+        </p>
       </div>
       </div>
     </main>

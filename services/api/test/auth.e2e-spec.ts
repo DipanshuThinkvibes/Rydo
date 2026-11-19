@@ -83,6 +83,25 @@ describe('Auth (email OTP)', () => {
     await api(app).post('/api/v1/auth/refresh').send({ refreshToken: r.refreshToken }).expect(401);
   });
 
+  it('the access token stops working the moment the session ends (logout, revoke or expiry)', async () => {
+    const r = await signIn(app, messages, 'ended@acme.test');
+    const me = (token: string) => api(app).get('/api/v1/me').set('Authorization', `Bearer ${token}`);
+    await me(r.accessToken).expect(200);
+    await api(app).post('/api/v1/auth/logout').set('Authorization', `Bearer ${r.accessToken}`).expect(200);
+    const after = await me(r.accessToken).expect(401);
+    expect(after.body.error.code).toBe('UNAUTHENTICATED');
+
+    // revoked by the server
+    const r2 = await signIn(app, messages, 'ended@acme.test');
+    await prisma.session.updateMany({ where: { userId: r2.user.id, revokedAt: null }, data: { revokedAt: new Date() } });
+    await me(r2.accessToken).expect(401);
+
+    // a session past its end date
+    const r3 = await signIn(app, messages, 'ended@acme.test');
+    await prisma.session.updateMany({ where: { userId: r3.user.id, revokedAt: null }, data: { expiresAt: new Date(Date.now() - 1000) } });
+    await me(r3.accessToken).expect(401);
+  });
+
   it('needs a token for private routes', async () => {
     const res = await api(app).get('/api/v1/me').expect(401);
     expect(res.body.error.code).toBe('UNAUTHENTICATED');

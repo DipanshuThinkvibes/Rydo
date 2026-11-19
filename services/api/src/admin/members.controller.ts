@@ -31,17 +31,26 @@ export class MembersController {
       orderBy: { createdAt: 'desc' },
       take: 200,
     });
+    // What each person wrote when they signed up (HR needs it to decide). Only this company's rows are read.
+    const regs = await this.prisma.employeeRegistration.findMany({ where: { organizationId: org.organizationId, membershipId: { in: rows.map((m) => m.id) } } });
+    const reg = new Map(regs.map((r) => [r.membershipId, r]));
     return {
-      data: rows.map((m) => ({
-        id: m.id,
-        name: m.user.name,
-        email: m.user.email,
-        department: m.department?.name ?? null,
-        departmentId: m.departmentId,
-        status: m.status,
-        roles: m.roles.map((r) => r.role),
-        joinedAt: m.createdAt,
-      })),
+      data: rows.map((m) => {
+        const r = reg.get(m.id);
+        return {
+          id: m.id,
+          name: m.user.name,
+          email: m.user.email,
+          department: m.department?.name ?? null,
+          departmentId: m.departmentId,
+          status: m.status,
+          roles: m.roles.map((x) => x.role),
+          joinedAt: m.createdAt,
+          registration: r
+            ? { employeeId: r.employeeId, designation: r.designation, department: r.department, office: r.office, phone: r.phone, idType: r.idType, idLast4: r.idLast4, managerName: r.managerName, managerEmail: r.managerEmail, submittedAt: r.createdAt }
+            : null,
+        };
+      }),
     };
   }
 

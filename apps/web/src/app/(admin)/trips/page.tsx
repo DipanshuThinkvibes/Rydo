@@ -132,6 +132,7 @@ export default function TripsPage() {
                       <Avatar name={b.ride.driverName} size={40} />
                       <span className="min-w-0 text-sm">
                         <span className="block font-extrabold">{b.ride.driverName}</span>
+                        {["CONFIRMED", "BOARDED"].includes(b.status) && <Link href={`/messages/${b.ride.id}`} className="text-sm font-extrabold underline">Message driver</Link>}
                         <span className="flex flex-wrap items-center gap-1.5 text-muted">{b.ride.vehicle.color} {b.ride.vehicle.make} {b.ride.vehicle.model} <Plate plate={b.ride.vehicle.plateNumber} /></span>
                       </span>
                     </div>

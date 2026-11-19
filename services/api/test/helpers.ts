@@ -8,6 +8,8 @@ import { PrismaService } from '../src/prisma/prisma.service';
 import { MESSAGE_ADAPTER, MessageAdapter } from '../src/adapters/message.adapter';
 import { STORAGE_ADAPTER, StorageAdapter } from '../src/adapters/storage.adapter';
 import { MAPS_ADAPTER, MapsAdapter } from '../src/adapters/maps.adapter';
+import { GOOGLE_IDENTITY, GoogleIdentityAdapter, GoogleProfile } from '../src/adapters/google-identity.adapter';
+import { AppError } from '../src/common/app-error';
 import type { LatLng } from '@rydo/shared';
 
 /** Captures emails instead of sending them, so tests can read OTP codes. */
@@ -17,8 +19,18 @@ export class FakeMessages implements MessageAdapter {
     this.sent.push(m);
   }
   lastCode(email: string) {
-    const msg = [...this.sent].reverse().find((m) => m.to === email && /sign-in code/.test(m.subject));
+    const msg = [...this.sent].reverse().find((m) => m.to === email && /(sign-in|email verification) code/.test(m.subject));
     return msg?.subject.match(/\d{6}/)?.[0];
+  }
+}
+
+/** Stands in for Google: a token looks like "gtest|email|Name|verified" (use gtoken()). Anything else is refused. */
+export const gtoken = (email: string, opts: { name?: string; verified?: boolean } = {}) => `gtest|${email}|${opts.name ?? ''}|${opts.verified === false ? 'no' : 'yes'}`;
+export class FakeGoogle implements GoogleIdentityAdapter {
+  async verify(idToken: string): Promise<GoogleProfile> {
+    const [tag, email, name, verified] = idToken.split("|");
+    if (tag !== "gtest" || !email) throw new AppError("UNAUTHENTICATED", "Google could not confirm this sign-in. Please try again.", 401);
+    return { email: email.toLowerCase(), emailVerified: verified === "yes", name: name || undefined, subject: "sub-" + email };
   }
 }
 
@@ -64,6 +76,8 @@ export async function createApp() {
     .useValue(new FakeStorage())
     .overrideProvider(MAPS_ADAPTER)
     .useValue(new FakeMaps())
+    .overrideProvider(GOOGLE_IDENTITY)
+    .useValue(new FakeGoogle())
     .compile();
   const app = moduleRef.createNestApplication();
   configureApp(app);

@@ -28,7 +28,7 @@ export class MeService {
       roles: m.roles.map((r) => r.role as OrgRoleName),
     }));
     return {
-      user: { id: user.id, email: user.email, name: user.name, isPlatformAdmin: user.platformRoles.some((p) => p.role === 'SUPER_ADMIN') },
+      user: { id: user.id, email: user.email, name: user.name, emailVerified: !!user.emailVerifiedAt, isPlatformAdmin: user.platformRoles.some((p) => p.role === 'SUPER_ADMIN') },
       memberships,
     };
   }

@@ -18,6 +18,8 @@ const schema = z.object({
   S3_SECRET_KEY: z.string().default(''),
   S3_BUCKET: z.string().default('rydo-documents'),
   GOOGLE_MAPS_API_KEY: z.string().optional(),
+  /** OAuth client id for "Sign in with Google" (Google Cloud Console, Credentials). Leave empty to switch Google sign-in off. */
+  GOOGLE_CLIENT_ID: z.string().optional(),
   /** Firebase Cloud Messaging (push). Leave all three empty to run without push. From the Firebase service-account JSON. */
   FCM_PROJECT_ID: z.string().optional(),
   FCM_CLIENT_EMAIL: z.string().optional(),

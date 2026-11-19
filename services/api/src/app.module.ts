@@ -17,6 +17,8 @@ import { JobsModule } from './jobs/jobs.module';
 import { TrackingModule } from './tracking/tracking.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { EngagementModule } from './engagement/engagement.module';
+import { InquiriesModule } from './inquiries/inquiries.module';
+import { RegistrationModule } from './registration/registration.module';
 import { HealthController } from './health/health.controller';
 import { ApiExceptionFilter } from './common/api-exception.filter';
 
@@ -35,6 +37,8 @@ import { ApiExceptionFilter } from './common/api-exception.filter';
     MapsModule,
     RidesModule, TrackingModule,
     EngagementModule,
+    InquiriesModule,
+    RegistrationModule,
     JobsModule,
   ],
   controllers: [HealthController],

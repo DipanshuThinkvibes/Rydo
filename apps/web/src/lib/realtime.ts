@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { io, type Socket } from "socket.io-client";
-import { REALTIME_PATH } from "@rydo/shared";
+import { CHAT_EVENT, CHAT_READ_EVENT, REALTIME_PATH } from "@rydo/shared";
 
 /**
  * One Socket.IO connection per tab. Signs in with the web cookie.
@@ -60,6 +60,43 @@ export function useRealtime(sub: Sub, handlers: Record<string, (data: never) => 
     };
     // Handler names are fixed per caller; re-run only when the room changes.
   }, [key]);
+}
+
+/** Live messages of one private chat (driver + one rider). Joins the chat room and re-joins after reconnects. */
+export function useChatRealtime(thread: { rideId: string; riderMembershipId: string } | null, onMessage: (m: ChatLive) => void, onRead?: () => void) {
+  const cb = useRef({ onMessage, onRead });
+  useEffect(() => {
+    cb.current = { onMessage, onRead };
+  });
+  const rideId = thread?.rideId;
+  const riderMembershipId = thread?.riderMembershipId;
+  useEffect(() => {
+    if (!rideId || !riderMembershipId) return;
+    const s = getSocket();
+    const body = { rideId, riderMembershipId };
+    const join = () => s.emit("chat.subscribe", body);
+    const msg = (m: ChatLive) => cb.current.onMessage(m);
+    const read = () => cb.current.onRead?.();
+    s.on(CHAT_EVENT, msg);
+    s.on(CHAT_READ_EVENT, read);
+    s.on("connect", join);
+    if (s.connected) join();
+    return () => {
+      s.off("connect", join);
+      s.off(CHAT_EVENT, msg);
+      s.off(CHAT_READ_EVENT, read);
+      s.emit("chat.unsubscribe", body);
+    };
+  }, [rideId, riderMembershipId]);
+}
+
+export interface ChatLive {
+  id: string;
+  rideId: string;
+  riderMembershipId: string;
+  senderMembershipId: string;
+  body: string;
+  createdAt: string;
 }
 
 /** Straight-line distance in metres (for "driver is 1.2 km away"). */

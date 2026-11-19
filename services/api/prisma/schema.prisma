@@ -262,6 +262,8 @@ model User {
   name         String
   phone        String?                                // never shown to other users; masked calls only
   photoKey     String?    @map("photo_key")
+  /// Set when the person proved they own this email (email code or Google). Null = not verified yet.
+  emailVerifiedAt DateTime? @map("email_verified_at") @db.Timestamptz
   gender       Gender     @default(UNDISCLOSED)       // used only for women-only rides
   passwordHash String?    @map("password_hash")       // null = OTP-only sign-in (decision pending)
   status       UserStatus @default(ACTIVE)
@@ -928,4 +930,59 @@ model SurveyResponse {
 
   @@unique([surveyId, membershipId])
   @@map("survey_responses")
+}
+
+enum InquiryStatus {
+  NEW
+  CONTACTED
+  ONBOARDED
+  CLOSED
+}
+
+/// A company asking RYDO to be set up, from the public Contact us form. Read and worked by RYDO staff only.
+model OnboardingInquiry {
+  id          String        @id @default(uuid()) @db.Uuid
+  companyName String        @map("company_name")
+  contactName String        @map("contact_name")
+  workEmail   String        @map("work_email") @db.Citext
+  phone       String?
+  companySize String        @map("company_size")
+  city        String?
+  message     String?       @db.VarChar(1500)
+  status      InquiryStatus @default(NEW)
+  notes       String?
+  handledById String?       @map("handled_by_id") @db.Uuid
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime      @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([status, createdAt])
+  @@index([workEmail, createdAt])
+  @@map("onboarding_inquiries")
+}
+
+/// What a new employee told us when they signed up, shown to their company's HR when they decide.
+/// Only the last 4 digits of the Aadhaar number are kept; the full number is never sent to the server.
+model EmployeeRegistration {
+  id            String   @id @default(uuid()) @db.Uuid
+  organizationId String  @map("organization_id") @db.Uuid
+  membershipId  String   @unique @map("membership_id") @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  fullName      String   @map("full_name")
+  phone         String
+  /// Which ID proof the person used: AADHAAR, PAN, PASSPORT, DRIVING_LICENCE or VOTER_ID.
+  idType        String   @default("AADHAAR") @map("id_type")
+  /// Last 4 characters of that ID's number. The full number is never sent or kept.
+  idLast4       String   @map("id_last4") @db.VarChar(4)
+  employeeId    String   @map("employee_id")
+  designation   String
+  department    String
+  office        String
+  managerName   String   @map("manager_name")
+  managerEmail  String   @map("manager_email") @db.Citext
+  notifiedAt    DateTime? @map("notified_at") @db.Timestamptz
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([organizationId])
+  @@map("employee_registrations")
 }

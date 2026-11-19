@@ -63,6 +63,6 @@ export interface AuthResult {
   /** Mobile only. The web app gets httpOnly cookies instead. */
   accessToken?: string;
   refreshToken?: string;
-  user: { id: string; email: string; name: string; isPlatformAdmin: boolean };
+  user: { id: string; email: string; name: string; emailVerified?: boolean; isPlatformAdmin: boolean };
   memberships: MembershipSummary[];
 }

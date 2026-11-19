@@ -1,7 +1,7 @@
 import { Body, Controller, HttpCode, Post, Req, Res } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
-import { otpRequestSchema, otpVerifySchema, passwordLoginSchema, passwordResetSchema, refreshSchema, type AuthResult, type OtpRequest, type OtpVerify, type PasswordLogin, type PasswordReset } from '@rydo/shared';
+import { googleAuthSchema, type GoogleAuth, otpRequestSchema, otpVerifySchema, passwordLoginSchema, passwordResetSchema, refreshSchema, type AuthResult, type OtpRequest, type OtpVerify, type PasswordLogin, type PasswordReset } from '@rydo/shared';
 import { ZodPipe } from '../common/zod.pipe';
 import { AppError } from '../common/app-error';
 import { Auth, type AuthContext, type RydoRequest } from '../common/request-context';
@@ -69,6 +69,15 @@ export class AuthController {
   @HttpCode(200)
   async verify(@Body(new ZodPipe(otpVerifySchema)) body: OtpVerify, @Req() req: RydoRequest, @Res({ passthrough: true }) res: Response) {
     return this.respond(body.client, await this.auth.verifyCode(body, req.headers['user-agent']), res);
+  }
+
+  /** Sign in or sign up with a Google account (see googleAuthSchema). */
+  @Public()
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @Post('google')
+  @HttpCode(200)
+  async google(@Body(new ZodPipe(googleAuthSchema)) body: GoogleAuth, @Req() req: RydoRequest, @Res({ passthrough: true }) res: Response) {
+    return this.respond(body.client, await this.auth.googleSignIn(body, req.headers['user-agent']), res);
   }
 
   @Public()

@@ -9,3 +9,6 @@ export * from './platform';
 export * from './tracking';
 export * from './commute';
 export * from './engagement';
+export * from './inquiries';
+export * from './registration';
+export * from './google';
