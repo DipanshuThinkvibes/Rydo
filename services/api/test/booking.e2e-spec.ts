@@ -57,8 +57,8 @@ describe('Matching and booking', () => {
   beforeAll(async () => {
     ({ app, messages, prisma } = await createApp());
     await resetDb(prisma);
-    orgs.A = (await prisma.organization.create({ data: { name: 'Company A', slug: 'a', emailDomains: ['a.test'], status: 'ACTIVE' } })).id;
-    orgs.B = (await prisma.organization.create({ data: { name: 'Company B', slug: 'b', emailDomains: ['b.test'], status: 'ACTIVE' } })).id;
+    orgs.A = (await prisma.organization.create({ data: { licenses: { create: [{ product: 'SHARE' }] }, name: 'Company A', slug: 'a', emailDomains: ['a.test'], status: 'ACTIVE' } })).id;
+    orgs.B = (await prisma.organization.create({ data: { licenses: { create: [{ product: 'SHARE' }] }, name: 'Company B', slug: 'b', emailDomains: ['b.test'], status: 'ACTIVE' } })).id;
     await person('rahul', 'A', ['RIDER', 'DRIVER'], 'MALE', true);
     await person('sneha', 'A', ['RIDER', 'DRIVER'], 'FEMALE', true);
     await person('priya', 'A', ['RIDER'], 'FEMALE');

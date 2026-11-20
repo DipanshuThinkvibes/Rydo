@@ -43,7 +43,7 @@ describe('Release 1.1', () => {
   beforeAll(async () => {
     ({ app, messages, prisma } = await createApp());
     await resetDb(prisma);
-    org = (await prisma.organization.create({ data: { name: 'R Co', slug: 'r', emailDomains: ['r.test'], status: 'ACTIVE' } })).id;
+    org = (await prisma.organization.create({ data: { licenses: { create: [{ product: 'SHARE' }] }, name: 'R Co', slug: 'r', emailDomains: ['r.test'], status: 'ACTIVE' } })).id;
     await prisma.$executeRawUnsafe(`INSERT INTO offices (id, organization_id, name, address, location, is_default) VALUES (gen_random_uuid(), '${org}', 'Office', 'ORR', ${pt(OFFICE)}, true)`);
     await person('driver', ['RIDER', 'DRIVER']);
     await person('priya', ['RIDER']);

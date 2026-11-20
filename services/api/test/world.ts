@@ -15,8 +15,8 @@ export const pt = (p: { lat: number; lng: number }) => `ST_SetSRID(ST_MakePoint(
  */
 export async function buildWorld(app: INestApplication, messages: FakeMessages, prisma: PrismaService, suffix = 'e') {
   const domain = `${suffix}.test`;
-  const org = (await prisma.organization.create({ data: { name: `${suffix} Co`, slug: suffix, emailDomains: [domain], status: 'ACTIVE' } })).id;
-  const other = (await prisma.organization.create({ data: { name: `${suffix} Other`, slug: `${suffix}-o`, emailDomains: [`o-${domain}`], status: 'ACTIVE' } })).id;
+  const org = (await prisma.organization.create({ data: { licenses: { create: [{ product: 'SHARE' }] }, name: `${suffix} Co`, slug: suffix, emailDomains: [domain], status: 'ACTIVE' } })).id;
+  const other = (await prisma.organization.create({ data: { licenses: { create: [{ product: 'SHARE' }] }, name: `${suffix} Other`, slug: `${suffix}-o`, emailDomains: [`o-${domain}`], status: 'ACTIVE' } })).id;
   const tokens: Record<string, string> = {};
   const ms: Record<string, string> = {};
   const users: Record<string, string> = {};

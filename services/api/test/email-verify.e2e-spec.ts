@@ -15,7 +15,7 @@ describe('Email verification', () => {
   beforeAll(async () => {
     ({ app, messages, prisma } = await createApp());
     await resetDb(prisma);
-    await prisma.organization.create({ data: { name: 'Verify Co', slug: 'verify', emailDomains: ['verify.test'], status: 'ACTIVE' } });
+    await prisma.organization.create({ data: { licenses: { create: [{ product: 'SHARE' }] }, name: 'Verify Co', slug: 'verify', emailDomains: ['verify.test'], status: 'ACTIVE' } });
     // a person who has only ever used a password: nobody has proved their inbox yet
     await prisma.user.create({ data: { email, name: 'Pw User', passwordHash: await hashPassword('Secret2026') } });
     const r = await api(app).post('/api/v1/auth/password/login').send({ email, password: 'Secret2026', client: 'MOBILE' }).expect(200);

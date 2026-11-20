@@ -40,3 +40,16 @@ export function dayChip(iso: string) {
   return { top: new Intl.DateTimeFormat("en-IN", { weekday: "short", timeZone: TZ }).format(d), bottom: fmtDayNum(iso) };
 }
 const fmtDayNum = (iso: string) => new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", timeZone: TZ }).format(new Date(`${iso}T12:00:00+05:30`));
+
+/** "Just now", "12 min ago", "Today, 10:57 pm", "Yesterday, 8:33 pm", or "18 Nov, 8:33 pm". */
+export function fmtWhenFriendly(iso: string | Date, now: Date = new Date()): string {
+  const d = new Date(iso);
+  const mins = Math.round((now.getTime() - d.getTime()) / 60_000);
+  if (mins < 1) return "Just now";
+  if (mins < 60) return `${mins} min ago`;
+  const day = (x: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(x);
+  if (day(d) === day(now)) return `Today, ${fmtTime(d)}`;
+  if (day(d) === day(new Date(now.getTime() - 86_400_000))) return `Yesterday, ${fmtTime(d)}`;
+  const date = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", timeZone: TZ, ...(d.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }) }).format(d);
+  return `${date}, ${fmtTime(d)}`;
+}

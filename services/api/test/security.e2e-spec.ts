@@ -24,8 +24,8 @@ describe('Security', () => {
   beforeAll(async () => {
     ({ app, messages, prisma } = await createApp());
     await resetDb(prisma);
-    orgs.A = (await prisma.organization.create({ data: { name: 'A Co', slug: 'a', emailDomains: ['a.test'], status: 'ACTIVE' } })).id;
-    orgs.B = (await prisma.organization.create({ data: { name: 'B Co', slug: 'b', emailDomains: ['b.test'], status: 'ACTIVE' } })).id;
+    orgs.A = (await prisma.organization.create({ data: { licenses: { create: [{ product: 'SHARE' }] }, name: 'A Co', slug: 'a', emailDomains: ['a.test'], status: 'ACTIVE' } })).id;
+    orgs.B = (await prisma.organization.create({ data: { licenses: { create: [{ product: 'SHARE' }] }, name: 'B Co', slug: 'b', emailDomains: ['b.test'], status: 'ACTIVE' } })).id;
     await person('adminA', 'A', ['ORG_ADMIN', 'HR_ADMIN']);
     await person('riderA', 'A', ['RIDER']);
     await person('riderB', 'B', ['RIDER']);

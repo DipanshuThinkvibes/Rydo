@@ -136,6 +136,7 @@ export class MembersController {
   async reactivate(@Auth() auth: AuthContext, @Org() org: OrgContext, @Param('id', ParseUUIDPipe) id: string) {
     const m = await this.inMyCompany(org, id);
     if (m.status !== 'SUSPENDED') throw new AppError('CONFLICT', 'Only suspended people can be reactivated.', 409);
+    if (m.platformBlockedAt) throw new AppError('FORBIDDEN', 'RYDO support blocked this person. Contact RYDO support to lift the block.', 403);
     await this.checkSeatLimit(org.organizationId);
     await this.prisma.membership.update({ where: { id }, data: { status: 'ACTIVE' } });
     await this.audit.log({ organizationId: org.organizationId, actorUserId: auth.userId, action: 'MEMBER_REACTIVATED', entityType: 'membership', entityId: id, before: { status: m.status }, after: { status: 'ACTIVE' } });

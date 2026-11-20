@@ -55,11 +55,14 @@ const groups: { title?: string; items: NavItem[] }[] = [
     items: [
       { href: "/platform", label: "Overview", icon: "sparkle", platformOnly: true, exact: true },
       { href: "/platform/clients", label: "Clients", icon: "globe", platformOnly: true },
+      { href: "/platform/licenses", label: "Licences", icon: "badge", platformOnly: true },
+      { href: "/platform/people", label: "People", icon: "users", platformOnly: true },
+      { href: "/platform/reports", label: "Reports and safety", icon: "flag", platformOnly: true },
       { href: "/platform/inquiries", label: "Onboarding requests", icon: "clipboard", platformOnly: true },
       { href: "/platform/activity", label: "Activity", icon: "clock", platformOnly: true },
     ],
   },
-  { items: [{ href: "/account", label: "My account", icon: "user" }] },
+  { items: [{ href: "/account", label: "My account", icon: "user" }, { href: "/settings", label: "Settings", icon: "settings" }] },
 ];
 
 /** Signed-in app frame: menu, header, support banner. Rendered inside a Suspense boundary by (admin)/layout.tsx. */
@@ -98,6 +101,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     );
   }
 
+  // The company's RYDO Share licence: tell everyone when carpool has stopped, and admins when it is about to.
+  const share = org?.organization.licenses?.find((l) => l.product === "SHARE");
+  const licenseNote =
+    !org || support || !share
+      ? null
+      : share.state !== "ACTIVE"
+        ? { stopped: true, text: share.state === "SCHEDULED" ? "Your company's RYDO Share licence has not started yet, so carpool is not available." : "Your company's RYDO Share licence is not active, so carpool is paused. Ask your admin to contact RYDO." }
+        : share.daysLeft !== null && share.daysLeft <= 14 && can("ORG_ADMIN", "HR_ADMIN", "OPS_ADMIN")
+          ? { stopped: false, text: `Your company's RYDO Share licence ends in ${Math.max(share.daysLeft, 0)} ${share.daysLeft === 1 ? "day" : "days"}. Contact RYDO to renew it so carpool does not stop.` }
+          : null;
   const visible = (n: NavItem) => (n.platformOnly ? me.user.isPlatformAdmin : n.orgOnly ? !!org && !support : n.member ? !!org && !support && features.share : n.roles ? can(...n.roles) : true);
   const leaveSupport = () => {
     if (support) api("POST", `/admin/platform/organizations/${support.orgId}/support/end`).catch(() => undefined);
@@ -187,6 +200,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="flex flex-wrap items-center gap-2 border-b border-warning/20 bg-warning-bg px-4 py-2 text-xs font-bold text-warning sm:px-6">
             <Icon name="shield" size={14} />
             You are viewing {support.orgName} as RYDO support. Nothing can be changed here. Access ends at {fmtTime(support.expiresAt)} and is logged.
+          </div>
+        )}
+        {licenseNote && (
+          <div role="status" className={`flex flex-wrap items-center gap-2 border-b px-4 py-2 text-xs font-bold sm:px-6 ${licenseNote.stopped ? "border-danger/20 bg-[#fee2e2] text-danger" : "border-warning/20 bg-warning-bg text-warning"}`}>
+            <Icon name="alert" size={14} />
+            {licenseNote.text}
           </div>
         )}
         <main id="main" tabIndex={-1} className="flex-1 p-4 outline-none sm:p-6">{children}</main>

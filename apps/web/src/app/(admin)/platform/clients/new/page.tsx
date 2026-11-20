@@ -38,12 +38,14 @@ export default function NewClientPage() {
 
   if (!me?.user.isPlatformAdmin) return <Notice tone="error">RYDO owner team only.</Notice>;
 
-  const domains = company.domains.split(/[\s,]+/).map((d) => d.trim().toLowerCase().replace(/^@/, "")).filter(Boolean);
+  // Accepts "acme.com", "@acme.com", a pasted email or a web address, and keeps only the domain.
+  const domains = [...new Set(company.domains.split(/[\s,;]+/).map((d) => d.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^.*@/, "").replace(/^www\./, "").replace(/[/?#].*$/, "")).filter(Boolean))];
+  const badDomain = domains.find((d) => !/^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/.test(d));
   const adminFinal = admin.sameAsContact ? { ...admin, name: contact.name, email: contact.email } : admin;
   const adminDomainOk = !adminFinal.email || domains.includes(adminFinal.email.split("@")[1] ?? "");
 
   const checks: (() => string | null)[] = [
-    () => (company.name.trim().length < 2 ? "Enter the company name." : !/^[a-z0-9-]{2,40}$/.test(company.slug) ? "Short name: 2–40 lowercase letters, digits or dashes." : domains.length === 0 ? "Add at least one email domain, like acme.com." : null),
+    () => (company.name.trim().length < 2 ? "Enter the company name." : !/^[a-z0-9-]{2,40}$/.test(company.slug) ? "Short name: 2–40 lowercase letters, digits or dashes." : domains.length === 0 ? "Add at least one email domain, like acme.com." : badDomain ? `"${badDomain}" is not a valid domain. Use something like acme.com.` : null),
     () => (!contact.name.trim() || !/\S+@\S+\.\S+/.test(contact.email) ? "Add the client's contact name and email." : !adminFinal.name.trim() || !/\S+@\S+\.\S+/.test(adminFinal.email) ? "Add the first admin's name and email." : !adminDomainOk ? `The admin must use a company email (${domains.join(", ")}).` : admin.password && !/^(?=.*[A-Za-z])(?=.*\d).{8,}$/.test(admin.password) ? "Password: 8+ characters with a letter and a digit." : null),
     () => null,
     () => (limit && (!/^\d+$/.test(limit) || Number(limit) < 1) ? "Seat limit must be a whole number, or empty for no limit." : null),

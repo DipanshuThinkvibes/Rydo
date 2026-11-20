@@ -3,7 +3,8 @@
 import { useEffect, useRef } from "react";
 
 type Gsi = {
-  accounts: { id: { initialize: (o: { client_id: string; callback: (r: { credential: string }) => void; ux_mode?: string }) => void; renderButton: (el: HTMLElement, o: Record<string, unknown>) => void } };
+  // Google Maps also defines window.google (with only `maps`), so `accounts` may be missing until the sign-in script loads.
+  accounts?: { id: { initialize: (o: { client_id: string; callback: (r: { credential: string }) => void; ux_mode?: string }) => void; renderButton: (el: HTMLElement, o: Record<string, unknown>) => void } };
 };
 declare global {
   interface Window {
@@ -16,7 +17,7 @@ let loading: Promise<void> | null = null;
 
 /** Loads Google's sign-in script once. */
 function loadGoogle() {
-  if (window.google) return Promise.resolve();
+  if (window.google?.accounts?.id) return Promise.resolve();
   loading ??= new Promise<void>((resolve, reject) => {
     const s = document.createElement("script");
     s.src = "https://accounts.google.com/gsi/client";
@@ -57,10 +58,15 @@ export function GoogleButton({ text = "continue_with", onCredential, onError, di
     let live = true;
     loadGoogle().then(
       () => {
-        if (!live || !window.google) return;
-        window.google.accounts.id.initialize({ client_id: CLIENT_ID, callback: (r) => cb.current.onCredential(r.credential) });
+        const gid = window.google?.accounts?.id;
+        if (!live) return;
+        if (!gid) {
+          cb.current.onError("We could not load Google sign-in. Check your connection, or use your email instead.");
+          return;
+        }
+        gid.initialize({ client_id: CLIENT_ID, callback: (r) => cb.current.onCredential(r.credential) });
         el.innerHTML = "";
-        window.google.accounts.id.renderButton(el, { type: "standard", theme: "outline", size: "large", text, shape: "pill", logo_alignment: "left", width: Math.min(400, el.clientWidth || 360) });
+        gid.renderButton(el, { type: "standard", theme: "outline", size: "large", text, shape: "pill", logo_alignment: "left", width: Math.min(400, el.clientWidth || 360) });
       },
       () => cb.current.onError("We could not load Google sign-in. Check your connection, or use your email instead."),
     );

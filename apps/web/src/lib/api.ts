@@ -1,4 +1,5 @@
 import type { ApiError, ErrorCode } from "@rydo/shared";
+import { announceSessionEnded } from "./session-end";
 import { ORG_HEADER, SUPPORT_HEADER } from "@rydo/shared";
 
 export class RequestError extends Error {
@@ -64,6 +65,7 @@ export async function apiWithMeta<T, M = Record<string, unknown>>(method: "GET" 
   if (res.status === 401 && !path.startsWith("/auth/")) {
     const refreshed = await send("POST", "/auth/refresh", {});
     if (refreshed.ok) res = await send(method, path, body);
+    else announceSessionEnded(); // the server no longer accepts this sign-in
   }
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {

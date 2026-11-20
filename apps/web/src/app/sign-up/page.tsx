@@ -217,17 +217,25 @@ function DetailsStep({ company, initial, onBack, onSubmit, viaGoogle }: { compan
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="flex flex-col gap-1.5">
-            <Select id="f-department" label="Department" value={d.department} onChange={(e) => set("department", e.target.value)} aria-invalid={errors.department ? true : undefined}>
-              <option value="">Choose…</option>
-              {company.departments.map((x) => <option key={x}>{x}</option>)}
-            </Select>
+            {company.departments.length ? (
+              <Select id="f-department" label="Department" value={d.department} onChange={(e) => set("department", e.target.value)} aria-invalid={errors.department ? true : undefined}>
+                <option value="">Choose…</option>
+                {company.departments.map((x) => <option key={x}>{x}</option>)}
+              </Select>
+            ) : (
+              <Input label="Department" placeholder="For example Engineering" {...field("department")} />
+            )}
             {errors.department && <span className="text-sm font-semibold text-danger">{errors.department}</span>}
           </div>
           <div className="flex flex-col gap-1.5">
-            <Select id="f-office" label="Office" value={d.office} onChange={(e) => set("office", e.target.value)} aria-invalid={errors.office ? true : undefined}>
-              <option value="">Choose…</option>
-              {company.offices.map((x) => <option key={x}>{x}</option>)}
-            </Select>
+            {company.offices.length ? (
+              <Select id="f-office" label="Office" value={d.office} onChange={(e) => set("office", e.target.value)} aria-invalid={errors.office ? true : undefined}>
+                <option value="">Choose…</option>
+                {company.offices.map((x) => <option key={x}>{x}</option>)}
+              </Select>
+            ) : (
+              <Input label="Office" placeholder="For example Head office" {...field("office")} />
+            )}
             {errors.office && <span className="text-sm font-semibold text-danger">{errors.office}</span>}
           </div>
         </div>

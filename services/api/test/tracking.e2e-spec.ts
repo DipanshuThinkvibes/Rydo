@@ -45,8 +45,8 @@ describe('Live trips', () => {
   beforeAll(async () => {
     ({ app, messages, prisma } = await createApp());
     await resetDb(prisma);
-    org = (await prisma.organization.create({ data: { name: 'T Co', slug: 't', emailDomains: ['t.test'], status: 'ACTIVE' } })).id;
-    other = (await prisma.organization.create({ data: { name: 'O Co', slug: 'o', emailDomains: ['o.test'], status: 'ACTIVE' } })).id;
+    org = (await prisma.organization.create({ data: { licenses: { create: [{ product: 'SHARE' }] }, name: 'T Co', slug: 't', emailDomains: ['t.test'], status: 'ACTIVE' } })).id;
+    other = (await prisma.organization.create({ data: { licenses: { create: [{ product: 'SHARE' }] }, name: 'O Co', slug: 'o', emailDomains: ['o.test'], status: 'ACTIVE' } })).id;
     await person('driver', ['RIDER', 'DRIVER']);
     await person('priya', ['RIDER']);
     await person('arjun', ['RIDER']);

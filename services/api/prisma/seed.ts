@@ -57,7 +57,7 @@ async function main() {
   const acme = await prisma.organization.upsert({
     where: { slug: 'acme' },
     update: {},
-    create: { name: 'Acme Tech', slug: 'acme', emailDomains: ['acme.test'], status: 'ACTIVE' },
+    create: { name: 'Acme Tech', slug: 'acme', emailDomains: ['acme.test'], status: 'ACTIVE', licenses: { create: [{ product: 'SHARE', notes: 'Demo licence' }] } },
   });
 
   const people: { email: string; name: string; status: 'ACTIVE' | 'PENDING'; roles: ('ORG_ADMIN' | 'HR_ADMIN' | 'OPS_ADMIN' | 'RIDER' | 'DRIVER')[]; gender?: 'FEMALE' | 'MALE' }[] = [

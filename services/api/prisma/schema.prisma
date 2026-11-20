@@ -220,9 +220,44 @@ model Organization {
   offices     Office[]
   departments Department[]
   memberships Membership[]
+  licenses    License[]
   supportGrants SupportGrant[]
 
   @@map("organizations")
+}
+
+enum LicenseProduct {
+  SHARE       // RYDO Share: carpool between colleagues
+  ENTERPRISE  // RYDO Enterprise: company cabs and shuttles
+  CAMPUS      // RYDO Campus: school and college buses
+}
+
+enum LicenseStatus {
+  ACTIVE
+  SUSPENDED
+  REVOKED
+}
+
+/// What a client is allowed to use. RYDO (super admin) issues, renews, suspends and revokes it. A product works only
+/// while its licence is ACTIVE and today is between startsAt and expiresAt (no expiresAt = no end date).
+model License {
+  id             String         @id @default(uuid()) @db.Uuid
+  organizationId String         @map("organization_id") @db.Uuid
+  product        LicenseProduct
+  status         LicenseStatus  @default(ACTIVE)
+  startsAt       DateTime       @default(now()) @map("starts_at") @db.Timestamptz
+  expiresAt      DateTime?      @map("expires_at") @db.Timestamptz
+  notes          String?
+  statusReason   String?        @map("status_reason")
+  issuedById     String?        @map("issued_by_id") @db.Uuid
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime       @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId, product])
+  @@index([expiresAt])
+  @@map("licenses")
 }
 
 model Office {
@@ -264,6 +299,8 @@ model User {
   photoKey     String?    @map("photo_key")
   /// Set when the person proved they own this email (email code or Google). Null = not verified yet.
   emailVerifiedAt DateTime? @map("email_verified_at") @db.Timestamptz
+  // { emailUpdates, pushUpdates }: both default to on. Safety and account alerts ignore these.
+  notificationPrefs Json @default("{}") @map("notification_prefs")
   gender       Gender     @default(UNDISCLOSED)       // used only for women-only rides
   passwordHash String?    @map("password_hash")       // null = OTP-only sign-in (decision pending)
   status       UserStatus @default(ACTIVE)
@@ -312,6 +349,7 @@ model Session {
   userAgent        String?    @map("user_agent")
   expiresAt        DateTime   @map("expires_at") @db.Timestamptz
   revokedAt        DateTime?  @map("revoked_at") @db.Timestamptz
+  lastActiveAt     DateTime   @default(now()) @map("last_active_at") @db.Timestamptz // websites end after 2 hours without use
   createdAt        DateTime   @default(now()) @map("created_at") @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id])
@@ -343,6 +381,10 @@ model Membership {
   status           MembershipStatus @default(PENDING)
   decidedById      String?          @map("decided_by_id") @db.Uuid   // HR admin membership
   decidedAt        DateTime?        @map("decided_at") @db.Timestamptz
+  // Set when RYDO blocks this person in this company; only RYDO can lift it (the company admin cannot reactivate).
+  platformBlockedAt   DateTime? @map("platform_blocked_at") @db.Timestamptz
+  platformBlockReason String?   @map("platform_block_reason")
+  platformBlockedById String?   @map("platform_blocked_by_id") @db.Uuid
   reliabilityScore Decimal          @default(100) @map("reliability_score") @db.Decimal(5, 2)
   // Rider preferences: { womenOnly, ac, quiet, noSmoking, autoRematch, autoBookCommute, usualToOffice, usualToHome }
   preferences      Json             @default("{}")

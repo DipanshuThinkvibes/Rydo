@@ -10,7 +10,7 @@ describe('Auth (email OTP)', () => {
   beforeAll(async () => {
     ({ app, messages, prisma } = await createApp());
     await resetDb(prisma);
-    await prisma.organization.create({ data: { name: 'Acme', slug: 'acme', emailDomains: ['acme.test'], status: 'ACTIVE' } });
+    await prisma.organization.create({ data: { licenses: { create: [{ product: 'SHARE' }] }, name: 'Acme', slug: 'acme', emailDomains: ['acme.test'], status: 'ACTIVE' } });
   });
   afterAll(() => app.close());
 

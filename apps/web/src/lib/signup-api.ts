@@ -4,9 +4,7 @@ import type { IdType } from "./validators";
 /**
  * Everything the sign-up screens need from the server, in one place.
  *
- * TEMPORARY: `searchCompanies` still reads a small built-in list of the companies that exist in the demo database.
- * Replace it with a real company-search endpoint and the screens will not need to change.
- * Everything else is real: the email code, and `submitRegistration`, which saves the details and asks the
+ * All real: `searchCompanies` reads the companies from the database, then the email code, and `submitRegistration`, which saves the details and asks the
  * company's HR to approve (the full ID number never leaves the browser; only its last 4 characters are sent).
  */
 
@@ -34,19 +32,11 @@ export interface EmployeeDetails {
   office: string;
 }
 
-const REGISTERED: CompanyInfo[] = [
-  { id: "acme", name: "Acme Tech", domains: ["acme.test"], departments: ["Engineering", "Human Resources", "Operations", "Sales", "Finance"], offices: ["Cubbon Park HQ", "Whitefield campus"] },
-  { id: "thinkvibes", name: "Thinkvibes", domains: ["thinkvibes.com"], departments: ["Engineering", "Design", "Delivery", "Sales", "Human Resources"], offices: ["Head office"] },
-];
-
-const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-/** Companies on RYDO whose name contains the text (case does not matter). */
+/** Real: companies that are live on RYDO whose name contains the text, read from the database. */
 export async function searchCompanies(query: string): Promise<CompanyInfo[]> {
-  await wait(250);
-  const q = query.trim().toLowerCase();
+  const q = query.trim();
   if (q.length < 2) return [];
-  return REGISTERED.filter((c) => c.name.toLowerCase().includes(q));
+  return api<CompanyInfo[]>("GET", `/public/companies?q=${encodeURIComponent(q)}`);
 }
 
 /** Real: saves the details and sends the approval request to the company's HR. Call after the email is verified. */

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { orgFeatures, type MembershipSummary, type OrgRoleName, type SetPassword, type UpdateMe } from '@rydo/shared';
+import { applyLicenses, licenseDaysLeft, licenseState, orgFeatures, type MembershipSummary, type OrgRoleName, type SetPassword, type UpdateMe } from '@rydo/shared';
 import { AppError } from '../common/app-error';
 import { hashPassword, verifyPassword } from '../auth/password';
 import { PrismaService } from '../prisma/prisma.service';
@@ -16,19 +16,26 @@ export class MeService {
         platformRoles: true,
         memberships: {
           where: { status: { not: 'LEFT' } },
-          include: { roles: true, organization: { select: { id: true, name: true, slug: true, features: true } } },
+          include: { roles: true, organization: { select: { id: true, name: true, slug: true, features: true, licenses: { select: { product: true, status: true, startsAt: true, expiresAt: true } } } } },
           orderBy: { createdAt: 'asc' },
         },
       },
     });
     const memberships: MembershipSummary[] = user.memberships.map((m) => ({
       id: m.id,
-      organization: { id: m.organization.id, name: m.organization.name, slug: m.organization.slug, features: orgFeatures(m.organization.features) },
+      organization: {
+        id: m.organization.id,
+        name: m.organization.name,
+        slug: m.organization.slug,
+        features: applyLicenses(orgFeatures(m.organization.features), m.organization.licenses),
+        licenses: m.organization.licenses.map((l) => ({ product: l.product, state: licenseState(l), expiresAt: l.expiresAt?.toISOString() ?? null, daysLeft: licenseDaysLeft(l) })),
+      },
       status: m.status,
       roles: m.roles.map((r) => r.role as OrgRoleName),
     }));
+    const platformRole: 'SUPER_ADMIN' | 'SUPPORT' | null = user.platformRoles.some((p) => p.role === 'SUPER_ADMIN') ? 'SUPER_ADMIN' : user.platformRoles.some((p) => p.role === 'SUPPORT') ? 'SUPPORT' : null;
     return {
-      user: { id: user.id, email: user.email, name: user.name, emailVerified: !!user.emailVerifiedAt, isPlatformAdmin: user.platformRoles.some((p) => p.role === 'SUPER_ADMIN') },
+      user: { id: user.id, email: user.email, name: user.name, emailVerified: !!user.emailVerifiedAt, isPlatformAdmin: user.platformRoles.some((p) => p.role === 'SUPER_ADMIN'), platformRole },
       memberships,
     };
   }

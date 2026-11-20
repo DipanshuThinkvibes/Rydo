@@ -1,11 +1,12 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { ADMIN_ROLES, DEFAULT_ORG_FEATURES, type MembershipSummary, type OrgFeatures, type OrgRoleName } from "@rydo/shared";
 import { api, selectedOrg, supportView, type SupportView } from "./api";
+import { IDLE_LIMIT_MS, SESSION_ENDED_EVENT, rememberEnd } from "./session-end";
 
 interface Me {
-  user: { id: string; email: string; name: string; isPlatformAdmin: boolean };
+  user: { id: string; email: string; name: string; isPlatformAdmin: boolean; platformRole?: "SUPER_ADMIN" | "SUPPORT" | null };
   memberships: MembershipSummary[];
 }
 
@@ -49,6 +50,71 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     api<Me>("GET", "/me").then(settle, () => settle(null));
   }, [settle]);
+
+  // Signing out must show up straight away, even in a tab that was left open:
+  // 1) the API says this sign-in is over, 2) a check every minute and whenever the tab comes back,
+  // 3) nobody touched the page for 2 hours.
+  const signedIn = useRef(false);
+  useEffect(() => {
+    signedIn.current = !!me;
+  }, [me]);
+  useEffect(() => {
+    const ended = (reason: "ended" | "idle") => {
+      if (!signedIn.current) return; // a visitor who never signed in has nothing to end
+      signedIn.current = false;
+      rememberEnd(reason);
+      selectedOrg.clear();
+      supportView.clear();
+      setSupport(null);
+      setMe(null);
+    };
+    const onEnded = () => ended("ended");
+    window.addEventListener(SESSION_ENDED_EVENT, onEnded);
+
+    const ACTIVITY_KEY = "rydo-last-activity";
+    let last = Date.now();
+    let written = 0;
+    const touch = () => {
+      last = Date.now();
+      if (last - written > 10_000) {
+        written = last;
+        try {
+          localStorage.setItem(ACTIVITY_KEY, String(last)); // so other open tabs know you are here
+        } catch {
+          /* storage blocked: this tab still tracks itself */
+        }
+      }
+    };
+    const lastSeen = () => {
+      try {
+        return Math.max(last, Number(localStorage.getItem(ACTIVITY_KEY)) || 0);
+      } catch {
+        return last;
+      }
+    };
+    const check = () => {
+      if (!signedIn.current) return;
+      if (Date.now() - lastSeen() > IDLE_LIMIT_MS) {
+        api("POST", "/auth/logout").catch(() => undefined);
+        ended("idle");
+        return;
+      }
+      api("GET", "/me").catch(() => undefined); // a 401 here announces the end
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") check();
+    };
+    const events = ["pointerdown", "keydown", "scroll", "touchstart", "mousemove"] as const;
+    events.forEach((e) => window.addEventListener(e, touch, { passive: true }));
+    document.addEventListener("visibilitychange", onVisible);
+    const timer = setInterval(check, 60_000);
+    return () => {
+      window.removeEventListener(SESSION_ENDED_EVENT, onEnded);
+      events.forEach((e) => window.removeEventListener(e, touch));
+      document.removeEventListener("visibilitychange", onVisible);
+      clearInterval(timer);
+    };
+  }, []);
 
   // Support sessions end by themselves; check once a minute.
   useEffect(() => {
