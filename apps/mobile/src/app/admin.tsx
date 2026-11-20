@@ -1,17 +1,20 @@
 import { useState } from 'react';
-import { Linking, Modal, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
 import { Alert } from '@/lib/dialog';
-import { Redirect } from 'expo-router';
+import { Redirect, router, type Href } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ID_PROOF_LABELS, type IdProofType } from '@rydo/shared';
+import { ID_PROOF_LABEL, type OrgRoleName } from '@rydo/shared';
 import { colors } from '@rydo/ui-tokens';
 import { api, apiWithMeta, errText } from '@/lib/api';
 import { fmtTime, fmtWhen, isoDay, shortName } from '@/lib/format';
 import { useData } from '@/lib/hooks';
 import { useSession } from '@/lib/session';
-import type { AdminDriver, Issue, Member, SosAlert } from '@/lib/types';
+import type { Issue, Member, SosAlert } from '@/lib/types';
 import { AccountButton } from '@/components/account-button';
+import { DriverReviewCard } from '@/components/driver-review-card';
+import type { DriverForReview } from '@/lib/driver-signup';
 import { TabBar } from '@/components/tab-bar';
+import { Icon } from '@/components/icons';
 import { Avatar, Badge, Button, Empty, Label, Loading, Notice, s } from '@/components/ui';
 
 type Tab = 'employees' | 'drivers' | 'issues';
@@ -19,7 +22,7 @@ type Tab = 'employees' | 'drivers' | 'issues';
 interface Data {
   sos: SosAlert[];
   members: Member[] | null;
-  drivers: AdminDriver[] | null;
+  drivers: DriverForReview[] | null;
   issues: Issue[] | null;
   openIssues: number | null;
   ridesToday: number | null;
@@ -43,7 +46,7 @@ export default function Admin() {
       const [sos, members, drivers, issues, rides, live] = await Promise.all([
         ok(api<SosAlert[]>('GET', '/admin/sos')),
         hr ? ok(api<Member[]>('GET', '/admin/members?status=PENDING')) : null,
-        hr ? ok(api<AdminDriver[]>('GET', '/admin/drivers?status=PENDING')) : null,
+        hr ? ok(api<DriverForReview[]>('GET', '/admin/drivers?status=PENDING')) : null,
         ok(apiWithMeta<Issue[], { counts?: Record<string, number> }>('GET', '/admin/issues?status=OPEN&limit=30')),
         ok(api<unknown[]>('GET', `/admin/rides?date=${isoDay(0)}`)),
         ok(api<unknown[]>('GET', '/admin/rides/live')),
@@ -154,28 +157,18 @@ export default function Admin() {
                       <Text numberOfLines={1} style={s.small}>{m.email}{m.department ? ` · ${m.department}` : ''}</Text>
                     </View>
                   </View>
-                  {m.employeeId ? (
+                  {m.registration ? (
                     <View style={{ gap: 4, padding: 12, borderRadius: 14, backgroundColor: colors.surface }}>
                       <Text style={s.small}>
-                        Employee ID <Text style={{ color: colors.ink, fontWeight: '800' }}>{m.employeeId}</Text>
-                        {m.phone ? <> · <Text style={{ color: colors.ink, fontWeight: '700' }}>{m.phone}</Text></> : null}
+                        Employee ID <Text style={{ color: colors.ink, fontWeight: '800' }}>{m.registration.employeeId}</Text> · <Text style={{ color: colors.ink, fontWeight: '700' }}>+91 {m.registration.phone}</Text>
                       </Text>
-                      {m.jobTitle || m.department || m.office ? <Text style={s.small}>{[m.jobTitle, m.department, m.office].filter(Boolean).join(' · ')}</Text> : null}
-                      {m.managerName ? <Text style={s.small}>Manager <Text style={{ color: colors.ink, fontWeight: '700' }}>{m.managerName}</Text>{m.managerEmail ? ` · ${m.managerEmail}` : m.managerEmployeeId ? ` (${m.managerEmployeeId})` : ''}</Text> : null}
-                      {m.idProofType ? (
-                        <Text style={s.small}>
-                          {ID_PROOF_LABELS[m.idProofType as IdProofType] ?? m.idProofType} <Text style={{ color: colors.ink, fontWeight: '700' }}>{m.idProofNumber}</Text>
-                        </Text>
-                      ) : null}
-                      {m.hasIdProof ? (
-                        <Pressable
-                          accessibilityRole="link"
-                          onPress={() => api<{ url: string }>('GET', `/admin/members/${m.id}/id-proof-url`).then((r) => Linking.openURL(r.url), (e) => Alert.alert('Could not open', errText(e)))}
-                          style={{ alignSelf: 'flex-start', marginTop: 4, height: 34, paddingHorizontal: 12, borderRadius: 10, backgroundColor: colors.white, borderWidth: 1.5, borderColor: colors.lineStrong, justifyContent: 'center' }}
-                        >
-                          <Text style={{ fontWeight: '800', color: colors.ink, fontSize: 13 }}>View ID proof</Text>
-                        </Pressable>
-                      ) : null}
+                      <Text style={s.small}>{[m.registration.designation, m.registration.department, m.registration.office].filter(Boolean).join(' · ')}</Text>
+                      <Text style={s.small}>
+                        Manager <Text style={{ color: colors.ink, fontWeight: '700' }}>{m.registration.managerName}</Text> · {m.registration.managerEmail}
+                      </Text>
+                      <Text style={s.small}>
+                        {ID_PROOF_LABEL[m.registration.idType] ?? m.registration.idType} ending <Text style={{ color: colors.ink, fontWeight: '700' }}>{m.registration.idLast4}</Text>
+                      </Text>
                     </View>
                   ) : null}
                   <View style={{ flexDirection: 'row', gap: 10 }}>
@@ -189,46 +182,8 @@ export default function Admin() {
 
           {tab === 'drivers' && (
             <>
-              {data.drivers?.length === 0 ? <Empty title="No documents to check">Driver licenses and RCs waiting for review appear here.</Empty> : null}
-              {data.drivers?.map((d) => {
-                const v = d.vehicles[0];
-                return (
-                  <View key={d.id} style={{ backgroundColor: colors.white, borderRadius: 20, padding: 16, gap: 12 }}>
-                    <View style={s.row}>
-                      <Avatar name={d.name} />
-                      <View style={{ flex: 1 }}>
-                        <Text style={s.strong}>{d.name}</Text>
-                        <Text numberOfLines={1} style={s.small}>{v ? `${v.color} ${v.make} ${v.model} · ${v.plateNumber}` : 'No vehicle yet'}</Text>
-                      </View>
-                    </View>
-                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                      {d.documents.map((doc) => (
-                        <Pressable
-                          key={doc.id}
-                          accessibilityRole="link"
-                          onPress={() => api<{ url: string }>('GET', `/admin/documents/${doc.id}/view-url`).then((r) => Linking.openURL(r.url), (e) => Alert.alert('Could not open', errText(e)))}
-                          style={{ height: 36, paddingHorizontal: 12, borderRadius: 12, backgroundColor: colors.surface2, justifyContent: 'center' }}
-                        >
-                          <Text style={{ fontWeight: '700', color: colors.ink, fontSize: 13 }}>View {doc.kind === 'DRIVING_LICENSE' ? 'license' : 'RC'} · {doc.status.toLowerCase()}</Text>
-                        </Pressable>
-                      ))}
-                    </View>
-                    <Button
-                      small
-                      label="Verify driver"
-                      disabled={!!busy || d.documents.length < 2}
-                      loading={busy === `v${d.id}`}
-                      onPress={() =>
-                        Alert.alert(`Verify ${d.name}?`, 'Only after you have opened and checked the license and the RC.', [
-                          { text: 'Cancel', style: 'cancel' },
-                          { text: 'Verify', onPress: () => act(`v${d.id}`, () => api('POST', `/admin/drivers/${d.id}/verify`)) },
-                        ])
-                      }
-                    />
-                    <Text style={s.small}>To ask for a re-upload with a reason, use the web admin (Drivers).</Text>
-                  </View>
-                );
-              })}
+              {data.drivers?.length === 0 ? <Empty title="No documents to check">New drivers and renewed papers waiting for review appear here.</Empty> : null}
+              {data.drivers?.map((d) => <DriverReviewCard key={d.id} driver={d} onChanged={reload} />)}
             </>
           )}
 
@@ -256,7 +211,7 @@ export default function Admin() {
               ))}
             </>
           )}
-          <Label style={{ textAlign: 'center', marginTop: 8 }}>Reports, ride map and settings are on the web admin</Label>
+          <AdminTools roles={roles} />
         </ScrollView>
       </SafeAreaView>
       <TabBar active="admin" />
@@ -377,5 +332,39 @@ function AnnounceModal({ visible, onClose, onSend }: { visible: boolean; onClose
         </View>
       </View>
     </Modal>
+  );
+}
+
+/** The rest of the web admin, as phone screens under /manage. Rows follow the roles the API allows. */
+function AdminTools({ roles }: { roles: OrgRoleName[] }) {
+  const has = (...r: OrgRoleName[]) => r.some((x) => roles.includes(x));
+  const rows: { title: string; sub: string; href: Href; show: boolean }[] = [
+    { title: 'All employees', sub: 'Search, departments, roles, suspend', href: '/manage/employees', show: has('ORG_ADMIN', 'HR_ADMIN') },
+    { title: 'Announcements', sub: 'Send and see what was sent', href: '/manage/announcements', show: true },
+    { title: 'Surveys', sub: 'Create, publish and read results', href: '/manage/surveys', show: true },
+    { title: 'Feedback', sub: 'Insights and everything employees sent', href: '/manage/feedback', show: true },
+    { title: 'Reports', sub: 'Rides, seats, CO₂, top drivers', href: '/manage/reports', show: true },
+    { title: 'Company and ride rules', sub: 'Name, email domains, logo, rules', href: '/manage/company', show: true },
+    { title: 'Offices and teams', sub: 'Offices on the map, departments', href: '/manage/structure', show: true },
+    { title: 'Activity log', sub: 'Every admin action, newest first', href: '/manage/activity', show: has('ORG_ADMIN', 'HR_ADMIN') },
+  ];
+  return (
+    <View style={{ gap: 8, marginTop: 8 }}>
+      <Label>Admin tools</Label>
+      <View style={{ backgroundColor: colors.white, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 4 }}>
+        {rows
+          .filter((r) => r.show)
+          .map((r, i) => (
+            <Pressable key={r.title} accessibilityRole="button" onPress={() => router.push(r.href)} style={({ pressed }) => [s.row, { paddingVertical: 12, opacity: pressed ? 0.6 : 1, borderTopWidth: i ? 1 : 0, borderTopColor: colors.line }]}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.strong}>{r.title}</Text>
+                <Text style={s.small}>{r.sub}</Text>
+              </View>
+              <Icon name="next" size={22} color={colors.muted} />
+            </Pressable>
+          ))}
+      </View>
+      <Text style={[s.small, { textAlign: 'center' }]}>The live ride map and CSV downloads are on the web admin.</Text>
+    </View>
   );
 }

@@ -41,6 +41,9 @@ describe('Company admin tools', () => {
       await api(app).post('/api/v1/auth/password/reset').send({ email, code: messages.lastCode(email), newPassword: 'Fresh2026' }).expect(200);
       await api(app).post('/api/v1/auth/refresh').send({ refreshToken: before.refreshToken }).expect(401);
       await api(app).post('/api/v1/auth/password/login').send({ email, password: 'Fresh2026', client: 'WEB' }).expect(200);
+      // the reset ended every old session, including the token the later tests used: sign in again
+      await api(app).get('/api/v1/me').set('Authorization', `Bearer ${tokens.hrA}`).expect(401);
+      tokens.hrA = (await signIn(app, messages, email)).accessToken;
     });
 
     it('rejects a wrong code', async () => {

@@ -1,5 +1,5 @@
-import { Body, Controller, Get, HttpStatus, Inject, Param, ParseUUIDPipe, Patch, Post, UploadedFile, UseInterceptors } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { Body, Controller, Get, HttpCode, HttpStatus, Inject, Param, ParseUUIDPipe, Patch, Post, UploadedFiles, UseInterceptors } from '@nestjs/common';
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { Prisma } from '@prisma/client';
 import { documentMetaSchema, driverProfileSchema, vehicleSchema, type DocumentMeta, type DriverProfileInput, type VehicleInput } from '@rydo/shared';
 import { PrismaService } from '../prisma/prisma.service';
@@ -10,7 +10,8 @@ import { Auth, Org, type AuthContext, type OrgContext } from '../common/request-
 import { OrgScoped } from '../tenancy/decorators';
 import { STORAGE_ADAPTER, StorageAdapter } from '../adapters/storage.adapter';
 import { randomToken } from '../auth/crypto';
-import { DOC_MAX_BYTES, DOC_TYPES, documentView, latestDocuments } from './documents';
+import { DOC_MAX_BYTES, DOC_TYPES, documentView, driverChecklist, latestDocuments, PHOTO_TYPES } from './documents';
+import { DocumentCheckService } from './document-check.service';
 
 /** The signed-in employee's own driver profile, vehicles and documents (used by the mobile app). */
 @Controller('driver')
@@ -20,10 +21,14 @@ export class DriverController {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     @Inject(STORAGE_ADAPTER) private readonly storage: StorageAdapter,
+    private readonly checks: DocumentCheckService,
   ) {}
 
   private async profile(org: OrgContext) {
-    return this.prisma.driverProfile.findUnique({ where: { membershipId: org.membershipId }, include: { vehicles: { where: { active: true } }, documents: true } });
+    return this.prisma.driverProfile.findUnique({
+      where: { membershipId: org.membershipId },
+      include: { vehicles: { where: { active: true } }, documents: true, membership: { select: { user: { select: { photoKey: true } } } } },
+    });
   }
 
   private async mustHaveProfile(org: OrgContext) {
@@ -39,8 +44,11 @@ export class DriverController {
       approvalMode: p.approvalMode,
       preferences: p.preferences,
       verifiedAt: p.verifiedAt,
+      guidelinesAcceptedAt: p.guidelinesAcceptedAt,
       vehicles: p.vehicles.map(({ driverProfileId: _d, organizationId: _o, ...v }) => v),
       documents: latestDocuments(p.documents).map(documentView),
+      // What is left to do, step by step (the app's checklist).
+      checklist: driverChecklist(p, !!p.membership.user.photoKey),
     };
   }
 
@@ -93,29 +101,64 @@ export class DriverController {
     return { data: this.view((await this.profile(org))!) };
   }
 
-  /** Photo or PDF of a driving license or vehicle RC, sent as multipart with its number and expiry. */
+  /** The driver agrees to the driver guidelines after reading the safety basics. Needed before HR can verify. */
+  @Post('guidelines')
+  @HttpCode(200)
+  async acceptGuidelines(@Auth() auth: AuthContext, @Org() org: OrgContext) {
+    const p = await this.mustHaveProfile(org);
+    if (!p.guidelinesAcceptedAt) {
+      await this.prisma.driverProfile.update({ where: { id: p.id }, data: { guidelinesAcceptedAt: new Date() } });
+      await this.audit.log({ organizationId: org.organizationId, actorUserId: auth.userId, action: 'DRIVER_GUIDELINES_ACCEPTED', entityType: 'driver_profile', entityId: p.id });
+    }
+    return { data: this.view((await this.profile(org))!) };
+  }
+
+  /**
+   * One driver document, sent as multipart: "file" (front side, or the photo) and, for a licence or RC, "back".
+   * Licence, RC and insurance numbers are then checked against government records (when a provider is set up).
+   */
   @Post('documents')
-  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: DOC_MAX_BYTES } }))
-  async upload(@Auth() auth: AuthContext, @Org() org: OrgContext, @Body(new ZodPipe(documentMetaSchema)) meta: DocumentMeta, @UploadedFile() file?: Express.Multer.File) {
-    const ext = file && DOC_TYPES[file.mimetype];
-    if (!file || !ext) throw new AppError('VALIDATION_ERROR', 'Upload a photo (JPG, PNG, WebP) or PDF up to 5 MB.', HttpStatus.BAD_REQUEST, { file: 'JPG, PNG, WebP or PDF, max 5 MB' });
+  @UseInterceptors(FileFieldsInterceptor([{ name: 'file', maxCount: 1 }, { name: 'back', maxCount: 1 }], { limits: { fileSize: DOC_MAX_BYTES } }))
+  async upload(@Auth() auth: AuthContext, @Org() org: OrgContext, @Body(new ZodPipe(documentMetaSchema)) meta: DocumentMeta, @UploadedFiles() files: { file?: Express.Multer.File[]; back?: Express.Multer.File[] } = {}) {
+    const isPhoto = meta.kind.startsWith('VEHICLE_PHOTO_');
+    const types = isPhoto ? PHOTO_TYPES : DOC_TYPES;
+    const front = files.file?.[0];
+    const back = files.back?.[0];
+    if (!front || !types[front.mimetype]) throw new AppError('VALIDATION_ERROR', isPhoto ? 'Upload a photo (JPG, PNG or WebP) up to 5 MB.' : 'Upload a photo (JPG, PNG, WebP) or PDF up to 5 MB.', HttpStatus.BAD_REQUEST, { file: isPhoto ? 'JPG, PNG or WebP, max 5 MB' : 'JPG, PNG, WebP or PDF, max 5 MB' });
+    if (back && (!['DRIVING_LICENSE', 'VEHICLE_RC'].includes(meta.kind) || !DOC_TYPES[back.mimetype])) throw new AppError('VALIDATION_ERROR', 'Only a licence or RC has a back side (JPG, PNG, WebP or PDF).', HttpStatus.BAD_REQUEST, { back: 'Not needed for this document' });
+    if (meta.kind === 'DRIVING_LICENSE' && !back) throw new AppError('VALIDATION_ERROR', 'Add photos of both sides of your licence.', HttpStatus.BAD_REQUEST, { back: 'Add the back side' });
     const p = await this.mustHaveProfile(org);
     let vehicleId: string | null = null;
-    if (meta.kind === 'VEHICLE_RC') {
-      if (!meta.vehicleId || !p.vehicles.some((v) => v.id === meta.vehicleId)) throw new AppError('VALIDATION_ERROR', 'Choose which vehicle this RC is for.', 400, { vehicleId: 'Pick your vehicle' });
+    if (meta.kind !== 'DRIVING_LICENSE') {
+      if (!meta.vehicleId || !p.vehicles.some((v) => v.id === meta.vehicleId)) throw new AppError('VALIDATION_ERROR', 'Choose which vehicle this is for.', 400, { vehicleId: 'Pick your vehicle' });
       vehicleId = meta.vehicleId;
     }
-    const key = `orgs/${org.organizationId}/drivers/${p.id}/${meta.kind.toLowerCase()}-${randomToken(9)}.${ext}`;
-    await this.storage.put(key, file.buffer, file.mimetype);
+    const base = `orgs/${org.organizationId}/drivers/${p.id}/${meta.kind.toLowerCase()}-${randomToken(9)}`;
+    const key = `${base}.${types[front.mimetype]}`;
+    const backKey = back ? `${base}-back.${DOC_TYPES[back.mimetype]}` : null;
+    await this.storage.put(key, front.buffer, front.mimetype);
+    if (back && backKey) await this.storage.put(backKey, back.buffer, back.mimetype);
     const doc = await this.prisma.$transaction(async (tx) => {
       const d = await tx.document.create({
-        data: { organizationId: org.organizationId, driverProfileId: p.id, vehicleId, kind: meta.kind, storageKey: key, number: meta.number, expiresAt: new Date(meta.expiresAt) },
+        data: {
+          organizationId: org.organizationId,
+          driverProfileId: p.id,
+          vehicleId,
+          kind: meta.kind,
+          storageKey: key,
+          backStorageKey: backKey,
+          number: isPhoto ? null : meta.number,
+          expiresAt: !isPhoto && meta.expiresAt ? new Date(meta.expiresAt) : null,
+          dateOfBirth: meta.kind === 'DRIVING_LICENSE' && meta.dateOfBirth ? new Date(meta.dateOfBirth) : null,
+          vehicleClasses: meta.kind === 'DRIVING_LICENSE' ? (meta.vehicleClasses ?? []) : [],
+        },
       });
       // A fresh upload puts a rejected or expired driver back in HR's queue.
       if (p.status === 'REJECTED' || p.status === 'EXPIRED') await tx.driverProfile.update({ where: { id: p.id }, data: { status: 'PENDING' } });
-      await this.audit.log({ organizationId: org.organizationId, actorUserId: auth.userId, action: 'DOCUMENT_UPLOADED', entityType: 'document', entityId: d.id, after: { kind: meta.kind, number: meta.number, expiresAt: meta.expiresAt } }, tx);
+      await this.audit.log({ organizationId: org.organizationId, actorUserId: auth.userId, action: 'DOCUMENT_UPLOADED', entityType: 'document', entityId: d.id, after: { kind: meta.kind, number: d.number, expiresAt: meta.expiresAt ?? null } }, tx);
       return d;
     });
-    return { data: documentView(doc) };
+    const checked = (await this.checks.checkAndStore(doc.id)) ?? doc;
+    return { data: documentView(checked) };
   }
 }

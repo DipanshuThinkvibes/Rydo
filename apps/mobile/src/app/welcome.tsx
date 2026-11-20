@@ -73,6 +73,14 @@ export default function Welcome() {
           <Pressable accessibilityRole="button" onPress={() => router.push('/sign-in')} style={{ height: 52, borderRadius: 16, borderWidth: 1.5, borderColor: colors.ink2, alignItems: 'center', justifyContent: 'center' }}>
             <Text style={{ color: colors.white, fontSize: 16, fontWeight: '800' }}>I already have an account</Text>
           </Pressable>
+          <Pressable accessibilityRole="link" onPress={() => router.push('/contact')} style={{ alignSelf: 'center', padding: 6 }}>
+            <Text style={{ color: colors.mutedOnDark, fontSize: 14 }}>
+              Company not on RYDO yet? <Text style={{ color: colors.lime, fontWeight: '800', textDecorationLine: 'underline' }}>Contact us</Text>
+            </Text>
+          </Pressable>
+          <Pressable accessibilityRole="link" onPress={() => router.push('/info')} style={{ alignSelf: 'center', padding: 6 }}>
+            <Text style={{ color: colors.mutedOnDark, fontSize: 14, textDecorationLine: 'underline' }}>How it works, FAQ and privacy</Text>
+          </Pressable>
         </View>
       </SafeAreaView>
     </View>

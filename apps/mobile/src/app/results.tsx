@@ -26,6 +26,20 @@ export default function Results() {
   const [waitBusy, setWaitBusy] = useState(false);
   const [card, setCard] = useState<string | null>(null);
   const [blocked, setBlocked] = useState<string[]>([]);
+  // Preferred-driver changes made here, on top of what the search returned (same as the web ♥).
+  const [fav, setFav] = useState<Record<string, boolean>>({});
+  const toggleFav = async (m: RideMatch) => {
+    const on = !(fav[m.driver.membershipId] ?? m.preferred);
+    setFav((f) => ({ ...f, [m.driver.membershipId]: on }));
+    try {
+      if (on) await api('POST', '/me/preferred-drivers', { driverMembershipId: m.driver.membershipId });
+      else await api('DELETE', `/me/preferred-drivers/${m.driver.membershipId}`);
+      setMsg({ tone: 'ok', text: on ? `${shortName(m.driver.name)} is now a preferred driver. Their rides show first.` : 'Removed from preferred drivers.' });
+    } catch (e) {
+      setFav((f) => ({ ...f, [m.driver.membershipId]: !on }));
+      setMsg({ tone: 'error', text: errText(e) });
+    }
+  };
 
   const shown = useMemo(
     () =>
@@ -107,7 +121,7 @@ export default function Results() {
             <Empty title="No rides match yet">Try another time or day. Or join the waitlist: when a seat opens on this route, you get it first.</Empty>
           )}
           {shown.map((m, i) => (
-            <MatchCard key={m.rideId} m={m} best={i === 0 && filter === 'all'} active={m.rideId === chosen?.rideId} onPress={() => setSelected(m.rideId)} onDriver={() => setCard(m.driver.membershipId)} />
+            <MatchCard key={m.rideId} m={m} best={i === 0 && filter === 'all'} active={m.rideId === chosen?.rideId} onPress={() => setSelected(m.rideId)} onDriver={() => setCard(m.driver.membershipId)} preferred={fav[m.driver.membershipId] ?? m.preferred} onFav={() => toggleFav(m)} />
           ))}
           <View style={{ gap: 10, padding: 16, borderRadius: 20, backgroundColor: colors.surface }}>
             <Text style={s.strong}>{shown.length ? 'Nothing quite right?' : 'Join the waitlist'}</Text>
@@ -134,7 +148,7 @@ export default function Results() {
   );
 }
 
-function MatchCard({ m, best, active, onPress, onDriver }: { m: RideMatch; best: boolean; active: boolean; onPress: () => void; onDriver: () => void }) {
+function MatchCard({ m, best, active, onPress, onDriver, preferred, onFav }: { m: RideMatch; best: boolean; active: boolean; onPress: () => void; onDriver: () => void; preferred: boolean; onFav: () => void }) {
   return (
     <Pressable
       accessibilityRole="button"
@@ -165,10 +179,20 @@ function MatchCard({ m, best, active, onPress, onDriver }: { m: RideMatch; best:
           <Text style={{ fontSize: 20, fontWeight: '800', color: colors.ink }}>{m.score}%</Text>
           <Text style={s.small}>match</Text>
         </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ selected: preferred }}
+          accessibilityLabel={preferred ? 'Remove preferred driver' : 'Save as preferred driver'}
+          onPress={onFav}
+          hitSlop={6}
+          style={{ width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: preferred ? '#FEF2F2' : colors.surface2 }}
+        >
+          <Text style={{ fontSize: 18, color: preferred ? colors.danger : colors.muted }}>{preferred ? '♥' : '♡'}</Text>
+        </Pressable>
       </View>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
         {best && <Badge tone="lime">Best match</Badge>}
-        {m.preferred && <Badge tone="ink">Preferred driver</Badge>}
+        {preferred && <Badge tone="ink">Preferred driver</Badge>}
         {m.womenOnly && <Badge tone="women">Women-only</Badge>}
         {m.vehicle.hasAc && <Badge tone="neutral">AC</Badge>}
         {m.vehicle.type === 'BIKE' && <Badge tone="neutral">Bike</Badge>}

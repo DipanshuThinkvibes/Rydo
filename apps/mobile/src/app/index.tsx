@@ -82,7 +82,10 @@ export default function Home() {
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <AccountButton size={48} />
           <ModeSwitch mode="ride" />
-          <RoundButton icon="bell" label={data?.unread ? `${data.unread} unread notifications` : 'Notifications'} dot={!!data?.unread} onPress={() => api('POST', '/me/notifications/read').then(reload, () => undefined)} />
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <RoundButton icon="chat" label={data?.chatUnread.total ? `${data.chatUnread.total} unread messages` : 'Messages'} dot={!!data?.chatUnread.total} onPress={() => router.push('/messages')} />
+            <RoundButton icon="bell" label={data?.unread ? `${data.unread} unread notifications` : 'Notifications'} dot={!!data?.unread} onPress={() => router.push('/notifications')} />
+          </View>
         </View>
         <View style={s.pillDark}>
           <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.lime }} />

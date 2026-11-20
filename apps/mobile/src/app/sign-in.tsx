@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import type { AuthResult, GoogleSignInResult } from '@rydo/shared';
+import type { AuthResult } from '@rydo/shared';
 import { colors } from '@rydo/ui-tokens';
 import { api, RequestError } from '@/lib/api';
+import { Alert } from '@/lib/dialog';
 import { useSession } from '@/lib/session';
 import { Button, Field, Logo, Notice, s } from '@/components/ui';
 import { GoogleButton, googleSignInAvailable } from '@/components/google-button';
@@ -69,15 +70,21 @@ export default function SignIn() {
     }
   }
 
-  /** Continue with Google: known people go straight in; new employees fill in the sign-up form. */
+  /** Continue with Google: signs in people who already have a RYDO account. New employees use Sign up. */
   const withGoogle = (idToken: string) =>
     run(async () => {
-      const r = await api<GoogleSignInResult>('POST', '/auth/google', { idToken, client: 'MOBILE' });
-      if (r.needsSignup) {
-        router.push({ pathname: '/signup', params: { email: r.email, name: r.name, companyId: r.companyId, company: r.companyName, googleIdToken: idToken } });
-        return;
+      try {
+        await finish(await api<AuthResult>('POST', '/auth/google', { idToken, client: 'MOBILE', mode: 'login' }));
+      } catch (e) {
+        if (e instanceof RequestError && e.code === 'NOT_FOUND') {
+          Alert.alert('No RYDO account yet', 'There is no RYDO account for this Google email. Sign up first: find your company and fill in your work details.', [
+            { text: 'Not now', style: 'cancel' },
+            { text: 'Sign up', onPress: () => router.push('/signup') },
+          ]);
+          return;
+        }
+        throw e;
       }
-      await finish(r);
     });
 
   const switchTo = (m: Mode) => {
@@ -116,6 +123,11 @@ export default function SignIn() {
             )}
             {mode === 'password' && (
               <Field label="Password" value={password} onChangeText={setPassword} secureTextEntry autoCapitalize="none" autoComplete="current-password" textContentType="password" onSubmitEditing={() => ready && submit()} />
+            )}
+            {mode === 'password' && (
+              <Pressable accessibilityRole="link" onPress={() => router.push({ pathname: '/forgot-password', params: { email } })} style={{ alignSelf: 'flex-end', marginTop: -6, padding: 4 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: colors.ink, textDecorationLine: 'underline' }}>Forgot password?</Text>
+              </Pressable>
             )}
             {mode === 'code' && (
               <Field label="6-digit code" value={code} onChangeText={(t) => setCode(t.replace(/\D/g, '').slice(0, 6))} keyboardType="number-pad" autoComplete="one-time-code" textContentType="oneTimeCode" maxLength={6} />

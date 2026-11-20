@@ -10,7 +10,7 @@ export default function Home() {
   const router = useRouter();
   useEffect(() => {
     if (!me) return;
-    router.replace(support ? "/employees" : isAdmin ? "/employees" : org && features.share ? "/ride" : me.user.isPlatformAdmin ? "/platform" : "/account");
+    router.replace(support ? "/employees" : org && features.share ? "/dashboard" : isAdmin ? "/employees" : me.user.isPlatformAdmin ? "/platform" : "/account");
   }, [me, org, isAdmin, features.share, support, router]);
   return <p className="text-muted">Loading…</p>;
 }

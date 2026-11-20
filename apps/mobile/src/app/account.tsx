@@ -1,14 +1,16 @@
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { Image, KeyboardAvoidingView, Platform, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { Alert } from '@/lib/dialog';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '@rydo/ui-tokens';
-import { api, errText } from '@/lib/api';
+import { api, errText, RequestError } from '@/lib/api';
+import { pick } from '@/lib/photo';
+import { Select } from '@/components/select';
 import { fmtWhen } from '@/lib/format';
 import { useData } from '@/lib/hooks';
 import { useSession } from '@/lib/session';
-import type { Blocked, EmergencyContact, MyIssue, MyProfile, OpenSurvey } from '@/lib/types';
+import type { Blocked, EmailState, EmergencyContact, MyIssue, MyProfile, OpenSurvey } from '@/lib/types';
 import { Icon, type IconName } from '@/components/icons';
 import { Avatar, BackButton, Badge, Button, Card, Field, Label, Loading, Notice, s } from '@/components/ui';
 
@@ -20,24 +22,34 @@ interface Data {
   blocks: Blocked[];
   issues: MyIssue[];
   surveys: OpenSurvey[];
+  email: EmailState | null;
 }
 
-/** Profile, phone, emergency contacts, blocked people, my reports, feedback, surveys, sign out. */
+const GENDERS = [
+  { value: 'UNDISCLOSED', label: 'Prefer not to say' },
+  { value: 'FEMALE', label: 'Female' },
+  { value: 'MALE', label: 'Male' },
+  { value: 'OTHER', label: 'Other' },
+];
+
+/** Profile (photo, name, phone, gender), email check, password, emergency contacts, blocked people, reports, links, sign out. */
 export default function Account() {
   const { me, membership, signOut } = useSession();
   const [refreshing, setRefreshing] = useState(false);
   const [editing, setEditing] = useState<EmergencyContact | 'new' | null>(null);
-  const [phone, setPhone] = useState<string | null>(null);
+  const [profileForm, setProfileForm] = useState<{ name: string; phone: string; gender: string } | null>(null);
+  const [profileErrors, setProfileErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const { data, setData, reload, error } = useData<Data>(async () => {
-    const [profile, contacts, blocks, issues, surveys] = await Promise.all([
+    const [profile, contacts, blocks, issues, surveys, email] = await Promise.all([
       api<MyProfile>('GET', '/me/profile'),
       api<EmergencyContact[]>('GET', '/me/emergency-contacts'),
       api<Blocked[]>('GET', '/me/blocks').catch(() => [] as Blocked[]),
       api<MyIssue[]>('GET', '/me/issues').catch(() => [] as MyIssue[]),
       api<OpenSurvey[]>('GET', '/me/surveys').catch(() => [] as OpenSurvey[]),
+      api<EmailState>('GET', '/me/email').catch(() => null),
     ]);
-    return { profile, contacts, blocks, issues, surveys };
+    return { profile, contacts, blocks, issues, surveys, email };
   }, []);
 
   const confirmSignOut = () =>
@@ -63,7 +75,43 @@ export default function Account() {
     }
   };
 
-  const savePhone = () => run('phone', () => api('PATCH', '/me', { phone: phone?.trim() ? phone.trim() : null })).then((ok) => ok && setPhone(null));
+  const saveProfile = async () => {
+    if (!profileForm) return;
+    setBusy('profile');
+    setProfileErrors({});
+    try {
+      await api('PATCH', '/me', { name: profileForm.name.trim(), gender: profileForm.gender, phone: profileForm.phone.trim() ? profileForm.phone.trim() : null });
+      await reload();
+      setProfileForm(null);
+    } catch (e) {
+      if (e instanceof RequestError && e.fields) setProfileErrors(e.fields);
+      else Alert.alert('That did not work', errText(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  /** Same 3 steps as the web: ask for an upload slot, PUT the photo there, then save it on the profile. */
+  const uploadPhoto = async (fromCamera: boolean) => {
+    const file = await pick(fromCamera);
+    if (!file) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) return Alert.alert('Choose a JPG, PNG or WebP photo.');
+    const blob = await (await fetch(file.uri)).blob();
+    if (blob.size > 5 * 1024 * 1024) return Alert.alert('The photo must be under 5 MB.');
+    await run('photo', async () => {
+      const slot = await api<{ key: string; uploadUrl: string; headers: Record<string, string> }>('POST', '/me/photo/upload-url', { contentType: file.type });
+      const put = await fetch(slot.uploadUrl, { method: 'PUT', headers: slot.headers, body: blob });
+      if (!put.ok) throw new Error('upload failed');
+      await api('PUT', '/me/photo', { key: slot.key });
+    });
+  };
+  const photoMenu = () =>
+    Alert.alert('Profile photo', 'Colleagues see it on rides, so they know who to look for.', [
+      { text: 'Take a photo', onPress: () => uploadPhoto(true) },
+      { text: 'Choose from gallery', onPress: () => uploadPhoto(false) },
+      ...(profile.photoUrl ? [{ text: 'Remove photo', style: 'destructive' as const, onPress: () => run('photo', () => api('DELETE', '/me/photo')) }] : []),
+      { text: 'Cancel', style: 'cancel' as const },
+    ]);
   const removeContact = (c: EmergencyContact) =>
     Alert.alert(`Remove ${c.name}?`, undefined, [
       { text: 'Keep', style: 'cancel' },
@@ -86,10 +134,15 @@ export default function Account() {
 
           <Card style={{ gap: 14 }}>
             <View style={s.row}>
-              <Avatar name={profile.name} size={60} tone="ink" />
+              <Pressable accessibilityRole="button" accessibilityLabel={profile.photoUrl ? 'Change profile photo' : 'Add profile photo'} onPress={photoMenu} disabled={busy === 'photo'}>
+                {profile.photoUrl ? <Image source={{ uri: profile.photoUrl }} style={{ width: 60, height: 60, borderRadius: 30 }} /> : <Avatar name={profile.name} size={60} tone="ink" />}
+                <View style={{ position: 'absolute', right: -2, bottom: -2, width: 24, height: 24, borderRadius: 12, backgroundColor: colors.lime, borderWidth: 2, borderColor: colors.white, alignItems: 'center', justifyContent: 'center' }}>
+                  <Icon name="plus" size={12} />
+                </View>
+              </Pressable>
               <View style={{ flex: 1 }}>
                 <Text style={s.h2}>{profile.name}</Text>
-                <Text style={s.small}>{profile.email}</Text>
+                <Text style={s.small}>{profile.email}{data.email ? (data.email.verified ? ' · ✓ verified' : ' · not verified') : ''}</Text>
                 <Text style={s.small}>{[membership?.organization.name, profile.department].filter(Boolean).join(' · ')}</Text>
               </View>
             </View>
@@ -120,23 +173,31 @@ export default function Account() {
           ))}
 
           <Card style={{ gap: 10 }}>
-            <Label>Phone</Label>
-            <Text style={s.small}>Only RYDO and your company&apos;s safety team can see it. Never shown to drivers or riders.</Text>
-            {phone === null ? (
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Text style={s.strong}>{profile.phone ?? 'Not added'}</Text>
-                <Button small variant="ghost" label={profile.phone ? 'Change' : 'Add phone'} onPress={() => setPhone(profile.phone ?? '')} />
-              </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Label>Profile</Label>
+              {profileForm === null ? <Button small variant="ghost" label="Edit" onPress={() => setProfileForm({ name: profile.name, phone: profile.phone ?? '', gender: profile.gender ?? 'UNDISCLOSED' })} /> : null}
+            </View>
+            {profileForm === null ? (
+              <>
+                <Text style={s.small}>Name <Text style={s.strong}>{profile.name}</Text></Text>
+                <Text style={s.small}>Phone <Text style={s.strong}>{profile.phone ?? 'Not added'}</Text> · private, never shown to drivers or riders</Text>
+                <Text style={s.small}>Gender <Text style={s.strong}>{GENDERS.find((g) => g.value === profile.gender)?.label ?? 'Prefer not to say'}</Text> · only used for women-only rides</Text>
+              </>
             ) : (
               <>
-                <Field label="Phone number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="+91 98765 43210" autoComplete="tel" />
+                <Field label="Name" value={profileForm.name} onChangeText={(name) => setProfileForm({ ...profileForm, name })} autoComplete="name" error={profileErrors.name} />
+                <Field label="Phone (private)" value={profileForm.phone} onChangeText={(phone) => setProfileForm({ ...profileForm, phone })} keyboardType="phone-pad" placeholder="+91 98765 43210" autoComplete="tel" error={profileErrors.phone} />
+                <Select label="Gender (only used for women-only rides)" value={profileForm.gender} options={GENDERS} onChange={(gender) => setProfileForm({ ...profileForm, gender })} error={profileErrors.gender} />
                 <View style={{ flexDirection: 'row', gap: 10 }}>
-                  <Button small variant="ghost" label="Cancel" style={{ flex: 1 }} onPress={() => setPhone(null)} />
-                  <Button small label="Save" style={{ flex: 1 }} loading={busy === 'phone'} onPress={savePhone} />
+                  <Button small variant="ghost" label="Cancel" style={{ flex: 1 }} onPress={() => (setProfileForm(null), setProfileErrors({}))} />
+                  <Button small label="Save" style={{ flex: 1 }} loading={busy === 'profile'} onPress={saveProfile} />
                 </View>
               </>
             )}
           </Card>
+
+          {data.email ? <EmailCard state={data.email} onVerified={reload} /> : null}
+          <PasswordCard />
 
           <Card style={{ gap: 10 }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -171,8 +232,13 @@ export default function Account() {
           </Card>
 
           <Card style={{ gap: 4, paddingVertical: 8 }}>
+            <Row icon="bell" title="Notifications" sub="Ride updates and news from your company" onPress={() => router.push('/notifications')} />
+            <Row icon="chat" title="Messages" sub="Chats with your drivers and riders" onPress={() => router.push('/messages')} />
+            <Row icon="star" title="Preferred drivers" sub="Colleagues you like riding with" onPress={() => router.push('/preferred-drivers')} />
+            <Row icon="clock" title="My waitlist" sub="Days you're waiting for a seat" onPress={() => router.push('/waitlist')} />
             <Row icon="chat" title="Send feedback about RYDO" sub="Ideas, problems, what works" onPress={() => router.push('/feedback')} />
             <Row icon="flag" title="Report a problem" sub="Goes to your company's admins" onPress={() => router.push('/report')} />
+            <Row icon="alert" title="Help and about RYDO" sub="FAQ, how it works, privacy and terms" onPress={() => router.push('/info')} />
           </Card>
 
           {data.issues.length > 0 && (
@@ -254,5 +320,120 @@ function ContactForm({ initial, busy, onSave, onCancel }: { initial?: EmergencyC
         />
       </View>
     </View>
+  );
+}
+
+/** Prove the work email with a 6-digit code (GET/POST /me/email…), same as the web account page. */
+function EmailCard({ state, onVerified }: { state: EmailState; onVerified: () => Promise<unknown> }) {
+  const [sent, setSent] = useState(false);
+  const [code, setCode] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ tone: 'ok' | 'error'; text: string }>();
+
+  const send = async () => {
+    setBusy(true);
+    setMsg(undefined);
+    try {
+      await api('POST', '/me/email/verify/send');
+      setSent(true);
+      setCode('');
+      setMsg({ tone: 'ok', text: `We emailed a 6-digit code to ${state.email}. It expires in a few minutes.` });
+    } catch (e) {
+      setMsg({ tone: 'error', text: errText(e) });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const verify = async () => {
+    setBusy(true);
+    setMsg(undefined);
+    try {
+      await api('POST', '/me/email/verify', { code });
+      setSent(false);
+      await onVerified();
+    } catch (e) {
+      setMsg({ tone: 'error', text: errText(e) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card style={{ gap: 10 }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Label>Email</Label>
+        <Badge tone={state.verified ? 'success' : 'warning'}>{state.verified ? 'verified' : 'not verified'}</Badge>
+      </View>
+      <Text style={s.strong}>{state.email}</Text>
+      {state.verified ? (
+        <Text style={s.small}>Your company can trust this account is really yours{state.verifiedAt ? ` (verified ${new Date(state.verifiedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })})` : ''}.</Text>
+      ) : (
+        <>
+          <Text style={s.small}>Verify your email so your company knows this account is really yours. We email you a 6-digit code.</Text>
+          {sent ? (
+            <>
+              <Field label="6-digit code" value={code} onChangeText={(t) => setCode(t.replace(/\D/g, '').slice(0, 6))} keyboardType="number-pad" autoComplete="one-time-code" textContentType="oneTimeCode" maxLength={6} placeholder="123456" />
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <Button small variant="ghost" label="New code" style={{ flex: 1 }} disabled={busy} onPress={send} />
+                <Button small label="Verify email" style={{ flex: 1 }} loading={busy} disabled={code.length !== 6} onPress={verify} />
+              </View>
+            </>
+          ) : (
+            <Button small label="Send verification code" loading={busy} onPress={send} />
+          )}
+        </>
+      )}
+      {msg ? <Notice tone={msg.tone}>{msg.text}</Notice> : null}
+    </Card>
+  );
+}
+
+/** Set or change the password (POST /me/password). The current password is only needed if one is set. */
+function PasswordCard() {
+  const [open, setOpen] = useState(false);
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [fields, setFields] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ tone: 'ok' | 'error'; text: string }>();
+
+  const save = async () => {
+    setBusy(true);
+    setFields({});
+    setMsg(undefined);
+    try {
+      await api('POST', '/me/password', { currentPassword: current || undefined, newPassword: next });
+      setCurrent('');
+      setNext('');
+      setOpen(false);
+      setMsg({ tone: 'ok', text: 'Password updated.' });
+    } catch (e) {
+      if (e instanceof RequestError) setFields(e.fields ?? {});
+      setMsg({ tone: 'error', text: errText(e) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card style={{ gap: 10 }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Label>Password</Label>
+        {!open ? <Button small variant="ghost" label="Change" onPress={() => (setOpen(true), setMsg(undefined))} /> : null}
+      </View>
+      <Text style={s.small}>Optional. You can always sign in with an email code instead.</Text>
+      {open ? (
+        <>
+          <Field label="Current password (leave empty if you never set one)" value={current} onChangeText={setCurrent} secureTextEntry autoCapitalize="none" autoComplete="current-password" error={fields.currentPassword} />
+          <Field label="New password" value={next} onChangeText={setNext} secureTextEntry autoCapitalize="none" autoComplete="new-password" textContentType="newPassword" error={fields.newPassword} />
+          <Text style={s.small}>At least 8 characters with a letter and a number.</Text>
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <Button small variant="ghost" label="Cancel" style={{ flex: 1 }} onPress={() => (setOpen(false), setFields({}), setMsg(undefined))} />
+            <Button small label="Save password" style={{ flex: 1 }} loading={busy} disabled={!next} onPress={save} />
+          </View>
+        </>
+      ) : null}
+      {msg ? <Notice tone={msg.tone}>{msg.text}</Notice> : null}
+    </Card>
   );
 }

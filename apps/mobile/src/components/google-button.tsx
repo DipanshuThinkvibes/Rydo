@@ -1,10 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Platform, Pressable, Text, View } from 'react-native';
-import * as Google from 'expo-auth-session/providers/google';
-import * as WebBrowser from 'expo-web-browser';
 import { colors } from '@rydo/ui-tokens';
-
-WebBrowser.maybeCompleteAuthSession();
 
 /**
  * Google OAuth client ids (Google Cloud → Credentials) from apps/mobile/.env. They are public ids, not secrets.
@@ -17,12 +13,36 @@ const ids = {
 };
 const forThisPlatform = Platform.OS === 'android' ? ids.androidClientId : Platform.OS === 'ios' ? ids.iosClientId : ids.webClientId;
 
-/** True when "Continue with Google" can work on this platform. */
-export const googleSignInAvailable = !!forThisPlatform;
+/**
+ * The Google sign-in package needs native code that Expo Go does not ship (ExpoApplication), so it is loaded only
+ * when a client id is set, and a failed load just hides the button instead of crashing the sign-in screens.
+ * Google sign-in works in a development build (npx expo run:android / eas build), not in Expo Go.
+ */
+type GoogleProvider = typeof import('expo-auth-session/providers/google');
+let Google: GoogleProvider | null = null;
+if (forThisPlatform) {
+  try {
+    /* eslint-disable @typescript-eslint/no-require-imports */
+    Google = require('expo-auth-session/providers/google') as GoogleProvider;
+    (require('expo-web-browser') as typeof import('expo-web-browser')).maybeCompleteAuthSession();
+    /* eslint-enable @typescript-eslint/no-require-imports */
+  } catch {
+    Google = null;
+  }
+}
+
+/** True when "Continue with Google" can work here (client id set and the native part present). */
+export const googleSignInAvailable = !!Google;
 
 /** "Continue with Google". Render only when googleSignInAvailable (the Google hook needs a client id). */
-export function GoogleButton({ onIdToken, onError, busy, label = 'Continue with Google', disabled }: { onIdToken: (idToken: string) => void; onError: (message: string) => void; busy?: boolean; label?: string; disabled?: boolean }) {
-  const [request, response, promptAsync] = Google.useIdTokenAuthRequest(ids);
+type ButtonProps = { onIdToken: (idToken: string) => void; onError: (message: string) => void; busy?: boolean; label?: string; disabled?: boolean };
+
+export function GoogleButton(props: ButtonProps) {
+  return Google ? <LoadedGoogleButton google={Google} {...props} /> : null;
+}
+
+function LoadedGoogleButton({ google, onIdToken, onError, busy, label = 'Continue with Google', disabled }: ButtonProps & { google: GoogleProvider }) {
+  const [request, response, promptAsync] = google.useIdTokenAuthRequest(ids);
   const handled = useRef<string | null>(null);
 
   useEffect(() => {

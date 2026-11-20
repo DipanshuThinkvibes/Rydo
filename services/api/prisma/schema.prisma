@@ -97,6 +97,18 @@ enum VehicleType {
 enum DocumentKind {
   DRIVING_LICENSE
   VEHICLE_RC
+  VEHICLE_INSURANCE
+  VEHICLE_PHOTO_FRONT
+  VEHICLE_PHOTO_SIDE
+  VEHICLE_PHOTO_INSIDE
+}
+
+/// Outcome of checking a document against government records (via the document-check adapter).
+enum DocumentCheckStatus {
+  PASSED
+  WARNING
+  FAILED
+  UNAVAILABLE
 }
 
 enum DocumentStatus {
@@ -262,9 +274,10 @@ model User {
   name         String
   phone        String?                                // never shown to other users; masked calls only
   photoKey     String?    @map("photo_key")
+  /// Set when the person proved they own this email (email code or Google). Null = not verified yet.
+  emailVerifiedAt DateTime? @map("email_verified_at") @db.Timestamptz
   gender       Gender     @default(UNDISCLOSED)       // used only for women-only rides
   passwordHash String?    @map("password_hash")       // null = OTP-only sign-in (decision pending)
-  googleSub    String?    @unique @map("google_sub")  // "Continue with Google" account id
   status       UserStatus @default(ACTIVE)
   createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz
   updatedAt    DateTime   @updatedAt @map("updated_at") @db.Timestamptz
@@ -339,16 +352,6 @@ model Membership {
   userId           String           @map("user_id") @db.Uuid
   departmentId     String?          @map("department_id") @db.Uuid
   employeeCode     String?          @map("employee_code")
-  // Self sign-up details, checked by HR before approval. Aadhaar numbers are stored masked (last 4 digits).
-  managerName         String?   @map("manager_name")
-  managerEmployeeCode String?   @map("manager_employee_code")
-  idProofType         String?   @map("id_proof_type")
-  idProofNumber       String?   @map("id_proof_number")
-  idProofKey          String?   @map("id_proof_key")
-  signedUpAt          DateTime? @map("signed_up_at") @db.Timestamptz
-  jobTitle            String?   @map("job_title")
-  officeId            String?   @map("office_id") @db.Uuid // checked in code to belong to the same company
-  managerEmail        String?   @map("manager_email")
   status           MembershipStatus @default(PENDING)
   decidedById      String?          @map("decided_by_id") @db.Uuid   // HR admin membership
   decidedAt        DateTime?        @map("decided_at") @db.Timestamptz
@@ -432,6 +435,8 @@ model DriverProfile {
   membershipId String       @unique @map("membership_id") @db.Uuid
   status       DriverStatus @default(PENDING)
   approvalMode ApprovalMode @default(MANUAL) @map("approval_mode")
+  /// When the driver agreed to the driver guidelines (safety basics). Required before HR can verify.
+  guidelinesAcceptedAt DateTime? @map("guidelines_accepted_at") @db.Timestamptz
   // Driver ride preferences: { ac, noSmoking, quiet, musicOk, womenRidersOnly }
   preferences  Json         @default("{}")
   verifiedById String?      @map("verified_by_id") @db.Uuid
@@ -474,10 +479,16 @@ model Document {
   id              String         @id @default(uuid()) @db.Uuid
   organizationId  String         @map("organization_id") @db.Uuid
   driverProfileId String         @map("driver_profile_id") @db.Uuid
-  vehicleId       String?        @map("vehicle_id") @db.Uuid   // set for VEHICLE_RC
+  vehicleId       String?        @map("vehicle_id") @db.Uuid   // set for everything except the driving licence
   kind            DocumentKind
-  storageKey      String         @map("storage_key")           // private bucket; served via short-lived signed URL
-  number          String?                                       // license / RC number as typed
+  storageKey      String         @map("storage_key")           // private bucket; served via short-lived signed URL (front side, or the photo)
+  backStorageKey  String?        @map("back_storage_key")      // back side of a licence or RC card
+  number          String?                                       // licence / RC / policy number as typed
+  vehicleClasses  String[]       @default([]) @map("vehicle_classes") // licence only: LMV, MCWG, MCWOG
+  dateOfBirth     DateTime?      @map("date_of_birth") @db.Date        // licence only: needed by licence checks
+  checkStatus     DocumentCheckStatus? @map("check_status")    // null = not checked (photos)
+  checkNotes      String[]       @default([]) @map("check_notes")
+  checkedAt       DateTime?      @map("checked_at") @db.Timestamptz
   expiresAt       DateTime?      @map("expires_at") @db.Date
   status          DocumentStatus @default(PENDING)
   reviewedById    String?        @map("reviewed_by_id") @db.Uuid
@@ -941,4 +952,59 @@ model SurveyResponse {
 
   @@unique([surveyId, membershipId])
   @@map("survey_responses")
+}
+
+enum InquiryStatus {
+  NEW
+  CONTACTED
+  ONBOARDED
+  CLOSED
+}
+
+/// A company asking RYDO to be set up, from the public Contact us form. Read and worked by RYDO staff only.
+model OnboardingInquiry {
+  id          String        @id @default(uuid()) @db.Uuid
+  companyName String        @map("company_name")
+  contactName String        @map("contact_name")
+  workEmail   String        @map("work_email") @db.Citext
+  phone       String?
+  companySize String        @map("company_size")
+  city        String?
+  message     String?       @db.VarChar(1500)
+  status      InquiryStatus @default(NEW)
+  notes       String?
+  handledById String?       @map("handled_by_id") @db.Uuid
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime      @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([status, createdAt])
+  @@index([workEmail, createdAt])
+  @@map("onboarding_inquiries")
+}
+
+/// What a new employee told us when they signed up, shown to their company's HR when they decide.
+/// Only the last 4 digits of the Aadhaar number are kept; the full number is never sent to the server.
+model EmployeeRegistration {
+  id            String   @id @default(uuid()) @db.Uuid
+  organizationId String  @map("organization_id") @db.Uuid
+  membershipId  String   @unique @map("membership_id") @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  fullName      String   @map("full_name")
+  phone         String
+  /// Which ID proof the person used: AADHAAR, PAN, PASSPORT, DRIVING_LICENCE or VOTER_ID.
+  idType        String   @default("AADHAAR") @map("id_type")
+  /// Last 4 characters of that ID's number. The full number is never sent or kept.
+  idLast4       String   @map("id_last4") @db.VarChar(4)
+  employeeId    String   @map("employee_id")
+  designation   String
+  department    String
+  office        String
+  managerName   String   @map("manager_name")
+  managerEmail  String   @map("manager_email") @db.Citext
+  notifiedAt    DateTime? @map("notified_at") @db.Timestamptz
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([organizationId])
+  @@map("employee_registrations")
 }

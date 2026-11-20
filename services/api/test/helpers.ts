@@ -8,7 +8,8 @@ import { PrismaService } from '../src/prisma/prisma.service';
 import { MESSAGE_ADAPTER, MessageAdapter } from '../src/adapters/message.adapter';
 import { STORAGE_ADAPTER, StorageAdapter } from '../src/adapters/storage.adapter';
 import { MAPS_ADAPTER, MapsAdapter } from '../src/adapters/maps.adapter';
-import { IDENTITY_ADAPTER, type GoogleIdentity, type IdentityAdapter } from '../src/adapters/identity.adapter';
+import { GOOGLE_IDENTITY, GoogleIdentityAdapter, GoogleProfile } from '../src/adapters/google-identity.adapter';
+import { DOCUMENT_CHECK, type CheckOutcome, type DocumentCheckAdapter, type LicenceRecord, type VehicleRecord } from '../src/adapters/document-check.adapter';
 import { AppError } from '../src/common/app-error';
 import type { LatLng } from '@rydo/shared';
 
@@ -19,8 +20,18 @@ export class FakeMessages implements MessageAdapter {
     this.sent.push(m);
   }
   lastCode(email: string) {
-    const msg = [...this.sent].reverse().find((m) => m.to === email && /sign-in code/.test(m.subject));
+    const msg = [...this.sent].reverse().find((m) => m.to === email && /(sign-in|email verification) code/.test(m.subject));
     return msg?.subject.match(/\d{6}/)?.[0];
+  }
+}
+
+/** Stands in for Google: a token looks like "gtest|email|Name|verified" (use gtoken()). Anything else is refused. */
+export const gtoken = (email: string, opts: { name?: string; verified?: boolean } = {}) => `gtest|${email}|${opts.name ?? ''}|${opts.verified === false ? 'no' : 'yes'}`;
+export class FakeGoogle implements GoogleIdentityAdapter {
+  async verify(idToken: string): Promise<GoogleProfile> {
+    const [tag, email, name, verified] = idToken.split("|");
+    if (tag !== "gtest" || !email) throw new AppError("UNAUTHENTICATED", "Google could not confirm this sign-in. Please try again.", 401);
+    return { email: email.toLowerCase(), emailVerified: verified === "yes", name: name || undefined, subject: "sub-" + email };
   }
 }
 
@@ -57,8 +68,29 @@ export class FakeMaps implements MapsAdapter {
   }
 }
 
+/**
+ * Government records for tests: put a licence or vehicle in `licences` / `vehicles` to make it "found";
+ * anything else is "not found". Set `down` to make every check "unavailable".
+ */
+export class FakeDocumentCheck implements DocumentCheckAdapter {
+  licences = new Map<string, LicenceRecord>();
+  vehicles = new Map<string, VehicleRecord>();
+  down = false;
+  async checkLicence({ number }: { number: string; dateOfBirth: string }): Promise<CheckOutcome<LicenceRecord>> {
+    if (this.down) return { kind: 'unavailable', reason: 'Provider down.' };
+    const r = this.licences.get(number);
+    return r ? { kind: 'found', record: r } : { kind: 'notFound' };
+  }
+  async checkVehicle({ plateNumber }: { plateNumber: string }): Promise<CheckOutcome<VehicleRecord>> {
+    if (this.down) return { kind: 'unavailable', reason: 'Provider down.' };
+    const r = this.vehicles.get(plateNumber);
+    return r ? { kind: 'found', record: r } : { kind: 'notFound' };
+  }
+}
+
 export async function createApp() {
   const messages = new FakeMessages();
+  const records = new FakeDocumentCheck();
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(MESSAGE_ADAPTER)
     .useValue(messages)
@@ -66,14 +98,16 @@ export async function createApp() {
     .useValue(new FakeStorage())
     .overrideProvider(MAPS_ADAPTER)
     .useValue(new FakeMaps())
-    .overrideProvider(IDENTITY_ADAPTER)
-    .useValue(new FakeIdentity())
+    .overrideProvider(GOOGLE_IDENTITY)
+    .useValue(new FakeGoogle())
+    .overrideProvider(DOCUMENT_CHECK)
+    .useValue(records)
     .compile();
   const app = moduleRef.createNestApplication();
   configureApp(app);
   await configureRealtime(app);
   await app.init();
-  return { app, messages, prisma: app.get(PrismaService) };
+  return { app, messages, records, prisma: app.get(PrismaService) };
 }
 
 export async function resetDb(prisma: PrismaService) {
@@ -81,16 +115,6 @@ export async function resetDb(prisma: PrismaService) {
     SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename NOT IN ('_prisma_migrations', 'spatial_ref_sys')`;
   if (tables.length) await prisma.$executeRawUnsafe(`TRUNCATE ${tables.map((t) => `"${t.tablename}"`).join(', ')} CASCADE`);
 }
-
-/** Google sign-in without Google: the token "google:<email>:<sub>[:unverified]" stands for that account. */
-export class FakeIdentity implements IdentityAdapter {
-  async verifyGoogleIdToken(idToken: string): Promise<GoogleIdentity> {
-    const [kind, email, sub, flag] = idToken.split(':');
-    if (kind !== 'google' || !email || !sub) throw new AppError('INVALID_CREDENTIALS', 'Google sign-in failed.', 401);
-    return { sub, email: email.toLowerCase(), emailVerified: flag !== 'unverified', name: 'Google Person' };
-  }
-}
-export const googleToken = (email: string, sub: string, unverified = false) => `google:${email}:${sub}${unverified ? ':unverified' : ''}`;
 
 export const api = (app: INestApplication) => request(app.getHttpServer());
 

@@ -1,6 +1,7 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { ClientType } from '@prisma/client';
-import type { AuthResult, OtpVerify, PasswordLogin, PasswordReset } from '@rydo/shared';
+import type { AuthResult, GoogleAuth, OtpVerify, PasswordLogin, PasswordReset } from '@rydo/shared';
+import { GOOGLE_IDENTITY, type GoogleIdentityAdapter } from '../adapters/google-identity.adapter';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppError } from '../common/app-error';
 import { MeService } from '../me/me.service';
@@ -19,6 +20,7 @@ export class AuthService {
     private readonly otp: OtpService,
     private readonly tokens: TokensService,
     private readonly me: MeService,
+    @Inject(GOOGLE_IDENTITY) private readonly google: GoogleIdentityAdapter,
   ) {}
 
   private companyFor(email: string) {
@@ -69,18 +71,53 @@ export class AuthService {
     });
     if (user.status === 'DISABLED') throw new AppError('FORBIDDEN', 'This account is disabled.', 403);
 
+    // The code came to this inbox, so the email is proven.
+    await this.prisma.user.updateMany({ where: { id: user.id, emailVerifiedAt: null }, data: { emailVerifiedAt: new Date() } });
     // First sign-in from a company domain: join that company and wait for HR approval.
-    const company = await this.companyFor(dto.email);
-    if (company) {
-      const existing = await this.prisma.membership.findUnique({
-        where: { organizationId_userId: { organizationId: company.id, userId: user.id } },
-      });
-      if (!existing) {
-        await this.prisma.membership.create({
-          data: { organizationId: company.id, userId: user.id, status: 'PENDING', roles: { create: [{ role: 'RIDER' }] } },
-        });
-      }
+    await this.joinCompanyIfNew(user.id, dto.email);
+
+    const tokens = await this.tokens.issue(user.id, dto.client as ClientType, userAgent);
+    return { ...(await this.me.summary(user.id)), accessToken: tokens.accessToken, refreshToken: tokens.refreshToken };
+  }
+
+  /** First sign-in from a company's email domain: a waiting membership, so the company's HR can approve it. */
+  private async joinCompanyIfNew(userId: string, email: string) {
+    const company = await this.companyFor(email);
+    if (!company) return;
+    const existing = await this.prisma.membership.findUnique({ where: { organizationId_userId: { organizationId: company.id, userId } } });
+    if (!existing) await this.prisma.membership.create({ data: { organizationId: company.id, userId, status: 'PENDING', roles: { create: [{ role: 'RIDER' }] } } });
+  }
+
+  /**
+   * Sign in or sign up with Google. Google proves the email, so no code is needed. The email's domain must belong to a
+   * company on RYDO, and (on sign-up) must be the company the person picked, so a personal Gmail cannot join Acme.
+   */
+  async googleSignIn(dto: GoogleAuth, userAgent?: string): Promise<AuthResult> {
+    const g = await this.google.verify(dto.idToken);
+    const email = g.email.toLowerCase();
+    const domain = domainOf(email);
+    if (!g.emailVerified) throw new AppError('UNAUTHENTICATED', 'Google says this email address is not verified. Verify it with Google, or use your email code.', HttpStatus.UNAUTHORIZED);
+
+    if (dto.expectDomain && domain !== dto.expectDomain) {
+      throw new AppError('DOMAIN_MISMATCH', `The Google account ${email} is not a @${dto.expectDomain} account. Sign in with your @${dto.expectDomain} work Google account, or use your email code.`, HttpStatus.BAD_REQUEST);
     }
+
+    const [company, existing] = await Promise.all([
+      this.companyFor(email),
+      this.prisma.user.findUnique({ where: { email }, include: { platformRoles: true, memberships: { where: { status: { not: 'LEFT' } } } } }),
+    ]);
+    const known = existing && (existing.platformRoles.length > 0 || existing.memberships.length > 0);
+    if (!company && !known) {
+      throw new AppError('DOMAIN_MISMATCH', `@${domain} is not a company on RYDO. Use your work Google account, or ask your company to join RYDO.`, HttpStatus.BAD_REQUEST);
+    }
+    if (dto.mode === 'login' && !existing) {
+      throw new AppError('NOT_FOUND', 'There is no RYDO account for this Google email yet. Choose Sign up to create one.', HttpStatus.NOT_FOUND);
+    }
+    if (existing?.status === 'DISABLED') throw new AppError('FORBIDDEN', 'This account is disabled.', HttpStatus.FORBIDDEN);
+
+    const user = existing ?? (await this.prisma.user.create({ data: { email, name: g.name?.trim() || nameFromEmail(email) } }));
+    await this.prisma.user.updateMany({ where: { id: user.id, emailVerifiedAt: null }, data: { emailVerifiedAt: new Date() } }); // Google verified it
+    await this.joinCompanyIfNew(user.id, email);
 
     const tokens = await this.tokens.issue(user.id, dto.client as ClientType, userAgent);
     return { ...(await this.me.summary(user.id)), accessToken: tokens.accessToken, refreshToken: tokens.refreshToken };

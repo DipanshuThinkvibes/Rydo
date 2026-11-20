@@ -93,3 +93,13 @@ Owner's words: "We are the main product owner for RYDO and we will manage this e
 - **Decision:** Employees sign up themselves (domain must belong to a company on RYDO) with employee ID, manager, contact number and an ID proof; HR approves as before. Aadhaar numbers are stored as `XXXX XXXX 1234`; PAN, passport, driving licence and voter ID numbers in full. The ID photo is private (HR only, 5-minute link, every view audited). "Continue with Google" checks the Google ID token via the `IdentityAdapter` (tokeninfo over HTTPS) against `GOOGLE_OAUTH_CLIENT_IDS`.
 - **Why:** UIDAI rules restrict storing full Aadhaar numbers; a masked number plus the photo is enough for HR to check. No package installs were possible, and the adapter rule keeps Google replaceable.
 - **Rejected:** Storing full Aadhaar numbers; skipping email proof for Google users whose Google email is unverified.
+
+## 2026-11-19 - One sign-up API for web and mobile (Anjali)
+- **Decision:** Mobile uses Dipanshu's sign-up API (`/auth/otp/*` or `/auth/google` with mode/expectDomain, then `POST /me/registration`). Only the last 4 characters of any ID number are sent and stored; no ID photo. Added public `GET /auth/companies?q=` and `GET /auth/companies/:id` for "Find your company". This replaces the earlier "Self sign-up keeps Aadhaar masked" entry above.
+- **Why:** Two sign-up APIs for the same data would drift and double the tests; storing only the last 4 characters is safer than masked Aadhaar plus full other IDs and a photo.
+- **Rejected:** Keeping both APIs; keeping my `/auth/signup` with ID photo upload.
+
+## 2026-11-19 - Driver sign-up: Uber-style checklist, government checks behind an adapter (Anjali)
+- **Decision:** Drivers finish a checklist (photo, licence both sides, vehicle, RC, insurance, 3 vehicle photos, safety guidelines). Licence, RC and insurance are checked against Sarathi/Vahan through a DOCUMENT_CHECK adapter; until a provider is chosen it is "off" (HR checks by eye). HR keeps one "Verify driver" button; a failed check needs an explicit, audited "verify anyway". PUC skipped for now.
+- **Why:** Matches what drivers know from Uber; insurance and photos replace an in-person inspection; the adapter keeps the paid provider swappable and out of tests.
+- **Rejected:** Per-document approval (owner prefers one button); background check and payouts (employees are HR-approved; RYDO takes no payments).

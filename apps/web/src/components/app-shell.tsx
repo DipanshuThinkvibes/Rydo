@@ -10,15 +10,28 @@ import { fmtTime } from "@/lib/format";
 import { Avatar, Badge, Button, Logo, Spinner } from "@/components/ui";
 import { Icon, type IconName } from "@/components/icons";
 import { NotificationsBell } from "@/components/notifications-bell";
+import { ThemeToggle } from "@/components/theme-toggle";
 
-type NavItem = { href: string; label: string; icon: IconName; member?: boolean; platformOnly?: boolean; exact?: boolean; roles?: OrgRoleName[] };
+type NavItem = { href: string; label: string; icon: IconName; member?: boolean; orgOnly?: boolean; platformOnly?: boolean; exact?: boolean; roles?: OrgRoleName[] };
 const groups: { title?: string; items: NavItem[] }[] = [
   {
     items: [
+      { href: "/dashboard", orgOnly: true, label: "Home", icon: "sparkle" },
       { href: "/ride", label: "Find a ride", icon: "search", member: true },
       { href: "/trips", label: "My trips", icon: "ticket", member: true },
       { href: "/commute", label: "My week", icon: "calendar", member: true },
       { href: "/drive", label: "Drive", icon: "wheel", member: true },
+      { href: "/messages", label: "Messages", icon: "chat", member: true },
+    ],
+  },
+  {
+    title: "Help & safety",
+    items: [
+      { href: "/safety", orgOnly: true, label: "Safety", icon: "shield" },
+      { href: "/issues", orgOnly: true, label: "Report an issue", icon: "flag" },
+      { href: "/feedback", orgOnly: true, label: "Feedback", icon: "star" },
+      { href: "/surveys", orgOnly: true, label: "Surveys", icon: "clipboard" },
+      { href: "/notifications", orgOnly: true, label: "Notifications", icon: "bell" },
     ],
   },
   {
@@ -31,6 +44,10 @@ const groups: { title?: string; items: NavItem[] }[] = [
       { href: "/structure", label: "Offices & teams", icon: "layers", roles: ["ORG_ADMIN", "HR_ADMIN", "OPS_ADMIN"] },
       { href: "/reports", label: "Reports", icon: "sparkle", roles: ["ORG_ADMIN", "HR_ADMIN", "OPS_ADMIN"] },
       { href: "/activity", label: "Activity", icon: "clock", roles: ["ORG_ADMIN", "HR_ADMIN"] },
+      { href: "/manage/issues", label: "Issues", icon: "flag", roles: ["ORG_ADMIN", "HR_ADMIN", "OPS_ADMIN"] },
+      { href: "/manage/feedback", label: "Feedback", icon: "star", roles: ["ORG_ADMIN", "HR_ADMIN", "OPS_ADMIN"] },
+      { href: "/manage/surveys", label: "Surveys", icon: "clipboard", roles: ["ORG_ADMIN", "HR_ADMIN", "OPS_ADMIN"] },
+      { href: "/manage/announcements", label: "Announcements", icon: "megaphone", roles: ["ORG_ADMIN", "HR_ADMIN"] },
     ],
   },
   {
@@ -38,6 +55,7 @@ const groups: { title?: string; items: NavItem[] }[] = [
     items: [
       { href: "/platform", label: "Overview", icon: "sparkle", platformOnly: true, exact: true },
       { href: "/platform/clients", label: "Clients", icon: "globe", platformOnly: true },
+      { href: "/platform/inquiries", label: "Onboarding requests", icon: "clipboard", platformOnly: true },
       { href: "/platform/activity", label: "Activity", icon: "clock", platformOnly: true },
     ],
   },
@@ -51,8 +69,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
 
   useEffect(() => {
-    if (!loading && !me) router.replace("/sign-in");
-  }, [loading, me, router]);
+    // Visitors who open the plain address see the website; everyone else is sent to log in.
+    if (!loading && !me) router.replace(path === "/" ? "/welcome" : "/sign-in");
+  }, [loading, me, router, path]);
 
   if (loading || !me)
     return (
@@ -79,7 +98,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     );
   }
 
-  const visible = (n: NavItem) => (n.platformOnly ? me.user.isPlatformAdmin : n.member ? !!org && !support && features.share : n.roles ? can(...n.roles) : true);
+  const visible = (n: NavItem) => (n.platformOnly ? me.user.isPlatformAdmin : n.orgOnly ? !!org && !support : n.member ? !!org && !support && features.share : n.roles ? can(...n.roles) : true);
   const leaveSupport = () => {
     if (support) api("POST", `/admin/platform/organizations/${support.orgId}/support/end`).catch(() => undefined);
     endSupport();
@@ -158,6 +177,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 End support
               </Button>
             )}
+            <ThemeToggle className="h-9 w-9" />
             {org && !support && <NotificationsBell />}
             <span className="md:hidden"><Avatar name={me.user.name ?? me.user.email} size={34} /></span>
             <Button variant="ghost" className="h-9 md:hidden" onClick={leave}>Sign out</Button>
@@ -169,7 +189,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             You are viewing {support.orgName} as RYDO support. Nothing can be changed here. Access ends at {fmtTime(support.expiresAt)} and is logged.
           </div>
         )}
-        <main className="flex-1 p-4 sm:p-6">{children}</main>
+        <main id="main" tabIndex={-1} className="flex-1 p-4 outline-none sm:p-6">{children}</main>
       </div>
     </div>
   );

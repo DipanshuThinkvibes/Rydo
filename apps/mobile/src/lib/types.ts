@@ -1,4 +1,4 @@
-import type { LatLng, OrgRoleName } from '@rydo/shared';
+import type { IdProofType, LatLng, OrgRoleName } from '@rydo/shared';
 
 /** Response shapes of the API routes the app reads (same as the web app's). */
 
@@ -130,6 +130,7 @@ export interface MyProfile {
   name: string;
   email: string;
   phone: string | null;
+  gender: 'FEMALE' | 'MALE' | 'OTHER' | 'UNDISCLOSED';
   photoUrl: string | null;
   emergencyContacts: number;
   department: string | null;
@@ -160,19 +161,22 @@ export interface Member {
   name: string;
   email: string;
   department: string | null;
+  departmentId?: string | null;
   status: 'PENDING' | 'ACTIVE' | 'REJECTED' | 'SUSPENDED' | 'LEFT';
   roles: OrgRoleName[];
-  /** Sign-up details (null for people added before self sign-up). */
-  employeeId?: string | null;
-  phone?: string | null;
-  managerName?: string | null;
-  managerEmployeeId?: string | null;
-  managerEmail?: string | null;
-  jobTitle?: string | null;
-  office?: string | null;
-  idProofType?: string | null;
-  idProofNumber?: string | null;
-  hasIdProof?: boolean;
+  /** What the person filed at sign-up (POST /me/registration); null for people added another way. */
+  registration?: {
+    employeeId: string;
+    designation: string;
+    department: string;
+    office: string;
+    phone: string;
+    idType: IdProofType;
+    idLast4: string;
+    managerName: string;
+    managerEmail: string;
+    submittedAt: string;
+  } | null;
 }
 export interface AdminDriver {
   id: string;
@@ -259,4 +263,11 @@ export interface MyIssue {
   status: 'OPEN' | 'IN_PROGRESS' | 'RESOLVED';
   resolution: string | null;
   createdAt: string;
+}
+
+/** GET /me/email: is the work email proven with a code? */
+export interface EmailState {
+  email: string;
+  verified: boolean;
+  verifiedAt: string | null;
 }

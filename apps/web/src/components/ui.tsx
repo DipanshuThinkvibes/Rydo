@@ -56,6 +56,19 @@ export function Select({ label, id, children, ...props }: React.SelectHTMLAttrib
   );
 }
 
+export function Textarea({ label, error, id, hint, ...props }: React.TextareaHTMLAttributes<HTMLTextAreaElement> & { label: string; error?: string; hint?: string }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor={id} className="text-sm font-bold">
+        {label}
+      </label>
+      <textarea id={id} rows={4} {...props} className={`${fieldBase} h-auto resize-y py-3`} />
+      {hint && <span className="text-xs text-muted">{hint}</span>}
+      {error && <span className="text-sm font-semibold text-danger">{error}</span>}
+    </div>
+  );
+}
+
 export function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return <div className={`rounded-[22px] border border-line/70 bg-white p-5 shadow-soft ${className}`}>{children}</div>;
 }

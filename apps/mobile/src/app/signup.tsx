@@ -3,19 +3,9 @@ import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput,
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import {
-  ID_PROOF_LABELS,
-  ID_PROOF_TYPES,
-  signupDetailsSchema,
-  type AuthResult,
-  type CompanyMatch,
-  type GoogleSignInResult,
-  type IdProofType,
-  type SignupOptions,
-} from '@rydo/shared';
+import { ID_PROOF_TYPES, registrationSchema, type AuthResult, type CompanyInfo, type IdProofType } from '@rydo/shared';
 import { colors } from '@rydo/ui-tokens';
-import { api, errText, RequestError } from '@/lib/api';
-import { Alert } from '@/lib/dialog';
+import { api, errText, RequestError, tokens } from '@/lib/api';
 import { useSession } from '@/lib/session';
 import { GoogleButton, googleSignInAvailable } from '@/components/google-button';
 import { Icon } from '@/components/icons';
@@ -30,14 +20,16 @@ const STEPS: { key: Step; label: string }[] = [
   { key: 'done', label: 'Done' },
 ];
 
-const ID_LABEL: Record<IdProofType, string> = { AADHAAR: 'Aadhaar card', PAN: 'PAN card', PASSPORT: 'Passport', DRIVING_LICENSE: 'Driving licence', VOTER_ID: 'Voter ID card' };
-const ID_HINT: Record<IdProofType, string> = {
-  AADHAAR: '12 digits. Only the last 4 characters are stored, and never shown to other employees.',
-  PAN: '10 characters, like ABCDE1234F. Only your HR team sees it.',
-  PASSPORT: 'Like A1234567. Only your HR team sees it.',
-  DRIVING_LICENSE: 'Like KA0120190012345. Only your HR team sees it.',
-  VOTER_ID: 'Like ABC1234567. Only your HR team sees it.',
+const ID_LABEL: Record<IdProofType, string> = { AADHAAR: 'Aadhaar card', PAN: 'PAN card', PASSPORT: 'Passport', DRIVING_LICENCE: 'Driving licence', VOTER_ID: 'Voter ID card' };
+/** Shape of each full ID number, checked on the phone only: just the last 4 characters are ever sent. */
+const ID_FORMAT: Record<IdProofType, { re: RegExp; hint: string }> = {
+  AADHAAR: { re: /^\d{12}$/, hint: '12 digits' },
+  PAN: { re: /^[A-Z]{5}\d{4}[A-Z]$/, hint: '10 characters, like ABCDE1234F' },
+  PASSPORT: { re: /^[A-Z]\d{7}$/, hint: 'Like A1234567' },
+  DRIVING_LICENCE: { re: /^[A-Z]{2}\d{2}[A-Z0-9]{8,14}$/, hint: 'Like KA0120190012345' },
+  VOTER_ID: { re: /^[A-Z]{3}\d{7}$/, hint: 'Like ABC1234567' },
 };
+const cleanId = (n: string) => n.toUpperCase().replace(/[\s-]/g, '');
 
 type Form = {
   name: string;
@@ -47,39 +39,43 @@ type Form = {
   idProofNumber: string;
   employeeId: string;
   jobTitle: string;
-  departmentId: string | null;
-  officeId: string | null;
+  department: string;
+  office: string;
   managerName: string;
   managerEmail: string;
   acceptTerms: boolean;
 };
 
 /**
- * Join your team on RYDO (mobile): 1. find your company (it must be on RYDO), 2. your details,
- * 3. verify your work email with a code (skipped with Google), 4. done — HR approves before the first ride.
+ * Join your team on RYDO (mobile), using the same sign-up API as the web:
+ * 1. find your company (GET /auth/companies — it must be on RYDO),
+ * 2. your details (checked here with the shared registrationSchema),
+ * 3. verify your work email with a code (POST /auth/otp/verify), or Google (POST /auth/google, mode "signup"),
+ *    then POST /me/registration, 4. done — HR approves before the first ride.
  */
 export default function Signup() {
   // Coming from "Continue with Google" on the sign-in screen for a new employee.
-  const params = useLocalSearchParams<{ email?: string; name?: string; companyId?: string; company?: string; googleIdToken?: string }>();
+  const params = useLocalSearchParams<{ email?: string }>();
   const { signedIn } = useSession();
-  const [step, setStep] = useState<Step>(params.companyId && params.googleIdToken ? 'details' : 'company');
-  const [company, setCompany] = useState<CompanyMatch | null>(params.companyId ? { id: params.companyId, name: params.company ?? 'your company', domains: params.email ? [params.email.split('@')[1]] : [] } : null);
-  const [googleIdToken, setGoogleIdToken] = useState<string | null>(params.googleIdToken ?? null);
+  const [step, setStep] = useState<Step>('company');
+  const [company, setCompany] = useState<CompanyInfo | null>(null);
+  // Set once the email is proven (code or Google): the account exists and is waiting for these details.
+  const [account, setAccount] = useState<AuthResult | null>(null);
+  const [viaGoogle, setViaGoogle] = useState(false);
   const [f, setF] = useState<Form>({
-    name: params.name ?? '',
+    name: '',
     email: params.email ?? '',
     phone: '',
     idProofType: 'AADHAAR',
     idProofNumber: '',
     employeeId: '',
     jobTitle: '',
-    departmentId: null,
-    officeId: null,
+    department: '',
+    office: '',
     managerName: '',
     managerEmail: '',
     acceptTerms: false,
   });
-  const [result, setResult] = useState<AuthResult | null>(null);
   const index = STEPS.findIndex((x) => x.key === step);
 
   return (
@@ -128,14 +124,12 @@ export default function Signup() {
                 selected={company}
                 onSelect={setCompany}
                 onContinue={() => setStep('details')}
-                onGoogle={(token, email, name) => {
-                  setGoogleIdToken(token);
-                  setF((x) => ({ ...x, email, name: x.name || name }));
+                onGoogle={async (r) => {
+                  await tokens.save(r);
+                  setAccount(r);
+                  setViaGoogle(true);
+                  setF((x) => ({ ...x, email: r.user.email, name: x.name || r.user.name }));
                   setStep('details');
-                }}
-                onSignedIn={async (r) => {
-                  await signedIn(r);
-                  router.replace('/');
                 }}
               />
             ) : null}
@@ -144,15 +138,20 @@ export default function Signup() {
                 company={company}
                 form={f}
                 setForm={setF}
-                viaGoogle={!!googleIdToken}
-                onChangeCompany={() => {
-                  setGoogleIdToken(null);
-                  setF((x) => ({ ...x, email: '', departmentId: null, officeId: null }));
-                  setStep('company');
-                }}
+                emailLocked={!!account}
+                viaGoogle={viaGoogle}
+                onChangeCompany={
+                  account
+                    ? undefined
+                    : () => {
+                        setF((x) => ({ ...x, email: '', department: '', office: '' }));
+                        setStep('company');
+                      }
+                }
                 onNext={async () => {
-                  if (googleIdToken) {
-                    setResult(await submit(company, f, { googleIdToken }));
+                  if (account) {
+                    // Email already proven (Google, or a code earlier): just send the details.
+                    await register(f);
                     setStep('done');
                   } else {
                     await api('POST', '/auth/otp/request', { email: f.email.trim().toLowerCase() });
@@ -166,7 +165,16 @@ export default function Signup() {
                 email={f.email.trim().toLowerCase()}
                 onBack={() => setStep('details')}
                 onCode={async (code) => {
-                  setResult(await submit(company, f, { code }));
+                  const r = await api<AuthResult>('POST', '/auth/otp/verify', { email: f.email.trim().toLowerCase(), code, client: 'MOBILE' });
+                  await tokens.save(r);
+                  setAccount(r);
+                  try {
+                    await register(f);
+                  } catch (e) {
+                    // The account exists now; fix the details and send them again (no new code needed).
+                    setStep('details');
+                    throw e;
+                  }
                   setStep('done');
                 }}
               />
@@ -175,7 +183,7 @@ export default function Signup() {
               <Done
                 company={company.name}
                 onOpen={async () => {
-                  if (result) await signedIn(result);
+                  if (account) await signedIn(account);
                   router.replace('/');
                 }}
               />
@@ -187,28 +195,20 @@ export default function Signup() {
   );
 }
 
-/** Sends the whole form (multipart, as the API expects) with the email proof. */
-async function submit(company: CompanyMatch, f: Form, proof: { code: string } | { googleIdToken: string }) {
-  const body: Record<string, string> = {
-    companyId: company.id,
-    email: f.email.trim().toLowerCase(),
-    name: f.name.trim(),
-    phone: `+91 ${f.phone.trim()}`,
-    idProofType: f.idProofType,
-    idProofNumber: f.idProofNumber,
+/** POST /me/registration: the details HR checks. Only the last 4 characters of the ID number are sent. */
+async function register(f: Form) {
+  await api('POST', '/me/registration', {
+    fullName: f.name.trim(),
+    phone: f.phone,
+    idType: f.idProofType,
+    idLast4: cleanId(f.idProofNumber).slice(-4),
     employeeId: f.employeeId.trim(),
-    jobTitle: f.jobTitle.trim(),
+    designation: f.jobTitle.trim(),
+    department: f.department,
+    office: f.office,
     managerName: f.managerName.trim(),
     managerEmail: f.managerEmail.trim().toLowerCase(),
-    acceptTerms: String(f.acceptTerms),
-    client: 'MOBILE',
-    ...(f.departmentId ? { departmentId: f.departmentId } : {}),
-    ...(f.officeId ? { officeId: f.officeId } : {}),
-    ...proof,
-  };
-  const form = new FormData();
-  for (const [k, v] of Object.entries(body)) form.append(k, v);
-  return api<AuthResult>('POST', '/auth/signup', form);
+  });
 }
 
 // ── 1. Find your company ──
@@ -218,16 +218,14 @@ function FindCompany({
   onSelect,
   onContinue,
   onGoogle,
-  onSignedIn,
 }: {
-  selected: CompanyMatch | null;
-  onSelect: (c: CompanyMatch | null) => void;
+  selected: CompanyInfo | null;
+  onSelect: (c: CompanyInfo | null) => void;
   onContinue: () => void;
-  onGoogle: (idToken: string, email: string, name: string) => void;
-  onSignedIn: (r: AuthResult) => Promise<void>;
+  onGoogle: (r: AuthResult) => Promise<void>;
 }) {
   const [q, setQ] = useState(selected?.name ?? '');
-  const [matches, setMatches] = useState<CompanyMatch[] | null>(null);
+  const [matches, setMatches] = useState<CompanyInfo[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -237,10 +235,10 @@ function FindCompany({
     if (selected && selected.name === text) return;
     onSelect(null);
     setMatches(null);
-    if (text.length < 3) return;
+    if (text.length < 2) return;
     const t = setTimeout(() => {
       setSearching(true);
-      api<CompanyMatch[]>('GET', `/auth/companies?q=${encodeURIComponent(text)}`)
+      api<CompanyInfo[]>('GET', `/auth/companies?q=${encodeURIComponent(text)}`)
         .then((r) => {
           setMatches(r);
           setError(undefined);
@@ -263,15 +261,11 @@ function FindCompany({
     setBusy(true);
     setError(undefined);
     try {
-      const r = await api<GoogleSignInResult>('POST', '/auth/google', { idToken, client: 'MOBILE' });
-      if (!r.needsSignup) return await onSignedIn(r);
-      if (r.companyId !== selected.id) {
-        setError(`That Google account isn't a ${selected.name} account. Use your ${domains} Google account.`);
-        return;
-      }
-      onGoogle(idToken, r.email, r.name);
+      // The server checks the token with Google and refuses any account outside the company's domain.
+      const r = await api<AuthResult>('POST', '/auth/google', { idToken, client: 'MOBILE', mode: 'signup', expectDomain: selected.domains[0] });
+      await onGoogle(r);
     } catch (e) {
-      setError(e instanceof RequestError && e.code === 'COMPANY_NOT_ON_RYDO' ? `Use your ${domains} Google account. Other Google accounts are not accepted.` : errText(e));
+      setError(errText(e));
     } finally {
       setBusy(false);
     }
@@ -324,7 +318,7 @@ function FindCompany({
         </>
       ) : null}
 
-      <Pressable accessibilityRole="button" onPress={() => Alert.alert('Not on RYDO yet?', 'RYDO works with companies, not single people. Ask your HR or admin team to get in touch with RYDO; once your company is set up, you can register here.')} style={{ alignSelf: 'center', padding: 6 }}>
+      <Pressable accessibilityRole="button" onPress={() => router.push('/contact')} style={{ alignSelf: 'center', padding: 6 }}>
         <Text style={{ color: colors.muted, fontSize: 14 }}>
           Not on RYDO yet? <Text style={{ color: colors.ink, fontWeight: '800', textDecorationLine: 'underline' }}>Contact us</Text>
         </Text>
@@ -339,27 +333,25 @@ function Details({
   company,
   form: f,
   setForm,
+  emailLocked,
   viaGoogle,
   onChangeCompany,
   onNext,
 }: {
-  company: CompanyMatch;
+  company: CompanyInfo;
   form: Form;
   setForm: React.Dispatch<React.SetStateAction<Form>>;
+  emailLocked: boolean;
   viaGoogle: boolean;
-  onChangeCompany: () => void;
+  /** Missing once the account exists: the company can't change any more. */
+  onChangeCompany?: () => void;
   onNext: () => Promise<void>;
 }) {
-  const [options, setOptions] = useState<SignupOptions>({ departments: [], offices: [] });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [showId, setShowId] = useState(false);
   const domain = company.domains[0] ?? 'company.com';
-
-  useEffect(() => {
-    api<SignupOptions>('GET', `/auth/companies/${company.id}/options`).then(setOptions, () => undefined);
-  }, [company.id]);
 
   const set = <K extends keyof Form>(k: K, v: Form[K]) => {
     setForm((x) => ({ ...x, [k]: v }));
@@ -370,27 +362,31 @@ function Details({
     setError(undefined);
     const email = f.email.trim().toLowerCase();
     // Same rules as the API (packages/shared), so mistakes show next to each field.
-    const parsed = signupDetailsSchema.safeParse({
-      companyId: company.id,
-      email,
-      name: f.name,
-      phone: `+91 ${f.phone}`,
-      idProofType: f.idProofType,
-      idProofNumber: f.idProofNumber,
+    const id = cleanId(f.idProofNumber);
+    const parsed = registrationSchema.safeParse({
+      fullName: f.name,
+      phone: f.phone,
+      idType: f.idProofType,
+      idLast4: id.slice(-4),
       employeeId: f.employeeId,
-      jobTitle: f.jobTitle,
-      departmentId: f.departmentId ?? undefined,
-      officeId: f.officeId ?? undefined,
+      designation: f.jobTitle,
+      department: f.department,
+      office: f.office,
       managerName: f.managerName,
       managerEmail: f.managerEmail,
-      acceptTerms: f.acceptTerms,
-      client: 'MOBILE',
     });
+    // Schema field -> form field, where the names differ.
+    const field: Record<string, keyof Form> = { fullName: 'name', idType: 'idProofType', idLast4: 'idProofNumber', designation: 'jobTitle' };
     const errs: Record<string, string> = {};
-    if (!parsed.success) for (const i of parsed.error.issues) errs[String(i.path[0])] ??= i.message;
-    if (!errs.email && !company.domains.some((d) => email.endsWith(`@${d}`))) errs.email = `Use your work email ending in ${company.domains.map((d) => `@${d}`).join(' or ')}`;
-    if (options.departments.length && !f.departmentId) errs.departmentId = 'Choose your department';
-    if (options.offices.length && !f.officeId) errs.officeId = 'Choose your office';
+    if (!parsed.success) for (const i of parsed.error.issues) errs[field[String(i.path[0])] ?? String(i.path[0])] ??= i.message;
+    if (!ID_FORMAT[f.idProofType].re.test(id)) errs.idProofNumber = `Enter a valid ${ID_LABEL[f.idProofType]} number (${ID_FORMAT[f.idProofType].hint})`;
+    const domains = company.domains.map((d) => `@${d}`).join(' or ');
+    if (!/^\S+@\S+\.\S+$/.test(email)) errs.email = 'Enter your work email';
+    else if (!company.domains.some((d) => email.endsWith(`@${d}`))) errs.email = `Use your work email ending in ${domains}`;
+    const manager = f.managerEmail.trim().toLowerCase();
+    if (!errs.managerEmail && !company.domains.some((d) => manager.endsWith(`@${d}`))) errs.managerEmail = `Use a ${domains} address`;
+    else if (!errs.managerEmail && manager === email) errs.managerEmail = "Use your manager's email, not yours";
+    if (!f.acceptTerms) errs.acceptTerms = 'Tick this to continue';
     setErrors(errs);
     if (Object.keys(errs).length) {
       setError('Check the highlighted fields.');
@@ -400,7 +396,7 @@ function Details({
     try {
       await onNext();
     } catch (e) {
-      if (e instanceof RequestError && /employee ID/i.test(e.message)) setErrors({ employeeId: e.message });
+      if (e instanceof RequestError && e.fields) setErrors(Object.fromEntries(Object.entries(e.fields).map(([k, v]) => [({ fullName: 'name', idLast4: 'idProofNumber', designation: 'jobTitle' } as Record<string, string>)[k] ?? k, String(v)])));
       setError(errText(e));
     } finally {
       setBusy(false);
@@ -415,7 +411,7 @@ function Details({
         <Text accessibilityRole="header" style={s.h2}>Your details</Text>
         <Text style={s.small}>
           Registering with <Text style={{ fontWeight: '800', color: colors.ink }}>{company.name}</Text>.{' '}
-          <Text accessibilityRole="link" onPress={onChangeCompany} style={{ fontWeight: '800', color: colors.ink, textDecorationLine: 'underline' }}>Change company</Text>
+          {onChangeCompany ? <Text accessibilityRole="link" onPress={onChangeCompany} style={{ fontWeight: '800', color: colors.ink, textDecorationLine: 'underline' }}>Change company</Text> : null}
         </Text>
       </View>
 
@@ -430,10 +426,10 @@ function Details({
         autoCapitalize="none"
         autoCorrect={false}
         autoComplete="email"
-        editable={!viaGoogle}
+        editable={!emailLocked}
         error={errors.email}
       />
-      {viaGoogle ? <Text style={s.small}>Confirmed with Google.</Text> : null}
+      {emailLocked ? <Text style={s.small}>{viaGoogle ? 'Confirmed with Google.' : 'Verified.'}</Text> : null}
 
       <View style={{ gap: 6 }}>
         <Text style={s.label}>Phone number</Text>
@@ -462,19 +458,19 @@ function Details({
         <View style={{ flexDirection: 'row', gap: 8 }}>
           <TextInput
             value={f.idProofNumber}
-            onChangeText={(v) => set('idProofNumber', v)}
+            onChangeText={(v) => set('idProofNumber', v.toUpperCase().replace(/[^A-Z0-9 -]/g, '').slice(0, 24))}
             secureTextEntry={!showId}
             autoCapitalize="characters"
             autoCorrect={false}
             keyboardType={f.idProofType === 'AADHAAR' ? 'number-pad' : 'default'}
-            accessibilityLabel={`${ID_PROOF_LABELS[f.idProofType]} number`}
+            accessibilityLabel={`${ID_LABEL[f.idProofType]} number`}
             style={[s.input, { flex: 1 }, errors.idProofNumber ? { borderColor: colors.danger } : null]}
           />
           <Pressable accessibilityRole="button" onPress={() => setShowId(!showId)} style={{ height: 52, paddingHorizontal: 16, borderRadius: 16, borderWidth: 1.5, borderColor: colors.lineStrong, justifyContent: 'center' }}>
             <Text style={{ fontWeight: '800', color: colors.ink }}>{showId ? 'Hide' : 'Show'}</Text>
           </Pressable>
         </View>
-        {errors.idProofNumber ? <Text style={s.error}>{errors.idProofNumber}</Text> : <Text style={s.small}>{ID_HINT[f.idProofType]}</Text>}
+        {errors.idProofNumber ? <Text style={s.error}>{errors.idProofNumber}</Text> : <Text style={s.small}>{ID_FORMAT[f.idProofType].hint}. Only the last 4 characters are sent to RYDO.</Text>}
       </View>
 
       {section('AT WORK')}
@@ -487,8 +483,21 @@ function Details({
         </View>
       </View>
       <View style={{ flexDirection: 'row', gap: 10 }}>
-        <Select label="Department" value={f.departmentId} options={options.departments.map((d) => ({ value: d.id, label: d.name }))} onChange={(v) => set('departmentId', v)} error={errors.departmentId} />
-        <Select label="Office" value={f.officeId} options={options.offices.map((o) => ({ value: o.id, label: o.name }))} onChange={(v) => set('officeId', v)} error={errors.officeId} />
+        {/* A list when HR has set one up; otherwise typed in. */}
+        <View style={{ flex: 1 }}>
+          {company.departments.length ? (
+            <Select label="Department" value={f.department || null} options={company.departments.map((d) => ({ value: d, label: d }))} onChange={(v) => set('department', v)} error={errors.department} />
+          ) : (
+            <Field label="Department" value={f.department} onChangeText={(v) => set('department', v)} placeholder="Engineering" error={errors.department} />
+          )}
+        </View>
+        <View style={{ flex: 1 }}>
+          {company.offices.length ? (
+            <Select label="Office" value={f.office || null} options={company.offices.map((o) => ({ value: o, label: o }))} onChange={(v) => set('office', v)} error={errors.office} />
+          ) : (
+            <Field label="Office" value={f.office} onChangeText={(v) => set('office', v)} placeholder="City or campus" error={errors.office} />
+          )}
+        </View>
       </View>
 
       {section('REPORTING MANAGER')}
@@ -500,15 +509,15 @@ function Details({
           {f.acceptTerms ? <Icon name="check" size={14} color={colors.lime} /> : null}
         </View>
         <Text style={{ flex: 1, fontSize: 14, lineHeight: 20, color: colors.ink }}>
-          I confirm these details are correct, and I agree to the <Text style={{ fontWeight: '800', textDecorationLine: 'underline' }}>terms</Text> and <Text style={{ fontWeight: '800', textDecorationLine: 'underline' }}>privacy policy</Text>.
+          I confirm these details are correct, and I agree to the <Text accessibilityRole="link" onPress={() => router.push({ pathname: '/info/[page]', params: { page: 'terms' } })} style={{ fontWeight: '800', textDecorationLine: 'underline' }}>terms</Text> and <Text accessibilityRole="link" onPress={() => router.push({ pathname: '/info/[page]', params: { page: 'privacy' } })} style={{ fontWeight: '800', textDecorationLine: 'underline' }}>privacy policy</Text>.
         </Text>
       </Pressable>
       {errors.acceptTerms ? <Text style={s.error}>{errors.acceptTerms}</Text> : null}
 
       {error ? <Notice tone="error">{error}</Notice> : null}
       <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
-        <Button label="Back" variant="ghost" onPress={onChangeCompany} style={{ paddingHorizontal: 22 }} />
-        <Button label={viaGoogle ? 'Create account' : 'Send verification code'} loading={busy} onPress={next} style={{ flex: 1 }} />
+        {onChangeCompany ? <Button label="Back" variant="ghost" onPress={onChangeCompany} style={{ paddingHorizontal: 22 }} /> : null}
+        <Button label={emailLocked ? 'Create account' : 'Send verification code'} loading={busy} onPress={next} style={{ flex: 1 }} />
       </View>
     </>
   );

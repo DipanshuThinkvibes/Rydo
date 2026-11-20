@@ -27,7 +27,7 @@ const store = {
 };
 
 export class RequestError extends Error {
-  constructor(public code: ErrorCode, message: string, public status: number) {
+  constructor(public code: ErrorCode, message: string, public status: number, public fields?: Record<string, string>) {
     super(message);
   }
 }
@@ -82,7 +82,7 @@ export async function apiWithMeta<T, M = Record<string, unknown>>(method: Method
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
     const e = (json as ApiError).error ?? { code: 'INTERNAL', message: 'Something went wrong' };
-    throw new RequestError(e.code, e.message, res.status);
+    throw new RequestError(e.code, e.message, res.status, e.fields);
   }
   return { data: (json as { data: T }).data, meta: ((json as { meta?: M }).meta ?? {}) as M };
 }

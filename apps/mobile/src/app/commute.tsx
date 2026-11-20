@@ -47,7 +47,51 @@ export default function Commute() {
   const toHome = usual?.toHomeTime ?? '18:30';
   const officeDays = days.filter((d) => d.status === 'OFFICE').length;
   const autoOn = days.some((d) => d.planned) ? days.filter((d) => d.status === 'OFFICE').every((d) => d.autoBook) : true;
-  const range = days.length ? `${dayNum(days[0].date)}–${dayNum(days[days.length - 1].date)} ${monthShort(days[days.length - 1].date)}` : '';
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  const range = days.length ? `${dayNum(days[0].date)}–${dayNum(days[days.length - 1].date)} ${monthShort(days[days.length 
+    - 1].date)}` : '';
 
   async function act<T>(key: string, fn: () => Promise<T>, ok?: (r: T) => string) {
     setBusy(key);

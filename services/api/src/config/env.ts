@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const schema = z.object({
+const base = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().default(4000),
   DATABASE_URL: z.string().url(),
@@ -18,12 +18,17 @@ const schema = z.object({
   S3_SECRET_KEY: z.string().default(''),
   S3_BUCKET: z.string().default('rydo-documents'),
   GOOGLE_MAPS_API_KEY: z.string().optional(),
-  /** "Continue with Google": comma-separated OAuth client ids (web, Android, iOS). Empty = Google sign-in off. */
-  GOOGLE_OAUTH_CLIENT_IDS: z.string().optional(),
+  /** OAuth client id for "Sign in with Google" (Google Cloud Console, Credentials). Leave empty to switch Google sign-in off. */
+  GOOGLE_CLIENT_ID: z.string().optional(),
   /** Firebase Cloud Messaging (push). Leave all three empty to run without push. From the Firebase service-account JSON. */
   FCM_PROJECT_ID: z.string().optional(),
   FCM_CLIENT_EMAIL: z.string().optional(),
   FCM_PRIVATE_KEY: z.string().optional(),
+  /**
+   * Checks of driving licences and vehicles against government records. "off" (default): HR checks photos by eye.
+   * "demo": made-up answers for demos and local testing, refused in production. A real provider is added as an adapter.
+   */
+  DOC_CHECK_PROVIDER: z.enum(['off', 'demo']).default('off'),
   /** Background jobs (pg-boss). Off in tests, which call the job code directly. */
   JOBS_ENABLED: z.enum(['true', 'false']).default('true'),
   /** Set when running more than one API server: live updates then pass between servers through Redis. */
@@ -33,6 +38,7 @@ const schema = z.object({
   /** Max JSON body. Small on purpose: no RYDO request needs more. */
   BODY_LIMIT: z.string().default('100kb'),
 });
+const schema = base.refine((e) => !(e.NODE_ENV === 'production' && e.DOC_CHECK_PROVIDER === 'demo'), { message: 'The demo document check gives made-up answers; it cannot run in production', path: ['DOC_CHECK_PROVIDER'] });
 
 export type Env = z.infer<typeof schema>;
 let cached: Env | undefined;

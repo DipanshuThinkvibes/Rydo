@@ -16,11 +16,17 @@
 - [ ] Legal view on carpool cost sharing
 - [ ] PDF reports and monthly settlement email (needs a PDF package; payments/pricing intentionally not built)
 
+- [ ] Pick the document-check provider (Surepass / Cashfree / Signzy), add its adapter and key
+- [ ] Web Drive page: upload insurance, licence back and vehicle photos (web drivers can't be verified until then)
+
 ## Later
 - [ ] Pilot with one company, then App Store + Play Store
 - [ ] Masked calls; Enterprise module; Campus module; payments and subscriptions (switched on per client in the owner console)
 
 ## Done (recent)
+- [x] Driver sign-up like Uber: checklist, insurance, vehicle photos, licence back, government-record checks adapter, guidelines (2026-11-19, Anjali, not committed)
+- [x] Mobile catches up with the web: forgot password, account (photo, email check, password), notifications, messages, preferred drivers, waitlist, help pages, contact us, and admin tools (/manage) (2026-11-19, Anjali, not committed)
+- [x] Mobile sign-up on Dipanshu's sign-up API + company search (`GET /auth/companies`); merged dipanshu/rydo-web into anjali/rydo-dev (2026-11-19, Anjali, merge staged, not committed)
 - [x] Mobile: all 14 RYDO Share prototype screens on the existing APIs, plus report a problem (2026-11-18, Anjali, not committed)
 - [x] Phase 1 gap APIs: issue reports, ride chat, feedback + surveys + insights, announcements, push, emergency contacts, blocks, profile card, car type + AC filters (2026-11-17, branch dipanshu/rydo-api)
 - [x] Release 1.1: preferred drivers, waitlist, commute planner (My week) (2026-11-06)

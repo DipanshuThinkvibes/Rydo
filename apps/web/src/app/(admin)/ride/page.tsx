@@ -29,6 +29,8 @@ export default function FindRidePage() {
   const [seats, setSeats] = useState(1);
   const [vehicleType, setVehicleType] = useState<"" | "CAR" | "BIKE">("");
   const [womenOnly, setWomenOnly] = useState(false);
+  const [carTypes, setCarTypes] = useState<("HATCHBACK" | "SEDAN" | "SUV")[]>([]);
+  const [ac, setAc] = useState<"" | "yes" | "no">("");
   const [autoRematch, setAutoRematch] = useState(true);
   const [results, setResults] = useState<RideMatch[] | null>(null);
   const [requested, setRequested] = useState<Record<string, string>>({});
@@ -84,7 +86,7 @@ export default function FindRidePage() {
     setMsg(undefined);
     setSelected(null);
     try {
-      const r = await api<RideMatch[]>("POST", "/rides/search", { pickup, drop, date, fromTime: from, toTime: to, seats, vehicleType: vehicleType || undefined, womenOnly });
+      const r = await api<RideMatch[]>("POST", "/rides/search", { pickup, drop, date, fromTime: from, toTime: to, seats, vehicleType: vehicleType || undefined, carTypes: carTypes.length && vehicleType !== "BIKE" ? carTypes : undefined, ac: ac === "" ? undefined : ac === "yes", womenOnly });
       setResults(r);
       setSelected(r[0]?.rideId ?? null);
     } catch (err) {
@@ -204,6 +206,14 @@ export default function FindRidePage() {
                 <Stepper label="Seats" value={seats} onChange={setSeats} min={1} max={3} />
               </div>
               <Segmented label="Vehicle" value={vehicleType} onChange={setVehicleType} options={[{ value: "", label: "Any" }, { value: "CAR", label: "Car" }, { value: "BIKE", label: "Bike" }]} />
+              {vehicleType !== "BIKE" && (
+                <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Car type">
+                  {(["HATCHBACK", "SEDAN", "SUV"] as const).map((t) => (
+                    <button key={t} type="button" aria-pressed={carTypes.includes(t)} onClick={() => setCarTypes(carTypes.includes(t) ? carTypes.filter((x) => x !== t) : [...carTypes, t])} className={`h-9 rounded-full border-[1.5px] px-3.5 text-sm font-extrabold ${carTypes.includes(t) ? "border-ink bg-ink text-white" : "border-line-strong"}`}>{t === "SUV" ? "SUV" : t[0] + t.slice(1).toLowerCase()}</button>
+                  ))}
+                  <Segmented label="Air conditioning" value={ac} onChange={setAc} options={[{ value: "", label: "AC or not" }, { value: "yes", label: "AC" }, { value: "no", label: "Non-AC" }]} />
+                </div>
+              )}
             </div>
 
             <div className="flex flex-col divide-y divide-line rounded-2xl bg-surface px-4 py-1">

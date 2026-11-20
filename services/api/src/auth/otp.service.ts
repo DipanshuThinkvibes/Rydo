@@ -21,7 +21,8 @@ export class OtpService {
     return hmac(env().OTP_PEPPER, `${email}:${code}`);
   }
 
-  async send(email: string) {
+  /** purpose only changes the wording of the email: "sign-in" (default) or "verify-email" (account page). */
+  async send(email: string, purpose: "sign-in" | "verify-email" = "sign-in") {
     const since = new Date(Date.now() - 60 * 60 * 1000);
     const recent = await this.prisma.otpCode.count({ where: { email, createdAt: { gte: since } } });
     if (recent >= MAX_PER_HOUR) {
@@ -33,8 +34,10 @@ export class OtpService {
     });
     await this.messages.sendEmail({
       to: email,
-      subject: `${code} is your RYDO sign-in code`,
-      text: `Your RYDO sign-in code is ${code}. It expires in ${TTL_MIN} minutes. If you didn't ask for it, ignore this email.`,
+      subject: purpose === 'verify-email' ? `${code} is your RYDO email verification code` : `${code} is your RYDO sign-in code`,
+      text: purpose === 'verify-email'
+        ? `Your RYDO email verification code is ${code}. Enter it on your account page to confirm this email address. It expires in ${TTL_MIN} minutes. If you didn't ask for it, ignore this email.`
+        : `Your RYDO sign-in code is ${code}. It expires in ${TTL_MIN} minutes. If you didn't ask for it, ignore this email.`,
     });
   }
 

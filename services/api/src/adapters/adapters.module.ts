@@ -11,8 +11,8 @@ import { PgBossJobQueue } from './pg-boss-job-queue';
 import { PUSH_ADAPTER } from './push.adapter';
 import { LogPushAdapter } from './log-push.adapter';
 import { FcmPushAdapter } from './fcm-push.adapter';
-import { IDENTITY_ADAPTER } from './identity.adapter';
-import { GoogleIdentityAdapter } from './google-identity.adapter';
+import { GOOGLE_IDENTITY, HttpGoogleIdentity } from './google-identity.adapter';
+import { DemoDocumentCheck, DOCUMENT_CHECK, OffDocumentCheck } from './document-check.adapter';
 import { env } from '../config/env';
 
 /** The only place that decides which vendor sits behind each adapter. */
@@ -26,7 +26,9 @@ import { env } from '../config/env';
     // Google Maps, with every paid call counted for the RYDO health page.
     { provide: MAPS_ADAPTER, useFactory: (g: GoogleMapsAdapter, u: UsageService) => new CountingMapsAdapter(g, u, 'google'), inject: [GoogleMapsAdapter, UsageService] },
     { provide: JOB_QUEUE, useClass: PgBossJobQueue },
-    { provide: IDENTITY_ADAPTER, useClass: GoogleIdentityAdapter },
+    { provide: GOOGLE_IDENTITY, useClass: HttpGoogleIdentity },
+    // Government record checks for driver papers. A real provider (Surepass, Cashfree, Signzy…) is added here later.
+    { provide: DOCUMENT_CHECK, useFactory: () => (env().DOC_CHECK_PROVIDER === 'demo' ? new DemoDocumentCheck() : new OffDocumentCheck()) },
     // Firebase when its three settings exist, otherwise a logger (nothing is sent).
     {
       provide: PUSH_ADAPTER,
@@ -38,6 +40,6 @@ import { env } from '../config/env';
       },
     },
   ],
-  exports: [MESSAGE_ADAPTER, STORAGE_ADAPTER, MAPS_ADAPTER, JOB_QUEUE, PUSH_ADAPTER, IDENTITY_ADAPTER, UsageService],
+  exports: [MESSAGE_ADAPTER, STORAGE_ADAPTER, MAPS_ADAPTER, JOB_QUEUE, PUSH_ADAPTER, GOOGLE_IDENTITY, DOCUMENT_CHECK, UsageService],
 })
 export class AdaptersModule {}

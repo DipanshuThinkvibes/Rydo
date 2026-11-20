@@ -22,6 +22,8 @@ Web-first build of Release 1 (RYDO Share, carpool for companies) is complete thr
 - [ ] Screens for chat, issue reporting, feedback, surveys, safety contacts and profile photo (web and mobile)
 - [ ] Staging server live (owner picks and pays for a server)
 - [x] Mobile screens from the RYDO Share prototype (all 14, on the same APIs)
+- [x] Mobile self sign-up (find company, details, email code or Google) on the shared sign-up API
+- [x] Mobile has the web's employee and company-admin features (owner console, ops map and CSV stay web-only)
 - [ ] Mobile: run on a phone, add native packages (maps, background GPS, photo picker, push, sockets), real-phone GPS test
 - [ ] Pilot with one company
 - [ ] Release 1 in App Store + Play Store
