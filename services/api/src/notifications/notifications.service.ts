@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { ADMIN_ROLES, type OrgRoleName } from '@rydo/shared';
+import { ADMIN_ROLES, isCriticalNotice, notificationPrefs, type OrgRoleName } from '@rydo/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { MESSAGE_ADAPTER, MessageAdapter } from '../adapters/message.adapter';
 import { PUSH_ADAPTER, type PushAdapter } from '../adapters/push.adapter';
@@ -29,14 +29,16 @@ export class NotificationsService {
   ) {}
 
   async notifyMembership(membershipId: string, n: Notice) {
-    const m = await this.prisma.membership.findUniqueOrThrow({ where: { id: membershipId }, include: { user: { select: { id: true, email: true } } } });
+    const m = await this.prisma.membership.findUniqueOrThrow({ where: { id: membershipId }, include: { user: { select: { id: true, email: true, notificationPrefs: true } } } });
+    const prefs = notificationPrefs(m.user.notificationPrefs);
+    const must = isCriticalNotice(n.type);
     if (n.inbox !== false) {
       await this.prisma.notification.create({
         data: { userId: m.user.id, organizationId: m.organizationId, type: n.type, title: n.title, body: n.body, data: (n.data ?? {}) as object },
       });
     }
-    if (n.push !== false) await this.pushTo([m.user.id], n);
-    if (n.email) await this.messages.sendEmail({ to: m.user.email, subject: n.title, text: n.body });
+    if (n.push !== false && (must || prefs.pushUpdates)) await this.pushTo([m.user.id], n);
+    if (n.email && (must || prefs.emailUpdates)) await this.messages.sendEmail({ to: m.user.email, subject: n.title, text: n.body });
   }
 
   /** Every active admin of a company (Org, HR and Ops admins unless roles are given). */
@@ -49,17 +51,20 @@ export class NotificationsService {
   /** Same message to many people with a few queries (announcements, surveys). */
   async notifyMany(membershipIds: string[], n: Notice) {
     if (!membershipIds.length) return 0;
-    const ms = await this.prisma.membership.findMany({ where: { id: { in: membershipIds } }, select: { organizationId: true, user: { select: { id: true, email: true } } } });
+    const ms = await this.prisma.membership.findMany({ where: { id: { in: membershipIds } }, select: { organizationId: true, user: { select: { id: true, email: true, notificationPrefs: true } } } });
+    const must = isCriticalNotice(n.type);
+    const wants = (m: (typeof ms)[number], k: 'pushUpdates' | 'emailUpdates') => must || notificationPrefs(m.user.notificationPrefs)[k];
     if (n.inbox !== false) {
       await this.prisma.notification.createMany({
         data: ms.map((m) => ({ userId: m.user.id, organizationId: m.organizationId, type: n.type, title: n.title, body: n.body, data: (n.data ?? {}) as object })),
       });
     }
-    if (n.push !== false) await this.pushTo(ms.map((m) => m.user.id), n);
+    if (n.push !== false) await this.pushTo(ms.filter((m) => wants(m, 'pushUpdates')).map((m) => m.user.id), n);
     if (n.email) {
-      for (let i = 0; i < ms.length; i += 5) {
+      const emailTo = ms.filter((m) => wants(m, 'emailUpdates'));
+      for (let i = 0; i < emailTo.length; i += 5) {
         await Promise.all(
-          ms.slice(i, i + 5).map((m) =>
+          emailTo.slice(i, i + 5).map((m) =>
             this.messages.sendEmail({ to: m.user.email, subject: n.title, text: n.body }).catch((e) => this.log.warn(`Email to one person failed: ${(e as Error).message}`)),
           ),
         );

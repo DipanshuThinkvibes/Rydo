@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Linking, Pressable, Text, View } from 'react-native';
 import type { Place } from '@rydo/shared';
-import { colors } from '@rydo/ui-tokens';
+import { colors } from '@/lib/theme';
 import { Alert } from '@/lib/dialog';
 import { api, errText, RequestError } from '@/lib/api';
 import { useData } from '@/lib/hooks';

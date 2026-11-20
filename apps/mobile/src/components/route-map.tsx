@@ -3,7 +3,7 @@ import { Text, View, type LayoutChangeEvent, type ViewStyle } from 'react-native
 import { Icon } from './icons';
 import type { MapMarker, RouteMapProps } from './route-map-types';
 import type { LatLng } from '@rydo/shared';
-import { colors } from '@rydo/ui-tokens';
+import { colors, isDark } from '@/lib/theme';
 import { initials } from '@/lib/format';
 
 /**
@@ -21,7 +21,8 @@ function thin(path: LatLng[]) {
   return Array.from({ length: MAX_POINTS }, (_, i) => path[Math.round(i * step)]);
 }
 
-export function RouteMap({ routes = [], markers = [], dark, style, inset, children }: RouteMapProps) {
+export function RouteMap({ routes = [], markers = [], dark: darkProp, style, inset, children }: RouteMapProps) {
+  const dark = darkProp ?? isDark();
   const [size, setSize] = useState({ w: 0, h: 0 });
   const onLayout = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
@@ -138,7 +139,7 @@ function Line({ points, active, dark }: { points: Pt[]; active: boolean; dark: b
 function MeDot({ x, y }: Pt) {
   return (
     <View pointerEvents="none" accessibilityLabel="You are here" style={{ position: 'absolute', left: x - 26, top: y - 26, width: 52, height: 52, borderRadius: 26, backgroundColor: 'rgba(47,107,255,0.16)', alignItems: 'center', justifyContent: 'center' }}>
-      <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.youAreHere }}>
+      <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.youAreHere }}>
         <Icon name="pin" size={20} color={colors.youAreHere} />
       </View>
     </View>
@@ -154,8 +155,8 @@ function Marker({ m, at, dark }: { m: MapMarker; at: Pt; dark: boolean }) {
         ...(side === 'right' ? { left: at.x + 16, top: at.y - 14 } : { left: at.x - 70, top: at.y - 46, width: 140, alignItems: 'center' }),
       }}
     >
-      <View style={{ backgroundColor: colors.ink, borderRadius: 999, paddingHorizontal: 12, height: 28, justifyContent: 'center' }}>
-        <Text numberOfLines={1} style={{ color: colors.white, fontSize: 12, fontWeight: '800', maxWidth: 160 }}>{text}</Text>
+      <View style={{ backgroundColor: colors.inkBg, borderRadius: 999, paddingHorizontal: 12, height: 28, justifyContent: 'center' }}>
+        <Text numberOfLines={1} style={{ color: colors.onInk, fontSize: 12, fontWeight: '800', maxWidth: 160 }}>{text}</Text>
       </View>
     </View>
   );
@@ -176,16 +177,25 @@ function Marker({ m, at, dark }: { m: MapMarker; at: Pt; dark: boolean }) {
           {m.label ? pill(m.label) : null}
         </>
       );
+    case 'place':
+      return (
+        <>
+          <View style={[place(30), { borderRadius: 15, backgroundColor: m.isDefault ? colors.lime : '#FFFFFF', borderWidth: 2, borderColor: '#0B1426', alignItems: 'center', justifyContent: 'center' }]}>
+            <Icon name={m.icon ?? 'pin'} size={15} color={m.isDefault ? colors.onLime : '#0B1426'} />
+          </View>
+          {m.label ? pill(m.label, 'top') : null}
+        </>
+      );
     case 'end':
       return (
         <>
-          <View style={[place(20), { borderRadius: 4, backgroundColor: colors.ink, borderWidth: 3, borderColor: dark ? colors.white : colors.lime }]} />
+          <View style={[place(20), { borderRadius: 4, backgroundColor: colors.inkBg, borderWidth: 3, borderColor: dark ? colors.white : colors.lime }]} />
           {m.label ? pill(m.label, 'top') : null}
         </>
       );
     case 'car':
       return (
-        <View style={[place(40), { borderRadius: 20, backgroundColor: m.inkCar ? colors.ink : colors.lime, borderWidth: 3, borderColor: m.inkCar ? colors.white : colors.ink, alignItems: 'center', justifyContent: 'center' }]}>
+        <View style={[place(40), { borderRadius: 20, backgroundColor: m.inkCar ? colors.inkBg : colors.lime, borderWidth: 3, borderColor: m.inkCar ? colors.white : colors.ink, alignItems: 'center', justifyContent: 'center' }]}>
           <Text style={{ color: m.inkCar ? colors.lime : colors.ink, fontSize: 16, fontWeight: '800', transform: [{ rotate: `${m.headingDeg ?? 0}deg` }] }}>▲</Text>
         </View>
       );

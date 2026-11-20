@@ -49,8 +49,8 @@ describe('Driver sign-up and verification', () => {
   beforeAll(async () => {
     ({ app, messages, records, prisma } = await createApp());
     await resetDb(prisma);
-    orgs.A = (await prisma.organization.create({ data: { name: 'Company A', slug: 'a', emailDomains: ['a.test'], status: 'ACTIVE' } })).id;
-    orgs.B = (await prisma.organization.create({ data: { name: 'Company B', slug: 'b', emailDomains: ['b.test'], status: 'ACTIVE' } })).id;
+    orgs.A = (await prisma.organization.create({ data: { licenses: { create: [{ product: 'SHARE' }] }, name: 'Company A', slug: 'a', emailDomains: ['a.test'], status: 'ACTIVE' } })).id;
+    orgs.B = (await prisma.organization.create({ data: { licenses: { create: [{ product: 'SHARE' }] }, name: 'Company B', slug: 'b', emailDomains: ['b.test'], status: 'ACTIVE' } })).id;
     await person('hrA', 'A', ['HR_ADMIN']);
     await person('rahul', 'A', ['RIDER']);
     await person('hrB', 'B', ['HR_ADMIN']);

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { colors } from '@rydo/ui-tokens';
+import { colors } from '@/lib/theme';
 import { api, errText } from '@/lib/api';
 import { fmtWhen } from '@/lib/format';
 import { useData } from '@/lib/hooks';

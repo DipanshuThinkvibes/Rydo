@@ -7,7 +7,7 @@ import { AuditService } from '../audit/audit.service';
 import { AppError } from '../common/app-error';
 import { ZodPipe } from '../common/zod.pipe';
 import { Auth, Org, type AuthContext, type OrgContext } from '../common/request-context';
-import { OrgScoped } from '../tenancy/decorators';
+import { MembersOnly, OrgScoped } from '../tenancy/decorators';
 import { STORAGE_ADAPTER, StorageAdapter } from '../adapters/storage.adapter';
 import { randomToken } from '../auth/crypto';
 import { DOC_MAX_BYTES, DOC_TYPES, documentView, driverChecklist, latestDocuments, PHOTO_TYPES } from './documents';
@@ -16,6 +16,7 @@ import { DocumentCheckService } from './document-check.service';
 /** The signed-in employee's own driver profile, vehicles and documents (used by the mobile app). */
 @Controller('driver')
 @OrgScoped()
+@MembersOnly()
 export class DriverController {
   constructor(
     private readonly prisma: PrismaService,

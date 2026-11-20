@@ -3,14 +3,15 @@ import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } fro
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { CLASSES_FOR, DRIVER_STEPS, LICENCE_CLASSES, LICENCE_CLASS_LABEL, type DriverStepName, type LicenceClass } from '@rydo/shared';
-import { colors } from '@rydo/ui-tokens';
+import { CAR_TYPE_LABEL, CAR_TYPES, CLASSES_FOR, DRIVER_STEPS, LICENCE_CLASSES, LICENCE_CLASS_LABEL, type CarType, type DriverStepName, type LicenceClass } from '@rydo/shared';
+import { colors } from '@/lib/theme';
 import { api, errText, RequestError } from '@/lib/api';
 import { Alert } from '@/lib/dialog';
 import { isIsoDate, latestOf, mainVehicle, STEP_INFO, uploadDocument, type DriverDocument, type DriverSignup, type DriverVehicle } from '@/lib/driver-signup';
 import { useData } from '@/lib/hooks';
-import { pick, type Picked } from '@/lib/photo';
+import { appendFile, pick, type Picked } from '@/lib/photo';
 import type { MyProfile } from '@/lib/types';
+import { findCars } from '@/lib/car-models';
 import { CheckNotes, DocPhoto } from '@/components/doc-photo';
 import { Icon } from '@/components/icons';
 import { Avatar, BackButton, Badge, Button, Card, Chip, Field, Label, Loading, Notice, s, Switch } from '@/components/ui';
@@ -96,7 +97,7 @@ function afterUpload(doc: DriverDocument, onDone: () => void) {
 // ── Profile photo (Uber's rules) ──
 
 function PhotoStep({ onDone }: { onDone: () => void }) {
-  const { data: me } = useData(() => api<MyProfile>('GET', '/me/profile'), []);
+  const { data: me } = useData(() => api<Pick<MyProfile, 'name'>>('GET', '/me/profile').then(async (p) => ({ ...p, photoUrl: (await api<{ photoUrl: string | null }>('GET', '/me/photo')).photoUrl })), []);
   const [busy, setBusy] = useState(false);
   const upload = async (camera: boolean) => {
     const file = await pick(camera);
@@ -104,12 +105,10 @@ function PhotoStep({ onDone }: { onDone: () => void }) {
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) return Alert.alert('Choose a JPG, PNG or WebP photo.');
     setBusy(true);
     try {
-      const blob = await (await fetch(file.uri)).blob();
-      if (blob.size > 5 * 1024 * 1024) return Alert.alert('The photo must be under 5 MB.');
-      const slot = await api<{ key: string; uploadUrl: string; headers: Record<string, string> }>('POST', '/me/photo/upload-url', { contentType: file.type });
-      const put = await fetch(slot.uploadUrl, { method: 'PUT', headers: slot.headers, body: blob });
-      if (!put.ok) throw new Error('upload');
-      await api('PUT', '/me/photo', { key: slot.key });
+      // Through the RYDO API (like the web), so it works even when the phone can't reach the file store.
+      const form = new FormData();
+      await appendFile(form, 'file', file);
+      await api('POST', '/me/photo/file', form);
       onDone();
     } catch (e) {
       Alert.alert('Could not upload', errText(e));
@@ -204,7 +203,7 @@ function LicenceStep({ profile, onDone }: { profile: DriverSignup; onDone: () =>
 function VehicleStep({ vehicle, onDone }: { vehicle?: DriverVehicle; onDone: () => void }) {
   const [v, setV] = useState({
     type: vehicle?.type ?? ('CAR' as DriverVehicle['type']),
-    carType: (vehicle?.carType ?? 'SEDAN') as 'HATCHBACK' | 'SEDAN' | 'SUV',
+    carType: (vehicle?.carType ?? 'SEDAN') as CarType,
     make: vehicle?.make ?? '',
     model: vehicle?.model ?? '',
     color: vehicle?.color ?? '',
@@ -216,6 +215,9 @@ function VehicleStep({ vehicle, onDone }: { vehicle?: DriverVehicle; onDone: () 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const car = v.type === 'CAR';
+  // Search a known car to fill make, model and body type; any other car is typed in by hand.
+  const [carQuery, setCarQuery] = useState('');
+  const matches = car ? findCars(carQuery) : [];
   const save = async () => {
     setBusy(true);
     setError(undefined);
@@ -249,14 +251,34 @@ function VehicleStep({ vehicle, onDone }: { vehicle?: DriverVehicle; onDone: () 
         <Chip label="Bike" selected={!car} onPress={() => setV({ ...v, type: 'BIKE' })} />
       </View>
       {car ? (
-        <View style={{ flexDirection: 'row', gap: 8 }}>
-          {(['HATCHBACK', 'SEDAN', 'SUV'] as const).map((t) => (
-            <Chip key={t} tone="lime" label={t === 'SUV' ? 'SUV' : t[0] + t.slice(1).toLowerCase()} selected={v.carType === t} onPress={() => setV({ ...v, carType: t })} />
+        <View style={{ gap: 8 }}>
+          <Field label="Find your car" value={carQuery} onChangeText={setCarQuery} placeholder="Type a model, e.g. Swift, Creta, Innova" autoCorrect={false} />
+          {matches.map((m) => (
+            <Pressable
+              key={`${m.make}-${m.model}`}
+              accessibilityRole="button"
+              onPress={() => {
+                setV({ ...v, make: m.make, model: m.model, carType: m.type });
+                setCarQuery('');
+              }}
+              style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: 14, backgroundColor: pressed ? colors.surface2 : colors.surface })}
+            >
+              <Icon name="car" size={18} />
+              <Text style={[s.strong, { flex: 1, fontSize: 15 }]} numberOfLines={1}>{m.make} {m.model}</Text>
+              <Text style={s.small}>{CAR_TYPE_LABEL[m.type]}</Text>
+            </Pressable>
           ))}
+          {carQuery.trim().length >= 2 && matches.length === 0 ? <Text style={s.small}>Not in the list? No problem: type the make and model below and pick the body type.</Text> : null}
+          <Label>Body type</Label>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            {CAR_TYPES.map((t) => (
+              <Chip key={t} tone="lime" label={CAR_TYPE_LABEL[t]} selected={v.carType === t} onPress={() => setV({ ...v, carType: t })} />
+            ))}
+          </View>
         </View>
       ) : null}
-      <Field label="Make" value={v.make} onChangeText={(make) => setV({ ...v, make })} placeholder="Honda" error={fields.make} />
-      <Field label="Model" value={v.model} onChangeText={(model) => setV({ ...v, model })} placeholder="City" error={fields.model} />
+      <Field label="Make" value={v.make} onChangeText={(make) => setV({ ...v, make })} placeholder="Any make, e.g. Honda" error={fields.make} />
+      <Field label="Model" value={v.model} onChangeText={(model) => setV({ ...v, model })} placeholder="Any model, e.g. City" error={fields.model} />
       <Field label="Colour" value={v.color} onChangeText={(color) => setV({ ...v, color })} placeholder="White" error={fields.color} />
       <Field label="Number plate" value={v.plateNumber} onChangeText={(plateNumber) => setV({ ...v, plateNumber: plateNumber.toUpperCase() })} placeholder="KA 01 AB 1234" autoCapitalize="characters" error={fields.plateNumber} />
       {car ? (
@@ -264,8 +286,8 @@ function VehicleStep({ vehicle, onDone }: { vehicle?: DriverVehicle; onDone: () 
           <Label>Passenger seats</Label>
           <View style={{ flexDirection: 'row', gap: 8 }}>
             {[1, 2, 3, 4, 5, 6].map((n) => (
-              <Pressable key={n} accessibilityRole="radio" accessibilityState={{ checked: v.seatCapacity === n }} onPress={() => setV({ ...v, seatCapacity: n })} style={{ width: 46, height: 46, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: v.seatCapacity === n ? colors.ink : colors.white, borderWidth: 1.5, borderColor: v.seatCapacity === n ? colors.ink : colors.lineStrong }}>
-                <Text style={{ fontWeight: '800', fontSize: 16, color: v.seatCapacity === n ? colors.white : colors.ink }}>{n}</Text>
+              <Pressable key={n} accessibilityRole="radio" accessibilityState={{ checked: v.seatCapacity === n }} onPress={() => setV({ ...v, seatCapacity: n })} style={{ width: 46, height: 46, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: v.seatCapacity === n ? colors.inkBg : colors.white, borderWidth: 1.5, borderColor: v.seatCapacity === n ? colors.ink : colors.lineStrong }}>
+                <Text style={{ fontWeight: '800', fontSize: 16, color: v.seatCapacity === n ? colors.onInk : colors.ink }}>{n}</Text>
               </Pressable>
             ))}
           </View>
@@ -409,7 +431,7 @@ function GuidelinesStep({ profile, onDone }: { profile: DriverSignup; onDone: ()
     <>
       {SAFETY.map((x, i) => (
         <Card key={x.title} style={{ flexDirection: 'row', gap: 14 }}>
-          <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center' }}>
+          <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: colors.inkBg, alignItems: 'center', justifyContent: 'center' }}>
             <Text style={{ color: colors.lime, fontWeight: '800' }}>{i + 1}</Text>
           </View>
           <View style={{ flex: 1, gap: 4 }}>
@@ -426,7 +448,7 @@ function GuidelinesStep({ profile, onDone }: { profile: DriverSignup; onDone: ()
       ) : (
         <>
           <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: agree }} onPress={() => setAgree(!agree)} style={{ flexDirection: 'row', gap: 12, alignItems: 'flex-start' }}>
-            <View style={{ width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: colors.ink, backgroundColor: agree ? colors.ink : colors.white, alignItems: 'center', justifyContent: 'center', marginTop: 1 }}>
+            <View style={{ width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: colors.ink, backgroundColor: agree ? colors.inkBg : colors.white, alignItems: 'center', justifyContent: 'center', marginTop: 1 }}>
               {agree ? <Icon name="check" size={14} color={colors.lime} /> : null}
             </View>
             <Text style={{ flex: 1, fontSize: 14, lineHeight: 20, color: colors.ink }}>I have read the safety basics and agree to follow the RYDO driver guidelines.</Text>

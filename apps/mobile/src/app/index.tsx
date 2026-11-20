@@ -3,7 +3,7 @@ import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native'
 import { Redirect, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { CommuteDayView, Place, SavedPlace } from '@rydo/shared';
-import { colors } from '@rydo/ui-tokens';
+import { colors } from '@/lib/theme';
 import { api, apiWithMeta } from '@/lib/api';
 import { fmtClock, fmtTime, dayOf, firstName, greeting, shortName, toPath } from '@/lib/format';
 import { useData } from '@/lib/hooks';
@@ -14,8 +14,10 @@ import type { Booking, Office, OpenSurvey, RideReq } from '@/lib/types';
 import { Icon } from '@/components/icons';
 import { RouteMap, type MapMarker } from '@/components/route-map';
 import { TabBar } from '@/components/tab-bar';
-import { Avatar, Badge, Button, Card, Logo, RoundButton, s, Sheet } from '@/components/ui';
+import { Avatar, Badge, Button, Card, Logo, RoundButton, s } from '@/components/ui';
 import { AccountButton } from '@/components/account-button';
+import { DragSheet } from '@/components/drag-sheet';
+import { LicenceBanner } from '@/components/licence-banner';
 import { ModeSwitch } from '@/components/mode-switch';
 
 interface HomeData {
@@ -31,7 +33,7 @@ interface HomeData {
 
 /** Prototype screen 2: map with the "Where to?" sheet, shortcuts and the next ride. */
 export default function Home() {
-  const { me, membership, active, reload: reloadSession, signOut } = useSession();
+  const { me, membership, active, orgs, isAdmin, isPlatformAdmin, reload: reloadSession, signOut } = useSession();
   const [refreshing, setRefreshing] = useState(false);
   const here = useCurrentLocation(!!me && active);
   const { data, reload } = useData<HomeData>(
@@ -53,6 +55,10 @@ export default function Home() {
   );
 
   if (!me) return <Redirect href="/welcome" />;
+  // RYDO staff without a company use the owner console (as on the web).
+  if (isPlatformAdmin && orgs.length === 0) return <Redirect href="/platform" />;
+  // Admin accounts (company, HR, ride desk, or RYDO support view) never ride or drive: their home is Admin.
+  if (active && isAdmin) return <Redirect href="/admin" />;
   if (!active) return <Waiting company={membership?.organization.name} status={membership?.status} onRefresh={reloadSession} signOut={signOut} />;
 
   const { home, office } = commuteEnds(data?.places, data?.offices);
@@ -72,12 +78,19 @@ export default function Home() {
   if (next?.pickup) markers.push({ id: 'p', at: next.pickup, kind: 'start' });
   if (next?.drop) markers.push({ id: 'd', at: next.drop, kind: 'end', label: shortName(next.dropLabel) });
   if (here.coords) markers.push({ id: 'me', at: here.coords, kind: 'me' });
-  else if (!next && home) markers.push({ id: 'home', at: home, kind: 'start' });
-  if (!next && office) markers.push({ id: 'o', at: office, kind: 'end', label: office.label });
+  // Saved home and office addresses as bookmarks with their names (default ones in lime).
+  const saved = (data?.places ?? []).filter((p) => p.label === 'HOME' || p.label === 'OFFICE');
+  for (const p of saved) {
+    markers.push({ id: `place-${p.id}`, at: { lat: p.lat, lng: p.lng }, kind: 'place', icon: p.label === 'HOME' ? 'house' : 'building', label: p.name, isDefault: p.isDefault });
+  }
+  // No office saved yet: show the company office the ride search falls back to.
+  if (office && !saved.some((p) => p.label === 'OFFICE')) markers.push({ id: 'company-office', at: office, kind: 'place', icon: 'building', label: office.label });
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.white }}>
-      <RouteMap style={{ position: 'absolute', left: 0, right: 0, top: 0, height: '58%' }} routes={next ? [{ id: 'r', path: toPath(next.route), active: true }] : []} markers={markers} inset={{ top: 110, bottom: 60 }} />
+      <View style={{ flex: 1 }}>
+      {/* Full height, so pushing the panel down shows the whole map */}
+      <RouteMap style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }} routes={next ? [{ id: 'r', path: toPath(next.route), active: true }] : []} markers={markers} inset={{ top: 110, bottom: 320 }} />
       <SafeAreaView edges={['top']} style={{ paddingHorizontal: 16, gap: 12 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <AccountButton size={48} />
@@ -89,18 +102,19 @@ export default function Home() {
         </View>
         <View style={s.pillDark}>
           <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.lime }} />
-          <Text style={{ color: colors.white, fontSize: 13, fontWeight: '700' }}>{membership?.organization.name} · verified colleagues only</Text>
+          <Text style={{ color: colors.onPanel, fontSize: 13, fontWeight: '700' }}>{membership?.organization.name} · verified colleagues only</Text>
         </View>
       </SafeAreaView>
 
-      <View style={{ flex: 1 }} />
-      <Sheet style={{ maxHeight: '58%', paddingBottom: 0 }}>
+      {/* Pull the panel up to see everything, or tap its handle */}
+      <DragSheet>
         <ScrollView
           contentContainerStyle={{ gap: 14, paddingBottom: 18 }}
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => (setRefreshing(true), await reload(), setRefreshing(false))} />}
         >
           <Text accessibilityRole="header" style={s.h2}>{greeting()}, {firstName(me.user.name)}</Text>
+          <LicenceBanner />
 
           <View style={{ flexDirection: 'row', alignItems: 'center', height: 56, borderRadius: 18, backgroundColor: colors.surface, paddingLeft: 16, paddingRight: 6, gap: 12 }}>
             <Pressable accessibilityRole="search" accessibilityLabel="Search rides: where to?" onPress={() => (updateDraft({ leaveNow: true }), go(current ?? home, null))} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, height: '100%' }}>
@@ -160,7 +174,7 @@ export default function Home() {
 
           {survey ? (
             <Card onPress={() => router.push({ pathname: '/survey/[id]', params: { id: survey.id } })} style={{ flexDirection: 'row', alignItems: 'center', gap: 14, borderColor: colors.lime, borderWidth: 2 }}>
-              <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center' }}>
+              <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: colors.inkBg, alignItems: 'center', justifyContent: 'center' }}>
                 <Icon name="star" size={20} color={colors.lime} />
               </View>
               <View style={{ flex: 1, gap: 2 }}>
@@ -172,7 +186,7 @@ export default function Home() {
 
           <Card onPress={() => router.replace('/commute')} style={{ backgroundColor: colors.surface, borderWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
             <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: colors.lime, alignItems: 'center', justifyContent: 'center' }}>
-              <Icon name="calendar" size={22} />
+              <Icon name="calendar" size={22} color={colors.onLime} />
             </View>
             <View style={{ flex: 1, gap: 2 }}>
               <Text style={s.strong}>Plan your whole week</Text>
@@ -180,7 +194,8 @@ export default function Home() {
             </View>
           </Card>
         </ScrollView>
-      </Sheet>
+      </DragSheet>
+      </View>
       <TabBar active="home" />
     </View>
   );
@@ -191,7 +206,7 @@ export default function Home() {
 function RideShortcut({ icon, title, sub, onPress, dark }: { icon: 'building' | 'house'; title: string; sub: string; onPress: () => void; dark?: boolean }) {
   return (
     <Card onPress={onPress} style={{ flex: 1, gap: 6, padding: 14 }}>
-      <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: dark ? colors.ink : colors.surface2, alignItems: 'center', justifyContent: 'center' }}>
+      <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: dark ? colors.inkBg : colors.surface2, alignItems: 'center', justifyContent: 'center' }}>
         <Icon name={icon} size={20} color={dark ? colors.lime : colors.ink} />
       </View>
       <Text style={s.strong}>{title}</Text>
@@ -210,8 +225,8 @@ function Waiting({ company, status, onRefresh, signOut }: { company?: string; st
         <Logo />
         <Card dark={pending}>
           <Badge tone={pending ? 'lime' : 'neutral'}>{pending ? 'Pending' : 'No access'}</Badge>
-          <Text style={{ fontSize: 20, fontWeight: '800', color: pending ? colors.white : colors.ink, marginTop: 6 }}>{pending ? 'Waiting for HR approval' : 'No company access yet'}</Text>
-          <Text style={{ fontSize: 14, lineHeight: 21, color: pending ? colors.mutedOnDark : colors.muted }}>
+          <Text style={{ fontSize: 20, fontWeight: '800', color: pending ? colors.onPanel : colors.ink, marginTop: 6 }}>{pending ? 'Waiting for HR approval' : 'No company access yet'}</Text>
+          <Text style={{ fontSize: 14, lineHeight: 21, color: pending ? colors.panelMuted : colors.muted }}>
             {pending
               ? `${company ?? 'Your company'}'s HR team will approve your account soon. We'll email you; then pull down here to refresh.`
               : 'Sign up with your work email, or ask your HR team to add you to RYDO.'}

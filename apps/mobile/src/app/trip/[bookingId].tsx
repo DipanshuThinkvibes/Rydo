@@ -4,7 +4,7 @@ import { Alert } from '@/lib/dialog';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { LiveLocation, LiveRide } from '@rydo/shared';
-import { colors } from '@rydo/ui-tokens';
+import { colors } from '@/lib/theme';
 import { api, errText } from '@/lib/api';
 import { co2Kg, etaSeconds, firstName, fmtKm, fmtTime, fmtWhen, metersBetween, pathLength, progressAlong, shortName, toPath } from '@/lib/format';
 import { openLongStop, useData, useLiveRide, useNow } from '@/lib/hooks';
@@ -103,8 +103,8 @@ function Pickup({ b, live, location, onChange }: { b: Booking; live: LiveRide | 
       <SafeAreaView edges={['top']} style={{ paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
         <BackButton />
         <View style={[s.pillDark, { height: 48, flex: 1, paddingHorizontal: 16 }]}>
-          <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: started ? colors.lime : colors.mutedOnDark }} />
-          <Text numberOfLines={1} style={{ color: colors.white, fontSize: 15, fontWeight: '800', flex: 1 }}>{banner}</Text>
+          <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: started ? colors.lime : colors.panelMuted }} />
+          <Text numberOfLines={1} style={{ color: colors.onPanel, fontSize: 15, fontWeight: '800', flex: 1 }}>{banner}</Text>
         </View>
       </SafeAreaView>
       <View style={{ flex: 1 }} />
@@ -191,14 +191,14 @@ function OnTheWay({ b, live, location, onChange }: { b: Booking; live: LiveRide 
     <View style={{ flex: 1, backgroundColor: colors.white }}>
       <RouteMap style={{ position: 'absolute', left: 0, right: 0, top: 0, height: '50%' }} routes={[{ id: 'r', path, active: true }]} markers={markers} inset={{ top: longStop ? 260 : 110, bottom: 20 }} />
       <SafeAreaView edges={['top']} style={{ paddingHorizontal: 16, gap: 12 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.ink, borderRadius: 20, padding: 16, gap: 12 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.panel, borderRadius: 20, padding: 16, gap: 12 }}>
           <View style={{ flex: 1 }}>
-            <Text style={{ color: colors.mutedOnDark, fontSize: 13, fontWeight: '600' }}>On the way to {b.dropLabel.split(',')[0]}</Text>
-            <Text style={{ color: colors.white, fontSize: 18, fontWeight: '800' }}>Arrive {fmtTime(arriveAt)} · {Math.max(1, Math.round(etaSeconds(leftM) / 60))} min</Text>
+            <Text style={{ color: colors.panelMuted, fontSize: 13, fontWeight: '600' }}>On the way to {b.dropLabel.split(',')[0]}</Text>
+            <Text style={{ color: colors.onPanel, fontSize: 18, fontWeight: '800' }}>Arrive {fmtTime(arriveAt)} · {Math.max(1, Math.round(etaSeconds(leftM) / 60))} min</Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.lime }} />
-            <Text style={{ color: colors.lime, fontSize: 12, fontWeight: '800' }}>LIVE</Text>
+            <Text style={{ color: colors.panelAccent, fontSize: 12, fontWeight: '800' }}>LIVE</Text>
           </View>
         </View>
         {longStop && (
@@ -220,7 +220,7 @@ function OnTheWay({ b, live, location, onChange }: { b: Booking; live: LiveRide 
           <Text style={s.small}>{fmtKm(done)} done</Text>
         </View>
         <View style={{ height: 8, borderRadius: 4, backgroundColor: colors.surface2, overflow: 'hidden' }}>
-          <View style={{ height: 8, borderRadius: 4, width: `${total ? Math.min(100, (done / total) * 100) : 0}%`, backgroundColor: colors.ink }} />
+          <View style={{ height: 8, borderRadius: 4, width: `${total ? Math.min(100, (done / total) * 100) : 0}%`, backgroundColor: colors.inkBg }} />
         </View>
         <View style={{ gap: 14, paddingVertical: 4 }}>
           <Step done title="You got in · PIN verified" sub={boardedAt ? `${fmtTime(boardedAt)} · ${b.pickupLabel}` : b.pickupLabel} />
@@ -238,8 +238,8 @@ function OnTheWay({ b, live, location, onChange }: { b: Booking; live: LiveRide 
 function Step({ title, sub, done, end }: { title: string; sub: string; done?: boolean; end?: boolean }) {
   return (
     <View style={{ flexDirection: 'row', gap: 12 }}>
-      <View style={{ width: 22, height: 22, marginTop: 1, borderRadius: end ? 5 : 11, backgroundColor: end ? colors.ink : done ? colors.lime : colors.white, borderWidth: done || end ? 0 : 3, borderColor: colors.ink, alignItems: 'center', justifyContent: 'center' }}>
-        {done ? <Icon name="check" size={14} /> : null}
+      <View style={{ width: 22, height: 22, marginTop: 1, borderRadius: end ? 5 : 11, backgroundColor: end ? colors.inkBg : done ? colors.lime : colors.white, borderWidth: done || end ? 0 : 3, borderColor: colors.ink, alignItems: 'center', justifyContent: 'center' }}>
+        {done ? <Icon name="check" size={14} color={colors.onLime} /> : null}
       </View>
       <View style={{ flex: 1 }}>
         <Text style={s.strong}>{title}</Text>
@@ -276,10 +276,10 @@ function Arrived({ b, live, onRated }: { b: Booking; live: LiveRide | null; onRa
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.white }}>
-      <View style={{ backgroundColor: colors.ink, borderBottomLeftRadius: 28, borderBottomRightRadius: 28 }}>
+      <View style={{ backgroundColor: colors.panel, borderBottomLeftRadius: 28, borderBottomRightRadius: 28 }}>
         <SafeAreaView edges={['top']} style={{ padding: 20, gap: 16 }}>
           <Badge tone="lime">ARRIVED{ended ? ` · ${fmtTime(new Date(ended))}` : ''}</Badge>
-          <Text accessibilityRole="header" style={{ color: colors.white, fontSize: 30, fontWeight: '800', lineHeight: 36 }}>
+          <Text accessibilityRole="header" style={{ color: colors.onPanel, fontSize: 30, fontWeight: '800', lineHeight: 36 }}>
             You&apos;re at {b.dropLabel.split(',')[0]}, {firstName(me?.user.name ?? '')}
           </Text>
           <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -288,9 +288,9 @@ function Arrived({ b, live, onRated }: { b: Booking; live: LiveRide | null; onRa
             <Stat dark big lime value={`≈${co2Kg(meters).toFixed(1)} kg`} label="CO₂ saved" />
           </View>
           {b.costShareEstimate ? (
-            <View style={{ backgroundColor: colors.ink2, borderRadius: 14, padding: 12 }}>
-              <Text style={{ color: colors.mutedOnDark, fontSize: 14 }}>
-                Your cost share <Text style={{ color: colors.white, fontWeight: '800' }}>₹{Math.round(b.costShareEstimate)} [est.]</Text>
+            <View style={{ backgroundColor: colors.panel2, borderRadius: 14, padding: 12 }}>
+              <Text style={{ color: colors.panelMuted, fontSize: 14 }}>
+                Your cost share <Text style={{ color: colors.onPanel, fontWeight: '800' }}>₹{Math.round(b.costShareEstimate)} [est.]</Text>
               </Text>
             </View>
           ) : null}

@@ -103,3 +103,8 @@ Owner's words: "We are the main product owner for RYDO and we will manage this e
 - **Decision:** Drivers finish a checklist (photo, licence both sides, vehicle, RC, insurance, 3 vehicle photos, safety guidelines). Licence, RC and insurance are checked against Sarathi/Vahan through a DOCUMENT_CHECK adapter; until a provider is chosen it is "off" (HR checks by eye). HR keeps one "Verify driver" button; a failed check needs an explicit, audited "verify anyway". PUC skipped for now.
 - **Why:** Matches what drivers know from Uber; insurance and photos replace an in-person inspection; the adapter keeps the paid provider swappable and out of tests.
 - **Rejected:** Per-document approval (owner prefers one button); background check and payouts (employees are HR-approved; RYDO takes no payments).
+
+## 2026-11-20 - Admin accounts never ride or drive (Anjali)
+- **Decision:** Company, HR and ride desk admins (ORG_ADMIN, HR_ADMIN, OPS_ADMIN) use admin-only accounts. The API refuses every ride and drive route for them with `ADMIN_ACCOUNT` (403), via `@MembersOnly()` in the OrgGuard; admins still watch live trips (`GET /rides/:id/live`). Giving someone an admin role drops their Rider and Driver roles. An admin who wants to carpool signs up separately with their own work email ("separate ID"). In the app, admin accounts open on Admin and see only the Admin and Menu tabs.
+- **Why:** Owner wants the people who approve employees and drivers kept apart from the carpool itself; enforcing it in the API means web and app follow the same rule.
+- **Rejected:** A generated HR login ID (new sign-in type); hiding ride screens in the app only (HR could still ride from the web); blocking HR only (owner chose all company admins).

@@ -3,7 +3,7 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { Place, RideMatch, SavedPlace } from '@rydo/shared';
-import { colors } from '@rydo/ui-tokens';
+import { colors } from '@/lib/theme';
 import { api, errText } from '@/lib/api';
 import { dayLabel, fmtClock, fmtDistance, isoDay, metersBetween } from '@/lib/format';
 import { useCurrentLocation } from '@/lib/location';
@@ -12,6 +12,7 @@ import { useSession } from '@/lib/session';
 import type { Office } from '@/lib/types';
 import { Icon } from '@/components/icons';
 import { buildSaved, PlacePicker, type Saved } from '@/components/place-picker';
+import { FiltersButton, RideFilters } from '@/components/ride-filters';
 import { BackButton, Button, Chip, ChipRow, Label, Notice, RoundButton, s } from '@/components/ui';
 
 const TIMES = Array.from({ length: 65 }, (_, i) => {
@@ -30,6 +31,7 @@ export default function PlanRide() {
   const current: Place | null = here.coords ? { label: 'Current location', ...here.coords } : null;
   const [picking, setPicking] = useState<'pickup' | 'drop' | null>(null);
   const [busy, setBusy] = useState(false);
+  const [filtering, setFiltering] = useState(false);
   const [error, setError] = useState<string>();
 
   useEffect(() => {
@@ -93,7 +95,7 @@ export default function PlanRide() {
           <View style={{ alignItems: 'center', width: 16 }}>
             <View style={{ width: 14, height: 14, borderRadius: 7, borderWidth: 3, borderColor: colors.ink }} />
             {[0, 1, 2, 3, 4].map((i) => <View key={i} style={{ width: 2, height: 5, marginVertical: 2, backgroundColor: colors.lineStrong }} />)}
-            <View style={{ width: 13, height: 13, backgroundColor: colors.ink, borderRadius: 2 }} />
+            <View style={{ width: 13, height: 13, backgroundColor: colors.inkBg, borderRadius: 2 }} />
           </View>
           <View style={{ flex: 1, gap: 10 }}>
             {field('pickup', d.pickup, 'Pickup: home, a gate or landmark')}
@@ -132,40 +134,32 @@ export default function PlanRide() {
           <Label>Seats</Label>
           <View style={{ flexDirection: 'row', gap: 10 }}>
             {[1, 2, 3].map((n) => (
-              <Pressable key={n} accessibilityRole="button" accessibilityLabel={`${n} seat${n > 1 ? 's' : ''}`} accessibilityState={{ selected: d.seats === n }} onPress={() => set({ seats: n })} style={{ width: 50, height: 50, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: d.seats === n ? colors.ink : colors.white, borderWidth: 1.5, borderColor: d.seats === n ? colors.ink : colors.lineStrong }}>
-                <Text style={{ fontSize: 17, fontWeight: '800', color: d.seats === n ? colors.white : colors.ink }}>{n}</Text>
+              <Pressable key={n} accessibilityRole="button" accessibilityLabel={`${n} seat${n > 1 ? 's' : ''}`} accessibilityState={{ selected: d.seats === n }} onPress={() => set({ seats: n })} style={{ width: 50, height: 50, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: d.seats === n ? colors.inkBg : colors.white, borderWidth: 1.5, borderColor: d.seats === n ? colors.ink : colors.lineStrong }}>
+                <Text style={{ fontSize: 17, fontWeight: '800', color: d.seats === n ? colors.onInk : colors.ink }}>{n}</Text>
               </Pressable>
             ))}
           </View>
         </View>
 
-        <View style={{ gap: 12 }}>
-          <Label>Preferences</Label>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            {features.womenOnly !== false && <Chip tone="lime" label="Women-only ride" selected={d.womenOnly} onPress={() => set({ womenOnly: !d.womenOnly })} />}
-            <Chip tone="lime" label="AC" selected={d.ac} onPress={() => set({ ac: !d.ac })} />
-          </View>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            {(
-              [
-                ['HATCHBACK', 'Hatchback'],
-                ['SEDAN', 'Sedan'],
-                ['SUV', 'SUV'],
-              ] as const
-            ).map(([k, l]) => {
-              const on = d.carTypes.includes(k);
-              return <Chip key={k} tone="lime" label={l} selected={on} onPress={() => set({ carTypes: on ? d.carTypes.filter((x) => x !== k) : [...d.carTypes, k] })} />;
-            })}
-          </View>
-          {d.carTypes.length > 0 && <Text style={s.small}>Only cars of these types. Bikes and cars without a type are hidden.</Text>}
-        </View>
+        {/* Vehicle, car type, AC and women-only live behind one Filters button */}
+        <FiltersButton d={d} onPress={() => setFiltering(true)} />
+        <RideFilters
+          visible={filtering}
+          d={d}
+          womenOnlyAllowed={features.womenOnly !== false}
+          onClose={() => setFiltering(false)}
+          onApply={(f) => {
+            set(f);
+            setFiltering(false);
+          }}
+        />
 
         {saved.length > 0 && (
           <View style={{ gap: 4 }}>
             <Label>Saved and recent</Label>
             {saved.filter((sv) => sv.key !== 'here').map((sv) => (
               <Pressable key={sv.key} accessibilityRole="button" onPress={() => set({ drop: sv.place })} style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 10, opacity: pressed ? 0.6 : 1 })}>
-                <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: sv.icon === 'building' ? colors.ink : colors.surface2, alignItems: 'center', justifyContent: 'center' }}>
+                <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: sv.icon === 'building' ? colors.inkBg : colors.surface2, alignItems: 'center', justifyContent: 'center' }}>
                   <Icon name={sv.icon} size={20} color={sv.icon === 'building' ? colors.lime : colors.ink} />
                 </View>
                 <View style={{ flex: 1 }}>

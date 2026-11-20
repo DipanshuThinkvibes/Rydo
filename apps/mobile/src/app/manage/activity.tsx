@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Platform, Pressable, Text, View } from 'react-native';
-import { colors } from '@rydo/ui-tokens';
+import { colors } from '@/lib/theme';
 import { apiWithMeta, errText } from '@/lib/api';
 import { fmtWhen } from '@/lib/format';
 import { useData } from '@/lib/hooks';

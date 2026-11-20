@@ -3,7 +3,7 @@ import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } fro
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { AuthResult } from '@rydo/shared';
-import { colors } from '@rydo/ui-tokens';
+import { colors } from '@/lib/theme';
 import { api, RequestError } from '@/lib/api';
 import { Alert } from '@/lib/dialog';
 import { useSession } from '@/lib/session';
@@ -22,17 +22,17 @@ function RouteArt() {
         {Array.from({ length: 9 }).map((_, i) => (
           <View key={i} style={{ width: 14, height: 5, borderRadius: 3, backgroundColor: colors.lime, opacity: 0.35 + i * 0.08 }} />
         ))}
-        <View style={{ width: 22, height: 22, borderRadius: 6, backgroundColor: colors.ink, borderWidth: 3, borderColor: colors.lime }} />
+        <View style={{ width: 22, height: 22, borderRadius: 6, backgroundColor: colors.panel, borderWidth: 3, borderColor: colors.lime }} />
       </View>
       <View style={{ position: 'absolute', top: 10, left: 90, height: 28, paddingHorizontal: 16, borderRadius: 14, backgroundColor: colors.lime, justifyContent: 'center' }}>
-        <Text style={{ fontSize: 13, fontWeight: '800', color: colors.ink }}>Pickup</Text>
+        <Text style={{ fontSize: 13, fontWeight: '800', color: colors.onLime }}>Pickup</Text>
       </View>
     </View>
   );
 }
 
 export default function SignIn() {
-  const { signedIn } = useSession();
+  const { signedIn, sessionEnded } = useSession();
   const [mode, setMode] = useState<Mode>('password');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -96,7 +96,7 @@ export default function SignIn() {
   const ready = mode === 'password' ? !!email && !!password : mode === 'email' ? !!email : code.length === 6;
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.ink }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.panel }}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
           {/* Dark hero, like the web side panel */}
@@ -106,8 +106,8 @@ export default function SignIn() {
             <Logo light />
             <RouteArt />
             <View style={{ gap: 8 }}>
-              <Text style={{ color: colors.white, fontSize: 34, fontWeight: '800', lineHeight: 38 }}>Ride to work{'\n'}with your team.</Text>
-              <Text style={{ color: colors.mutedOnDark, fontSize: 15, lineHeight: 22 }}>Colleagues already driving your way, verified by HR. Share the seat, split the cost.</Text>
+              <Text style={{ color: colors.onPanel, fontSize: 34, fontWeight: '800', lineHeight: 38 }}>Ride to work{'\n'}with your team.</Text>
+              <Text style={{ color: colors.panelMuted, fontSize: 15, lineHeight: 22 }}>Colleagues already driving your way, verified by HR. Share the seat, split the cost.</Text>
             </View>
           </View>
 
@@ -133,6 +133,7 @@ export default function SignIn() {
               <Field label="6-digit code" value={code} onChangeText={(t) => setCode(t.replace(/\D/g, '').slice(0, 6))} keyboardType="number-pad" autoComplete="one-time-code" textContentType="oneTimeCode" maxLength={6} />
             )}
 
+            {sessionEnded && !error ? <Notice tone="info">Your session ended, for example because 14 days passed since you signed in or you were signed out on another device. Please sign in again.</Notice> : null}
             {error ? <Notice tone="error">{error}</Notice> : null}
 
             <Button label={mode === 'email' ? 'Send code' : 'Sign in'} loading={busy} disabled={!ready} onPress={submit} />

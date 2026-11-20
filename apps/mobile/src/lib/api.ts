@@ -1,7 +1,7 @@
 import Constants from 'expo-constants';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
-import { ORG_HEADER, type ApiError, type AuthResult, type ErrorCode } from '@rydo/shared';
+import { ORG_HEADER, SUPPORT_HEADER, type ApiError, type AuthResult, type ErrorCode } from '@rydo/shared';
 
 // On a physical phone "localhost" is the phone itself. When the configured URL is local
 // (or unset), use the dev machine's LAN address that Expo already gave this device.
@@ -54,21 +54,48 @@ export const setApiOrg = (id: string | null) => {
   currentOrg = id;
 };
 
+/** RYDO support looking at a client read-only (web "support view"). Ends by itself at expiresAt. */
+export interface SupportView {
+  orgId: string;
+  orgName: string;
+  expiresAt: string;
+}
+let support: SupportView | null = null;
+export const setApiSupport = (v: SupportView | null) => {
+  support = v;
+};
+export const activeSupport = () => (support && new Date(support.expiresAt).getTime() > Date.now() ? support : null);
+
 async function send(method: string, path: string, body?: unknown) {
   const isForm = body instanceof FormData;
   // For FormData the phone sets the multipart boundary itself.
   const headers: Record<string, string> = isForm ? {} : { 'content-type': 'application/json' };
   const access = await store.get(KEY.access);
   if (access) headers.authorization = `Bearer ${access}`;
-  if (currentOrg) headers[ORG_HEADER] = currentOrg;
+  const sv = activeSupport();
+  const org = sv?.orgId ?? currentOrg;
+  if (org) headers[ORG_HEADER] = org;
+  if (sv) headers[SUPPORT_HEADER] = '1';
   return fetch(BASE + path, { method, headers, body: body === undefined ? undefined : isForm ? body : JSON.stringify(body) });
 }
+
+/** Called when the sign-in has ended (14 days after signing in, or signed out on another device). */
+let sessionEnded: (() => void) | null = null;
+export const onSessionEnded = (fn: (() => void) | null) => {
+  sessionEnded = fn;
+};
 
 async function refresh() {
   const refreshToken = await store.get(KEY.refresh);
   if (!refreshToken) return false;
   const res = await fetch(BASE + '/auth/refresh', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ refreshToken }) });
-  if (!res.ok) return false;
+  if (!res.ok) {
+    if (res.status === 401) {
+      await tokens.clear();
+      sessionEnded?.();
+    }
+    return false;
+  }
   await tokens.save((await res.json()).data);
   return true;
 }

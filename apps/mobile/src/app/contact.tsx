@@ -3,7 +3,7 @@ import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput,
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COMPANY_SIZES, inquiryCreateSchema } from '@rydo/shared';
-import { colors } from '@rydo/ui-tokens';
+import { colors } from '@/lib/theme';
 import { api, errText, RequestError } from '@/lib/api';
 import { Icon } from '@/components/icons';
 import { Select } from '@/components/select';
@@ -63,7 +63,7 @@ export default function Contact() {
 
           <View style={{ gap: 12 }}>
             <View style={{ alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 999, backgroundColor: colors.lime }}>
-              <Text style={{ fontSize: 12, fontWeight: '800', letterSpacing: 1.5, color: colors.ink }}>CONTACT US</Text>
+              <Text style={{ fontSize: 12, fontWeight: '800', letterSpacing: 1.5, color: colors.onLime }}>CONTACT US</Text>
             </View>
             <Text accessibilityRole="header" style={{ fontSize: 34, lineHeight: 38, fontWeight: '800', color: colors.ink }}>Bring RYDO to your company.</Text>
             <Text style={{ fontSize: 16, lineHeight: 24, color: colors.muted }}>
@@ -74,7 +74,7 @@ export default function Contact() {
           <View style={{ gap: 16 }}>
             {STEPS.map((x, i) => (
               <View key={x.title} style={{ flexDirection: 'row', gap: 14 }}>
-                <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center' }}>
+                <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: colors.inkBg, alignItems: 'center', justifyContent: 'center' }}>
                   <Text style={{ color: colors.lime, fontWeight: '800', fontSize: 15 }}>{i + 1}</Text>
                 </View>
                 <View style={{ flex: 1, gap: 2 }}>
@@ -89,7 +89,7 @@ export default function Contact() {
             {sent ? (
               <View style={{ alignItems: 'center', gap: 12, paddingVertical: 12 }}>
                 <View style={{ width: 72, height: 72, borderRadius: 22, backgroundColor: colors.lime, alignItems: 'center', justifyContent: 'center' }}>
-                  <Icon name="check" size={36} />
+                  <Icon name="check" size={36} color={colors.onLime} />
                 </View>
                 <Text accessibilityRole="header" style={[s.h2, { textAlign: 'center' }]}>Thanks, we got it</Text>
                 <Text style={[s.body, { textAlign: 'center' }]}>The RYDO team will contact {f.workEmail.trim().toLowerCase()} within 2 working days.</Text>
@@ -123,7 +123,7 @@ export default function Contact() {
                 </View>
 
                 <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: f.consent }} onPress={() => set('consent', !f.consent)} style={{ flexDirection: 'row', gap: 12, alignItems: 'flex-start' }}>
-                  <View style={{ width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: errors.consent ? colors.danger : colors.ink, backgroundColor: f.consent ? colors.ink : colors.white, alignItems: 'center', justifyContent: 'center', marginTop: 1 }}>
+                  <View style={{ width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: errors.consent ? colors.danger : colors.ink, backgroundColor: f.consent ? colors.inkBg : colors.white, alignItems: 'center', justifyContent: 'center', marginTop: 1 }}>
                     {f.consent ? <Icon name="check" size={14} color={colors.lime} /> : null}
                   </View>
                   <Text style={{ flex: 1, fontSize: 14, lineHeight: 20, color: colors.ink }}>

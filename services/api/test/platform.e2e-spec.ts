@@ -83,7 +83,9 @@ describe('RYDO owner console', () => {
   it('switching a feature off is enforced for the client', async () => {
     const me = (await api(app).get('/api/v1/me').set(as('lisa')).expect(200)).body.data;
     expect(me.memberships[0].organization.features).toMatchObject({ share: true, womenOnly: false });
-    await api(app).post('/api/v1/rides/search').set(as('lisa', clientId)).send({ pickup: { label: 'Home', lat: 12.91, lng: 77.64 }, drop: { label: 'Office', lat: 12.92, lng: 77.67 }, date: '2030-01-07', fromTime: '08:00', toTime: '09:00' }).expect(200);
+    // Lisa is the company admin: admin accounts never ride, so carpool answers ADMIN_ACCOUNT while Share is on.
+    const on = await api(app).post('/api/v1/rides/search').set(as('lisa', clientId)).send({ pickup: { label: 'Home', lat: 12.91, lng: 77.64 }, drop: { label: 'Office', lat: 12.92, lng: 77.67 }, date: '2030-01-07', fromTime: '08:00', toTime: '09:00' }).expect(403);
+    expect(on.body.error.code).toBe('ADMIN_ACCOUNT');
     await api(app).patch(`/api/v1/admin/platform/organizations/${clientId}`).set(as('root')).send({ features: { share: false } }).expect(200);
     const off = await api(app).post('/api/v1/rides/search').set(as('lisa', clientId)).send({ pickup: { label: 'Home', lat: 12.91, lng: 77.64 }, drop: { label: 'Office', lat: 12.92, lng: 77.67 }, date: '2030-01-07', fromTime: '08:00', toTime: '09:00' }).expect(403);
     expect(off.body.error.code).toBe('FEATURE_OFF');

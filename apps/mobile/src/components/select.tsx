@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { FlatList, Modal, Pressable, Text, View } from 'react-native';
-import { colors } from '@rydo/ui-tokens';
+import { colors } from '@/lib/theme';
 import { Icon } from './icons';
 import { s } from './ui';
 

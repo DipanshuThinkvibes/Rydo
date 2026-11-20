@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Text, View } from 'react-native';
-import { colors } from '@rydo/ui-tokens';
+import { colors } from '@/lib/theme';
 import { Alert } from '@/lib/dialog';
 import { api, errText, RequestError } from '@/lib/api';
 import { dayOf } from '@/lib/format';

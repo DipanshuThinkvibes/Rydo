@@ -3,7 +3,7 @@ import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput,
 import { Alert } from '@/lib/dialog';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { colors } from '@rydo/ui-tokens';
+import { colors } from '@/lib/theme';
 import { api, errText } from '@/lib/api';
 import { useData } from '@/lib/hooks';
 import type { OpenSurvey } from '@/lib/types';
@@ -65,7 +65,7 @@ export default function Survey() {
                   {[1, 2, 3, 4, 5].map((n) => {
                     const on = answers[q.id] === n;
                     return (
-                      <Pressable key={n} accessibilityRole="radio" accessibilityState={{ checked: on }} accessibilityLabel={`${n} of 5`} onPress={() => set(q.id, n)} style={{ width: 52, height: 52, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: on ? colors.ink : colors.white, borderWidth: 1.5, borderColor: on ? colors.ink : colors.lineStrong }}>
+                      <Pressable key={n} accessibilityRole="radio" accessibilityState={{ checked: on }} accessibilityLabel={`${n} of 5`} onPress={() => set(q.id, n)} style={{ width: 52, height: 52, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: on ? colors.inkBg : colors.white, borderWidth: 1.5, borderColor: on ? colors.ink : colors.lineStrong }}>
                         <Text style={{ fontSize: 18, fontWeight: '800', color: on ? colors.lime : colors.ink }}>{n}</Text>
                       </Pressable>
                     );

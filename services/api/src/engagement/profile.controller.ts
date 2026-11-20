@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, Get, HttpCode, Inject, Param, ParseUUIDPipe, Post, Put } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Inject, Param, ParseUUIDPipe, Post, Put, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { randomUUID } from 'node:crypto';
 import { photoConfirmSchema, photoUploadSchema } from '@rydo/shared';
 import type { z } from 'zod';
@@ -10,6 +11,15 @@ import { AppError } from '../common/app-error';
 import { STORAGE_ADAPTER, StorageAdapter } from '../adapters/storage.adapter';
 
 const EXT: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
+const PHOTO_MAX_BYTES = 5 * 1024 * 1024;
+
+/** The first bytes of the file must really be a JPEG, PNG or WebP, whatever the browser says the type is. */
+function looksLike(type: string, b: Buffer) {
+  if (type === 'image/png') return b.length > 8 && b[0] === 0x89 && b.toString('ascii', 1, 4) === 'PNG';
+  if (type === 'image/jpeg') return b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff;
+  if (type === 'image/webp') return b.length > 12 && b.toString('ascii', 0, 4) === 'RIFF' && b.toString('ascii', 8, 12) === 'WEBP';
+  return false;
+}
 
 /** Profile photo, my own profile with ratings, and a colleague's public card (never phone or email). */
 @Controller()
@@ -41,6 +51,24 @@ export class ProfileController {
     return { data: { key, uploadUrl: await this.storage.signedUploadUrl(key, b.contentType, 300), method: 'PUT', headers: { 'content-type': b.contentType }, expiresInSec: 300 } };
   }
 
+  /**
+   * Upload the photo through the API (what the website uses). It does not depend on the browser being allowed to talk to
+   * the file store, so it works the same everywhere. The mobile app can keep using the signed link above.
+   */
+  @Post('me/photo/file')
+  @HttpCode(200)
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: PHOTO_MAX_BYTES } }))
+  async uploadFile(@Auth() auth: AuthContext, @UploadedFile() file?: Express.Multer.File) {
+    const ext = file && EXT[file.mimetype];
+    if (!file || !ext || !looksLike(file.mimetype, file.buffer)) {
+      throw new AppError('VALIDATION_ERROR', 'Upload a JPG, PNG or WebP photo up to 5 MB.', HttpStatus.BAD_REQUEST, { file: 'JPG, PNG or WebP, max 5 MB' });
+    }
+    const key = `users/${auth.userId}/photo-${randomUUID()}.${ext}`;
+    await this.storage.put(key, file.buffer, file.mimetype);
+    await this.prisma.user.update({ where: { id: auth.userId }, data: { photoKey: key } });
+    return { data: { photoUrl: await this.photoUrl(key) } };
+  }
+
   /** Call after the upload succeeds. Only a key issued to this person can be saved. */
   @Put('me/photo')
   async savePhoto(@Auth() auth: AuthContext, @Body(new ZodPipe(photoConfirmSchema)) b: z.infer<typeof photoConfirmSchema>) {
@@ -48,6 +76,13 @@ export class ProfileController {
     if (!ok) throw new AppError('VALIDATION_ERROR', 'That is not one of your photo uploads.', 400, { key: 'Invalid key' });
     await this.prisma.user.update({ where: { id: auth.userId }, data: { photoKey: b.key } });
     return { data: { photoUrl: await this.photoUrl(b.key) } };
+  }
+
+  /** My own photo, for any signed-in person (RYDO staff have no company profile). */
+  @Get('me/photo')
+  async myPhoto(@Auth() auth: AuthContext) {
+    const u = await this.prisma.user.findUniqueOrThrow({ where: { id: auth.userId }, select: { photoKey: true } });
+    return { data: { photoUrl: await this.photoUrl(u.photoKey) } };
   }
 
   @Delete('me/photo')

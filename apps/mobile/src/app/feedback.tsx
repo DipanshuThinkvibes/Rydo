@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { colors } from '@rydo/ui-tokens';
+import { colors } from '@/lib/theme';
 import { api, errText } from '@/lib/api';
 import { fmtWhen } from '@/lib/format';
 import { useData } from '@/lib/hooks';
@@ -62,7 +62,7 @@ export default function Feedback() {
             <Label>How is RYDO for you? (optional)</Label>
             <View style={{ flexDirection: 'row', gap: 8 }}>
               {[1, 2, 3, 4, 5].map((n) => (
-                <Pressable key={n} accessibilityRole="button" accessibilityLabel={`${n} stars`} accessibilityState={{ selected: rating === n }} onPress={() => setRating(rating === n ? 0 : n)} style={{ width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: n <= rating ? colors.ink : colors.white, borderWidth: 1.5, borderColor: n <= rating ? colors.ink : colors.lineStrong }}>
+                <Pressable key={n} accessibilityRole="button" accessibilityLabel={`${n} stars`} accessibilityState={{ selected: rating === n }} onPress={() => setRating(rating === n ? 0 : n)} style={{ width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: n <= rating ? colors.inkBg : colors.white, borderWidth: 1.5, borderColor: n <= rating ? colors.ink : colors.lineStrong }}>
                   <Text style={{ fontSize: 22, color: n <= rating ? colors.lime : colors.muted }}>★</Text>
                 </Pressable>
               ))}

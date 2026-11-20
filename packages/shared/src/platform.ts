@@ -48,6 +48,8 @@ export const clientSetupSchema = z.object({
   settings: orgSettingsSchema.partial().default({}),
   features: orgFeaturesSchema.partial().default({}),
   maxEmployees: z.number().int().min(1).max(1_000_000).nullable().default(null),
+  /** Licences are issued for every module switched on in `features`. null = no end date. */
+  licenseEndsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a date like 2027-03-31').nullable().default(null),
   sendWelcome: z.boolean().default(true),
 });
 export type ClientSetup = z.infer<typeof clientSetupSchema>;
@@ -82,3 +84,58 @@ export const auditQuerySchema = z.object({
   before: z.string().regex(/^\d+$/).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });
+
+/* ---------------- Licences ----------------
+   RYDO issues a licence per product to each client. A product works only while its licence is valid. */
+export const LICENSE_PRODUCTS = ['SHARE', 'ENTERPRISE', 'CAMPUS'] as const;
+export type LicenseProduct = (typeof LICENSE_PRODUCTS)[number];
+export type LicenseStoredStatus = 'ACTIVE' | 'SUSPENDED' | 'REVOKED';
+/** What a licence is right now, from its stored status and dates. */
+export type LicenseState = 'ACTIVE' | 'SCHEDULED' | 'EXPIRED' | 'SUSPENDED' | 'REVOKED';
+
+export const LICENSE_INFO: Record<LicenseProduct, { label: string; hint: string; feature: keyof OrgFeatures; soon?: boolean }> = {
+  SHARE: { label: 'RYDO Share', hint: 'Carpool between colleagues: find, offer and book rides', feature: 'share' },
+  ENTERPRISE: { label: 'RYDO Enterprise', hint: 'Company cabs and shuttles', feature: 'enterprise', soon: true },
+  CAMPUS: { label: 'RYDO Campus', hint: 'School and college buses', feature: 'campus', soon: true },
+};
+
+export interface LicenseLike {
+  product: LicenseProduct | string;
+  status: LicenseStoredStatus | string;
+  startsAt: Date | string;
+  expiresAt: Date | string | null;
+}
+
+export function licenseState(l: LicenseLike, now: Date = new Date()): LicenseState {
+  if (l.status === 'REVOKED') return 'REVOKED';
+  if (l.status === 'SUSPENDED') return 'SUSPENDED';
+  if (new Date(l.startsAt) > now) return 'SCHEDULED';
+  if (l.expiresAt && new Date(l.expiresAt) <= now) return 'EXPIRED';
+  return 'ACTIVE';
+}
+
+/** Whole days left, rounded up. null = no end date; negative = ended. */
+export function licenseDaysLeft(l: Pick<LicenseLike, 'expiresAt'>, now: Date = new Date()): number | null {
+  return l.expiresAt ? Math.ceil((new Date(l.expiresAt).getTime() - now.getTime()) / 86_400_000) : null;
+}
+
+/** The three products are on only with a valid licence (and not switched off by RYDO); the rest are plain switches. */
+export function applyLicenses(features: OrgFeatures, licenses: LicenseLike[], now: Date = new Date()): OrgFeatures {
+  const out = { ...features };
+  for (const p of LICENSE_PRODUCTS) {
+    const key = LICENSE_INFO[p].feature;
+    const valid = licenses.some((l) => l.product === p && licenseState(l, now) === 'ACTIVE');
+    out[key] = features[key] && valid;
+  }
+  return out;
+}
+
+const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a date like 2027-03-31');
+/** Issue or renew a licence. No expiresAt (null) = no end date. */
+export const licenseIssueSchema = z.object({
+  startsAt: day.optional(),
+  expiresAt: day.nullable(),
+  notes: z.string().trim().max(300).optional(),
+});
+export type LicenseIssue = z.infer<typeof licenseIssueSchema>;
+export const licenseReasonSchema = z.object({ reason: z.string().trim().min(5, 'Give a short reason (at least 5 characters).').max(300) });

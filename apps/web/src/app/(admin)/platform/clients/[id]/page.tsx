@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ORG_FEATURE_INFO, type OrgFeatures } from "@rydo/shared";
+import { LICENSE_INFO, ORG_FEATURE_INFO, type OrgFeatures } from "@rydo/shared";
+import { LicenseControls } from "@/components/license-actions";
+import { STATE_LABEL, dayLabel, leftLabel, stateTone, type LicenseRow } from "@/lib/licenses";
 import { api, RequestError } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { fmtDay, fmtTime, fmtWhen } from "@/lib/format";
@@ -145,6 +147,8 @@ export default function ClientDetailPage() {
 
       <DayChart series={c.series} />
 
+      <LicensesCard orgId={c.id} />
+
       <div className="grid gap-6 lg:grid-cols-2">
         <Features c={c} busy={busy === "patch"} onToggle={(k, v) => patch({ features: { [k]: v } }, `${ORG_FEATURE_INFO[k].label} switched ${v ? "on" : "off"}.`)} />
         <PlanForm c={c} busy={busy === "plan"} onSave={(body) => act("plan", () => api("PATCH", `/admin/platform/organizations/${c.id}`, body), "Saved.")} />
@@ -206,12 +210,51 @@ export default function ClientDetailPage() {
   );
 }
 
+/** What this client may use. Each product works only while its licence is valid. */
+function LicensesCard({ orgId }: { orgId: string }) {
+  const [rows, setRows] = useState<LicenseRow[] | null>(null);
+  const load = useCallback(() => api<LicenseRow[]>("GET", `/admin/platform/organizations/${orgId}/licenses`).then(setRows, () => setRows([])), [orgId]);
+  useEffect(() => {
+    load();
+  }, [load]);
+  return (
+    <Card className="flex flex-col gap-4">
+      <div>
+        <h2 className="flex items-center gap-2 text-lg font-extrabold"><Icon name="badge" size={18} /> Licences</h2>
+        <p className="text-xs text-muted">This client can use a product only while its licence is valid. When a licence ends or is paused, that product stops for every employee right away.</p>
+      </div>
+      {rows === null && <Skeleton className="h-32" />}
+      <div className="grid gap-4 lg:grid-cols-3">
+        {rows?.map((l) => (
+          <div key={l.product} className="flex flex-col gap-3 rounded-2xl bg-surface p-4">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="font-extrabold">{LICENSE_INFO[l.product].label}{LICENSE_INFO[l.product].soon ? " (coming later)" : ""}</p>
+                <p className="text-xs text-muted">{LICENSE_INFO[l.product].hint}</p>
+              </div>
+              <Badge tone={stateTone(l.state, l.daysLeft)}>{STATE_LABEL[l.state]}</Badge>
+            </div>
+            {l.state !== "NONE" && (
+              <p className="text-sm">
+                <span className="text-muted">Valid until</span> <b>{dayLabel(l.expiresAt)}</b>
+                {leftLabel(l) && <span className="ml-1 text-xs font-bold text-warning">{leftLabel(l)}</span>}
+                {l.statusReason && (l.state === "SUSPENDED" || l.state === "REVOKED") && <span className="mt-1 block text-xs text-muted">{l.statusReason}</span>}
+              </p>
+            )}
+            <LicenseControls orgId={orgId} product={l.product} state={l.state} endsOn={l.expiresAt} onChanged={load} />
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 function Features({ c, busy, onToggle }: { c: ClientDetail; busy: boolean; onToggle: (k: keyof OrgFeatures, v: boolean) => void }) {
-  const keys = Object.keys(ORG_FEATURE_INFO) as (keyof OrgFeatures)[];
+  const keys = (Object.keys(ORG_FEATURE_INFO) as (keyof OrgFeatures)[]).filter((k) => !ORG_FEATURE_INFO[k].module);
   return (
     <Card className="flex flex-col gap-3">
-      <h2 className="flex items-center gap-2 text-lg font-extrabold"><Icon name="layers" size={18} /> Features {busy && <span className="text-xs font-bold text-muted">saving…</span>}</h2>
-      <p className="text-xs text-muted">Only RYDO can change these. Switching a module off hides it for every employee of this client right away.</p>
+      <h2 className="flex items-center gap-2 text-lg font-extrabold"><Icon name="layers" size={18} /> Options {busy && <span className="text-xs font-bold text-muted">saving…</span>}</h2>
+      <p className="text-xs text-muted">Only RYDO can change these. Products themselves are controlled by the licences above.</p>
       <div className="divide-y divide-line rounded-2xl bg-surface px-4 py-1">
         {keys.map((k) => (
           <div key={k} className="flex items-center gap-2">

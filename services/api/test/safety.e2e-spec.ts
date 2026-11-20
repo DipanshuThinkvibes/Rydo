@@ -122,6 +122,30 @@ describe('Safety, profile and car filters', () => {
   // ───────── Profile ─────────
 
   describe('profile photo, profile and colleague card', () => {
+    it('uploads a photo straight to the API (what the website does), checking it really is an image', async () => {
+      const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(64)]);
+      const jpg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(64)]);
+      const webp = Buffer.concat([Buffer.from('RIFF'), Buffer.alloc(4), Buffer.from('WEBP'), Buffer.alloc(32)]);
+      await api(app).post('/api/v1/me/photo/file').attach('file', png, { filename: 'me.png', contentType: 'image/png' }).expect(401);
+      for (const [buf, type] of [[png, 'image/png'], [jpg, 'image/jpeg'], [webp, 'image/webp']] as const) {
+        const res = (await api(app).post('/api/v1/me/photo/file').set(w.as('priya')).attach('file', buf, { filename: 'me', contentType: type }).expect(200)).body.data;
+        expect(res.photoUrl).toContain(`users/${w.users.priya}/photo-`);
+      }
+      expect((await api(app).get('/api/v1/me/profile').set(w.as('priya')).expect(200)).body.data.photoUrl).toContain('.webp'); // the latest one is kept
+      // not an image, wrong label, too big, nothing sent
+      await api(app).post('/api/v1/me/photo/file').set(w.as('priya')).attach('file', Buffer.from('just some text'), { filename: 'x.png', contentType: 'image/png' }).expect(400);
+      await api(app).post('/api/v1/me/photo/file').set(w.as('priya')).attach('file', png, { filename: 'x.png', contentType: 'image/jpeg' }).expect(400);
+      await api(app).post('/api/v1/me/photo/file').set(w.as('priya')).attach('file', Buffer.from('%PDF-1.4'), { filename: 'x.pdf', contentType: 'application/pdf' }).expect(400);
+      await api(app).post('/api/v1/me/photo/file').set(w.as('priya')).expect(400);
+      const big = Buffer.concat([png, Buffer.alloc(5 * 1024 * 1024 + 10)]);
+      expect([400, 413]).toContain((await api(app).post('/api/v1/me/photo/file').set(w.as('priya')).attach('file', big, { filename: 'big.png', contentType: 'image/png' })).status);
+      expect((await api(app).get('/api/v1/me/photo').set(w.as('priya')).expect(200)).body.data.photoUrl).toContain('.webp');
+      await api(app).get('/api/v1/me/photo').expect(401);
+      // somebody else's photo is untouched
+      expect((await api(app).get('/api/v1/me/profile').set(w.as('arjun')).expect(200)).body.data.photoUrl).toBeNull();
+      await api(app).delete('/api/v1/me/photo').set(w.as('priya')).expect(200);
+    });
+
     it('uploads a photo through a signed link and saves only a key that was issued to you', async () => {
       const up = (await api(app).post('/api/v1/me/photo/upload-url').set(w.as('priya')).send({ contentType: 'image/png' }).expect(200)).body.data;
       expect(up.key).toMatch(new RegExp(`^users/${w.users.priya}/photo-[0-9a-f-]{36}\\.png$`));
@@ -183,6 +207,15 @@ describe('Safety, profile and car filters', () => {
       await api(app).post('/api/v1/driver/vehicles').set(w.as('driver')).send({ ...car, carType: 'TRUCK', plateNumber: 'KA 05 TR 2222' }).expect(400);
     });
 
+    it('accepts every body type, so a driver can describe any car', async () => {
+      const types = ['HATCHBACK', 'SEDAN', 'COMPACT_SUV', 'SUV', 'MUV', 'LUXURY', 'OTHER'];
+      for (const [i, carType] of types.entries()) {
+        const plateNumber = `KA 06 CT ${1000 + i}`;
+        await api(app).post('/api/v1/driver/vehicles').set(w.as('driver')).send({ type: 'CAR', carType, make: 'Any', model: `Car ${i}`, color: 'Grey', plateNumber, seatCapacity: 4, isDefault: false }).expect(201);
+        expect((await prisma.vehicle.findFirstOrThrow({ where: { plateNumber } })).carType).toBe(carType);
+      }
+    });
+
     it('filters search by Hatchback / Sedan / SUV and by AC', async () => {
       const ids = (r: { body: { data: { vehicle: { carType: string } }[] } }) => r.body.data.length;
       expect(ids(await search('kiran'))).toBe(1);
@@ -191,6 +224,8 @@ describe('Safety, profile and car filters', () => {
       expect(sedan.body.data[0].vehicle).toMatchObject({ carType: 'SEDAN', hasAc: true });
       expect(ids(await search('kiran', { carTypes: ['SUV'] }))).toBe(0);
       expect(ids(await search('kiran', { carTypes: ['SUV', 'SEDAN'] }))).toBe(1);
+      expect(ids(await search('kiran', { carTypes: ['MUV', 'COMPACT_SUV', 'LUXURY'] }))).toBe(0);
+      expect(ids(await search('kiran', { carTypes: ['HATCHBACK', 'SEDAN', 'COMPACT_SUV', 'SUV', 'MUV', 'LUXURY', 'OTHER'] }))).toBe(1);
       expect(ids(await search('kiran', { ac: true }))).toBe(1);
       expect(ids(await search('kiran', { ac: false }))).toBe(0);
       await api(app).post('/api/v1/rides/search').set(w.as('kiran')).send({ pickup: { label: 'Home', ...HOME }, drop: { label: 'Office', ...OFFICE }, date: tomorrow, fromTime: '08:00', toTime: '09:00', carTypes: ['BUS'] }).expect(400);

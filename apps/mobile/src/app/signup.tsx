@@ -4,7 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { ID_PROOF_TYPES, registrationSchema, type AuthResult, type CompanyInfo, type IdProofType } from '@rydo/shared';
-import { colors } from '@rydo/ui-tokens';
+import { colors, isDark } from '@/lib/theme';
 import { api, errText, RequestError, tokens } from '@/lib/api';
 import { useSession } from '@/lib/session';
 import { GoogleButton, googleSignInAvailable } from '@/components/google-button';
@@ -48,7 +48,7 @@ type Form = {
 
 /**
  * Join your team on RYDO (mobile), using the same sign-up API as the web:
- * 1. find your company (GET /auth/companies — it must be on RYDO),
+ * 1. find your company (GET /public/companies, same as the web — it must be on RYDO),
  * 2. your details (checked here with the shared registrationSchema),
  * 3. verify your work email with a code (POST /auth/otp/verify), or Google (POST /auth/google, mode "signup"),
  *    then POST /me/registration, 4. done — HR approves before the first ride.
@@ -80,23 +80,23 @@ export default function Signup() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
-      <StatusBar style="light" />
+      <StatusBar style={isDark() ? "light" : "dark"} />
       {/* Dark header with the four steps (left panel of the prototype) */}
-      <View style={{ backgroundColor: colors.ink, borderBottomLeftRadius: 28, borderBottomRightRadius: 28, overflow: 'hidden' }}>
+      <View style={{ backgroundColor: colors.panel, borderBottomLeftRadius: 28, borderBottomRightRadius: 28, overflow: 'hidden' }}>
         <View pointerEvents="none" style={{ position: 'absolute', right: -80, top: -80, width: 240, height: 240, borderRadius: 120, backgroundColor: colors.lime, opacity: 0.1 }} />
         <SafeAreaView edges={['top']} style={{ paddingHorizontal: 20, paddingBottom: 18, gap: 12 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 6 }}>
             <Logo light />
             <Pressable accessibilityRole="button" onPress={() => router.replace('/sign-in')} hitSlop={8}>
-              <Text style={{ color: colors.mutedOnDark, fontSize: 14 }}>
-                Already registered? <Text style={{ color: colors.lime, fontWeight: '800', textDecorationLine: 'underline' }}>Log in</Text>
+              <Text style={{ color: colors.panelMuted, fontSize: 14 }}>
+                Already registered? <Text style={{ color: colors.panelAccent, fontWeight: '800', textDecorationLine: 'underline' }}>Log in</Text>
               </Text>
             </Pressable>
           </View>
           {step === 'company' ? (
             <View style={{ gap: 4 }}>
-              <Text style={{ color: colors.white, fontSize: 28, fontWeight: '800', lineHeight: 32 }}>Join your team{'\n'}on RYDO.</Text>
-              <Text style={{ color: colors.mutedOnDark, fontSize: 14, lineHeight: 20 }}>Register once with your work details. Your company&apos;s HR approves you before your first ride.</Text>
+              <Text style={{ color: colors.onPanel, fontSize: 28, fontWeight: '800', lineHeight: 32 }}>Join your team{'\n'}on RYDO.</Text>
+              <Text style={{ color: colors.panelMuted, fontSize: 14, lineHeight: 20 }}>Register once with your work details. Your company&apos;s HR approves you before your first ride.</Text>
             </View>
           ) : null}
           <View style={{ flexDirection: 'row', gap: 6 }} accessibilityLabel={`Step ${index + 1} of 4: ${STEPS[index].label}`}>
@@ -105,10 +105,10 @@ export default function Signup() {
               const on = i === index;
               return (
                 <View key={x.key} style={{ flex: 1, alignItems: 'center', gap: 6 }}>
-                  <View style={{ width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: done ? colors.lime : 'transparent', borderWidth: 2, borderColor: done || on ? colors.lime : colors.ink2 }}>
-                    {done ? <Icon name="check" size={14} /> : <Text style={{ color: on ? colors.white : colors.mutedOnDark, fontSize: 12, fontWeight: '800' }}>{i + 1}</Text>}
+                  <View style={{ width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: done ? colors.lime : 'transparent', borderWidth: 2, borderColor: done || on ? colors.lime : colors.panel2 }}>
+                    {done ? <Icon name="check" size={14} color={colors.onLime} /> : <Text style={{ color: on ? colors.onPanel : colors.panelMuted, fontSize: 12, fontWeight: '800' }}>{i + 1}</Text>}
                   </View>
-                  <Text numberOfLines={1} style={{ color: on || done ? colors.white : colors.mutedOnDark, fontSize: 11, fontWeight: on ? '800' : '600' }}>{x.label}</Text>
+                  <Text numberOfLines={1} style={{ color: on || done ? colors.onPanel : colors.panelMuted, fontSize: 11, fontWeight: on ? '800' : '600' }}>{x.label}</Text>
                 </View>
               );
             })}
@@ -238,7 +238,7 @@ function FindCompany({
     if (text.length < 2) return;
     const t = setTimeout(() => {
       setSearching(true);
-      api<CompanyInfo[]>('GET', `/auth/companies?q=${encodeURIComponent(text)}`)
+      api<CompanyInfo[]>('GET', `/public/companies?q=${encodeURIComponent(text)}`)
         .then((r) => {
           setMatches(r);
           setError(undefined);
@@ -283,7 +283,7 @@ function FindCompany({
       {selected ? (
         <View style={{ flexDirection: 'row', gap: 12, padding: 14, borderRadius: 16, backgroundColor: colors.successBg }}>
           <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: colors.successText, alignItems: 'center', justifyContent: 'center' }}>
-            <Icon name="check" size={14} color={colors.white} />
+            <Icon name="check" size={14} color={colors.onInk} />
           </View>
           <Text style={{ flex: 1, color: colors.successText, fontSize: 14, lineHeight: 20 }}>
             <Text style={{ fontWeight: '800' }}>{selected.name} is on RYDO.</Text> Use your work email ending in <Text style={{ fontWeight: '800' }}>{domains}</Text> to register.
@@ -466,8 +466,8 @@ function Details({
             accessibilityLabel={`${ID_LABEL[f.idProofType]} number`}
             style={[s.input, { flex: 1 }, errors.idProofNumber ? { borderColor: colors.danger } : null]}
           />
-          <Pressable accessibilityRole="button" onPress={() => setShowId(!showId)} style={{ height: 52, paddingHorizontal: 16, borderRadius: 16, borderWidth: 1.5, borderColor: colors.lineStrong, justifyContent: 'center' }}>
-            <Text style={{ fontWeight: '800', color: colors.ink }}>{showId ? 'Hide' : 'Show'}</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel={showId ? 'Hide ID number' : 'Show ID number'} onPress={() => setShowId(!showId)} style={{ height: 52, width: 52, borderRadius: 16, borderWidth: 1.5, borderColor: colors.lineStrong, alignItems: 'center', justifyContent: 'center' }}>
+            <Icon name={showId ? 'eyeOff' : 'eye'} size={22} color={colors.ink} />
           </Pressable>
         </View>
         {errors.idProofNumber ? <Text style={s.error}>{errors.idProofNumber}</Text> : <Text style={s.small}>{ID_FORMAT[f.idProofType].hint}. Only the last 4 characters are sent to RYDO.</Text>}
@@ -505,7 +505,7 @@ function Details({
       <Field label="Manager's work email" value={f.managerEmail} onChangeText={(v) => set('managerEmail', v)} placeholder={`manager@${domain}`} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} error={errors.managerEmail} />
 
       <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: f.acceptTerms }} onPress={() => set('acceptTerms', !f.acceptTerms)} style={{ flexDirection: 'row', gap: 12, alignItems: 'flex-start', marginTop: 4 }}>
-        <View style={{ width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: errors.acceptTerms ? colors.danger : colors.ink, backgroundColor: f.acceptTerms ? colors.ink : colors.white, alignItems: 'center', justifyContent: 'center', marginTop: 1 }}>
+        <View style={{ width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: errors.acceptTerms ? colors.danger : colors.ink, backgroundColor: f.acceptTerms ? colors.inkBg : colors.white, alignItems: 'center', justifyContent: 'center', marginTop: 1 }}>
           {f.acceptTerms ? <Icon name="check" size={14} color={colors.lime} /> : null}
         </View>
         <Text style={{ flex: 1, fontSize: 14, lineHeight: 20, color: colors.ink }}>
@@ -587,7 +587,7 @@ function Done({ company, onOpen }: { company: string; onOpen: () => void }) {
   return (
     <View style={{ alignItems: 'center', gap: 14, paddingVertical: 10 }}>
       <View style={{ width: 84, height: 84, borderRadius: 24, backgroundColor: colors.lime, alignItems: 'center', justifyContent: 'center' }}>
-        <Icon name="check" size={44} />
+        <Icon name="check" size={44} color={colors.onLime} />
       </View>
       <Text accessibilityRole="header" style={[s.h2, { textAlign: 'center' }]}>You&apos;re registered</Text>
       <Text style={[s.body, { textAlign: 'center' }]}>{company}&apos;s HR team will check your details and approve your account. We&apos;ll email you; then you can find or offer rides.</Text>

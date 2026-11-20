@@ -3,6 +3,8 @@ import { api, createApp, FakeMessages, resetDb, signIn } from './helpers';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { buildWorld, World } from './world';
 
+const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g;
+
 const details = (w: World, over: object = ({} as object)) => ({
   fullName: 'Anita Verma',
   phone: '98765 43210',
@@ -77,7 +79,7 @@ describe('Employee registration request', () => {
   it('keeps only the last 4 digits of the Aadhaar number and refuses a full number', async () => {
     const reg = await prisma.employeeRegistration.findFirstOrThrow();
     expect(reg).toMatchObject({ idType: 'AADHAAR', idLast4: '0124' });
-    expect(JSON.stringify(reg)).not.toMatch(/\d{12}/);
+    expect(JSON.stringify(reg).replace(UUID, "")).not.toMatch(/\d{12}/);
     const bad = await api(app).post('/api/v1/me/registration').set(bearer()).send(details(w, { idLast4: '234567890124' })).expect(400);
     expect(bad.body.error.fields.idLast4).toBeDefined();
   });
@@ -86,7 +88,7 @@ describe('Employee registration request', () => {
     const list = (await api(app).get('/api/v1/admin/members?status=PENDING').set(w.as('hr')).expect(200)).body.data;
     const row = list.find((r: { email: string }) => r.email === email());
     expect(row.registration).toMatchObject({ employeeId: 'RG-10234', designation: 'Software engineer', department: 'Engineering', office: 'Cubbon Park HQ', managerName: 'Ravi Menon', idType: 'AADHAAR', idLast4: '0124' });
-    expect(JSON.stringify(row)).not.toMatch(/\d{12}/);
+    expect(JSON.stringify(row).replace(UUID, "")).not.toMatch(/\d{12}/);
     await api(app).get('/api/v1/admin/members').set(w.as('priya')).expect(403);
     const other = (await api(app).get('/api/v1/admin/members').set(w.as('outsider', w.other)).expect(200)).body.data;
     expect(other.some((r: { email: string }) => r.email === email())).toBe(false);

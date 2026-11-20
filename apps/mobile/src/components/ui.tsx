@@ -1,21 +1,25 @@
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type TextInputProps, type ViewStyle } from 'react-native';
 import { router } from 'expo-router';
-import { colors, radius } from '@rydo/ui-tokens';
+import { radius } from '@rydo/ui-tokens';
+import { colors, isDark, onThemeChange } from '@/lib/theme';
 import { initials } from '@/lib/format';
 import { Icon, type IconName } from './icons';
 
 /** Same look as apps/web/src/components/ui.tsx and the RYDO Share prototype: ink / lime / ghost buttons, soft cards, pill chips. */
 type Variant = 'primary' | 'lime' | 'ghost' | 'soft' | 'danger' | 'white';
 
-const look: Record<Variant, { bg: string; fg: string; border?: string; shadow?: object }> = {
-  primary: { bg: colors.ink, fg: colors.white, shadow: { shadowColor: colors.ink, shadowOpacity: 0.18, shadowRadius: 8, shadowOffset: { width: 0, height: 6 }, elevation: 3 } },
-  lime: { bg: colors.lime, fg: colors.ink, shadow: { shadowColor: '#8CBE28', shadowOpacity: 0.28, shadowRadius: 8, shadowOffset: { width: 0, height: 6 }, elevation: 3 } },
+/** Built at render time so it follows the theme. In dark mode the main button turns lime, like the web. */
+const look = (): Record<Variant, { bg: string; fg: string; border?: string; shadow?: object }> => ({
+  primary: isDark()
+    ? { bg: colors.lime, fg: colors.onLime }
+    : { bg: colors.inkBg, fg: colors.onInk, shadow: { shadowColor: colors.inkBg, shadowOpacity: 0.18, shadowRadius: 8, shadowOffset: { width: 0, height: 6 }, elevation: 3 } },
+  lime: { bg: colors.lime, fg: colors.onLime, shadow: { shadowColor: '#8CBE28', shadowOpacity: 0.28, shadowRadius: 8, shadowOffset: { width: 0, height: 6 }, elevation: 3 } },
   ghost: { bg: colors.white, fg: colors.ink, border: colors.lineStrong },
   soft: { bg: colors.surface2, fg: colors.ink },
-  danger: { bg: colors.danger, fg: colors.white },
+  danger: { bg: '#DC2626', fg: '#FFFFFF' },
   white: { bg: colors.white, fg: colors.danger },
-};
+});
 
 export function Button({
   label,
@@ -34,7 +38,7 @@ export function Button({
   style?: StyleProp<ViewStyle>;
   small?: boolean;
 }) {
-  const v = look[variant];
+  const v = look()[variant];
   return (
     <Pressable
       accessibilityRole="button"
@@ -51,7 +55,7 @@ export function Button({
         style,
       ]}
     >
-      {loading ? <ActivityIndicator color={v.fg} /> : <Text numberOfLines={1} style={[s.buttonText, small && { fontSize: 14 }, { color: disabled ? colors.white : v.fg }]}>{label}</Text>}
+      {loading ? <ActivityIndicator color={v.fg} /> : <Text numberOfLines={1} style={[s.buttonText, small && { fontSize: 14 }, { color: disabled ? colors.muted : v.fg }]}>{label}</Text>}
     </Pressable>
   );
 }
@@ -59,23 +63,40 @@ export function Button({
 /** Text input: surface fill, turns white with an ink border on focus (like the web fields). */
 export function Field({ label, error, ...props }: TextInputProps & { label: string; error?: string }) {
   const [focused, setFocused] = useState(false);
+  // Password fields get an eye button to show or hide what was typed.
+  const secret = !!props.secureTextEntry;
+  const [shown, setShown] = useState(false);
   return (
     <View style={{ gap: 6 }}>
       <Text style={s.label}>{label}</Text>
-      <TextInput
-        accessibilityLabel={label}
-        placeholderTextColor={colors.muted}
-        {...props}
-        onFocus={(e) => {
-          setFocused(true);
-          props.onFocus?.(e);
-        }}
-        onBlur={(e) => {
-          setFocused(false);
-          props.onBlur?.(e);
-        }}
-        style={[s.input, focused && s.inputFocused]}
-      />
+      <View style={{ justifyContent: 'center' }}>
+        <TextInput
+          accessibilityLabel={label}
+          placeholderTextColor={colors.muted}
+          {...props}
+          secureTextEntry={secret && !shown}
+          onFocus={(e) => {
+            setFocused(true);
+            props.onFocus?.(e);
+          }}
+          onBlur={(e) => {
+            setFocused(false);
+            props.onBlur?.(e);
+          }}
+          style={[s.input, focused && s.inputFocused, secret && { paddingRight: 52 }, props.style]}
+        />
+        {secret ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={shown ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
+            onPress={() => setShown((v) => !v)}
+            hitSlop={8}
+            style={{ position: 'absolute', right: 6, width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}
+          >
+            <Icon name={shown ? 'eyeOff' : 'eye'} size={22} color={colors.muted} />
+          </Pressable>
+        ) : null}
+      </View>
       {error ? <Text style={s.error}>{error}</Text> : null}
     </View>
   );
@@ -90,14 +111,15 @@ export function Logo({ light = false }: { light?: boolean }) {
         <View style={[s.logoDot, { right: 8, top: 8 }]} />
         <View style={s.logoBar} />
       </View>
-      <Text style={{ fontSize: 18, fontWeight: '800', letterSpacing: 3, color: light ? colors.white : colors.ink }}>RYDO</Text>
+      <Text style={{ fontSize: 18, fontWeight: '800', letterSpacing: 3, color: light ? colors.onPanel : colors.ink }}>RYDO</Text>
     </View>
   );
 }
 
 /** White rounded card with a soft shadow (web Card). */
 export function Card({ children, dark = false, style, onPress }: { children: React.ReactNode; dark?: boolean; style?: StyleProp<ViewStyle>; onPress?: () => void }) {
-  const st = [s.card, dark && { backgroundColor: colors.ink, borderWidth: 0 }, style];
+  // `dark` = a hero card: navy in dark mode, a plain card in light mode (use panel/onPanel colours inside).
+  const st = [s.card, dark && { backgroundColor: colors.panel, borderColor: colors.panelLine }, style];
   if (onPress)
     return (
       <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [...st, pressed && { opacity: 0.85 }]}>
@@ -109,7 +131,7 @@ export function Card({ children, dark = false, style, onPress }: { children: Rea
 
 /** Inline error / success message (web Notice). */
 export function Notice({ tone, children }: { tone: 'error' | 'ok' | 'info'; children: React.ReactNode }) {
-  const bg = tone === 'error' ? '#FEF2F2' : tone === 'ok' ? colors.successBg : colors.surface2;
+  const bg = tone === 'error' ? colors.dangerBg : tone === 'ok' ? colors.successBg : colors.surface2;
   const fg = tone === 'error' ? colors.danger : tone === 'ok' ? colors.successText : colors.muted;
   return (
     <View accessibilityRole={tone === 'error' ? 'alert' : undefined} style={[s.notice, { backgroundColor: bg }]}>
@@ -124,10 +146,10 @@ export function Badge({ tone, children }: { tone: 'success' | 'warning' | 'neutr
     success: { bg: colors.successBg, fg: colors.successText },
     warning: { bg: colors.warningBg, fg: colors.warningText },
     neutral: { bg: colors.surface2, fg: colors.ink },
-    ink: { bg: colors.ink, fg: colors.white },
-    lime: { bg: colors.lime, fg: colors.ink },
+    ink: { bg: colors.inkBg, fg: colors.onInk },
+    lime: { bg: colors.lime, fg: colors.onLime },
     women: { bg: colors.womenOnlyBg, fg: colors.womenOnlyText },
-    danger: { bg: '#FEE2E2', fg: colors.danger },
+    danger: { bg: colors.dangerBg, fg: colors.danger },
   }[tone];
   return (
     <View style={{ alignSelf: 'flex-start', minHeight: 26, borderRadius: radius.chip, paddingHorizontal: 10, justifyContent: 'center', backgroundColor: t.bg }}>
@@ -138,7 +160,7 @@ export function Badge({ tone, children }: { tone: 'success' | 'warning' | 'neutr
 
 /** Choice pill. `tone="lime"` for on/off preferences, ink for picking one of several. */
 export function Chip({ label, selected, onPress, tone = 'ink', disabled, rect }: { label: string; selected?: boolean; onPress?: () => void; tone?: 'ink' | 'lime'; disabled?: boolean; rect?: boolean }) {
-  const on = selected ? (tone === 'lime' ? { bg: colors.lime, fg: colors.ink, border: colors.lime } : { bg: colors.ink, fg: colors.white, border: colors.ink }) : { bg: colors.white, fg: colors.ink, border: colors.lineStrong };
+  const on = selected ? (tone === 'lime' ? { bg: colors.lime, fg: colors.onLime, border: colors.lime } : isDark() ? { bg: colors.ink, fg: colors.surface, border: colors.ink } : { bg: colors.inkBg, fg: colors.onInk, border: colors.inkBg }) : { bg: colors.white, fg: colors.ink, border: colors.lineStrong };
   return (
     <Pressable
       accessibilityRole="button"
@@ -154,7 +176,7 @@ export function Chip({ label, selected, onPress, tone = 'ink', disabled, rect }:
 
 /** Initials in a soft circle (RM, PS…). */
 export function Avatar({ name, size = 44, tone = 'blue' }: { name: string; size?: number; tone?: 'blue' | 'pink' | 'lime' | 'ink' }) {
-  const t = { blue: { bg: '#E3E9FF', fg: '#2B3FA8' }, pink: { bg: '#FDE2EC', fg: '#A3204F' }, lime: { bg: colors.lime, fg: colors.ink }, ink: { bg: colors.ink, fg: colors.white } }[tone];
+  const t = { blue: { bg: '#E3E9FF', fg: '#2B3FA8' }, pink: { bg: '#FDE2EC', fg: '#A3204F' }, lime: { bg: colors.lime, fg: colors.onLime }, ink: { bg: colors.inkBg, fg: colors.onInk } }[tone];
   return (
     <View accessibilityLabel={name} style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: t.bg, alignItems: 'center', justifyContent: 'center' }}>
       <Text style={{ fontSize: size * 0.36, fontWeight: '800', color: t.fg }}>{initials(name)}</Text>
@@ -174,8 +196,18 @@ export function Switch({ value, onChange, label, disabled }: { value: boolean; o
       hitSlop={8}
       style={{ width: 58, height: 34, borderRadius: 17, padding: 4, backgroundColor: value ? colors.lime : colors.lineStrong, justifyContent: 'center', opacity: disabled ? 0.5 : 1 }}
     >
-      <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: value ? colors.ink : colors.white, alignSelf: value ? 'flex-end' : 'flex-start' }} />
+      <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: value ? colors.onLime : colors.white, alignSelf: value ? 'flex-end' : 'flex-start' }} />
     </Pressable>
+  );
+}
+
+/** A switch with its label shown beside it (Switch alone only reads the label to screen readers). */
+export function SwitchRow({ value, onChange, label, disabled }: { value: boolean; onChange: (v: boolean) => void; label: string; disabled?: boolean }) {
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 44 }}>
+      <Text style={[s.strong, { flex: 1, fontSize: 15 }]}>{label}</Text>
+      <Switch label={label} value={value} onChange={onChange} disabled={disabled} />
+    </View>
   );
 }
 
@@ -188,11 +220,11 @@ export function RoundButton({ icon, onPress, label, dark, size = 48, dot }: { ic
       onPress={onPress}
       hitSlop={6}
       style={({ pressed }) => [
-        { width: size, height: size, borderRadius: size / 2, alignItems: 'center', justifyContent: 'center', backgroundColor: dark ? colors.ink : colors.white, transform: [{ scale: pressed ? 0.94 : 1 }] },
+        { width: size, height: size, borderRadius: size / 2, alignItems: 'center', justifyContent: 'center', backgroundColor: dark ? colors.panel : colors.white, transform: [{ scale: pressed ? 0.94 : 1 }] },
         s.lift,
       ]}
     >
-      <Icon name={icon} size={size * 0.46} color={dark ? colors.white : colors.ink} />
+      <Icon name={icon} size={size * 0.46} color={dark ? colors.onPanel : colors.ink} />
       {dot ? <View style={{ position: 'absolute', top: size * 0.22, right: size * 0.24, width: 9, height: 9, borderRadius: 5, backgroundColor: colors.danger, borderWidth: 1.5, borderColor: colors.white }} /> : null}
     </Pressable>
   );
@@ -206,8 +238,8 @@ export const BackButton = ({ dark }: { dark?: boolean }) => (
 export function ActionTile({ icon, label, onPress, dark }: { icon: IconName; label: string; onPress: () => void; dark?: boolean }) {
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={({ pressed }) => ({ alignItems: 'center', gap: 8, flex: 1, opacity: pressed ? 0.7 : 1 })}>
-      <View style={{ width: 56, height: 56, borderRadius: 18, backgroundColor: dark ? colors.ink : colors.surface2, alignItems: 'center', justifyContent: 'center' }}>
-        <Icon name={icon} size={24} color={dark ? colors.lime : colors.ink} />
+      <View style={{ width: 56, height: 56, borderRadius: 18, backgroundColor: dark ? colors.panel2 : colors.surface2, alignItems: 'center', justifyContent: 'center' }}>
+        <Icon name={icon} size={24} color={dark ? colors.panelAccent : colors.ink} />
       </View>
       <Text style={{ fontSize: 13, fontWeight: '700', color: colors.ink }}>{label}</Text>
     </Pressable>
@@ -226,22 +258,22 @@ export function Sheet({ children, style }: { children: React.ReactNode; style?: 
 
 /** Small caps label: WHEN, SEATS, PREFERENCES… */
 export const Label = ({ children, light, style }: { children: React.ReactNode; light?: boolean; style?: object }) => (
-  <Text style={[{ fontSize: 12, fontWeight: '800', letterSpacing: 1, color: light ? colors.mutedOnDark : colors.muted, textTransform: 'uppercase' }, style]}>{children}</Text>
+  <Text style={[{ fontSize: 12, fontWeight: '800', letterSpacing: 1, color: light ? colors.panelMuted : colors.muted, textTransform: 'uppercase' }, style]}>{children}</Text>
 );
 
 /** Number + caption box (Pickup 8:44 AM, 9.4 km shared). */
 export function Stat({ value, label, dark, big, lime }: { value: string; label: string; dark?: boolean; big?: boolean; lime?: boolean }) {
   return (
-    <View style={{ flex: 1, borderRadius: 16, padding: 12, gap: 2, backgroundColor: dark ? colors.ink2 : colors.surface }}>
+    <View style={{ flex: 1, borderRadius: 16, padding: 12, gap: 2, backgroundColor: dark ? colors.panel2 : colors.surface }}>
       {big ? (
         <>
-          <Text style={{ fontSize: 22, fontWeight: '800', color: lime ? colors.lime : dark ? colors.white : colors.ink }}>{value}</Text>
-          <Text style={{ fontSize: 13, fontWeight: '600', color: dark ? colors.mutedOnDark : colors.muted }}>{label}</Text>
+          <Text style={{ fontSize: 22, fontWeight: '800', color: lime ? colors.panelAccent : dark ? colors.onPanel : colors.ink }}>{value}</Text>
+          <Text style={{ fontSize: 13, fontWeight: '600', color: dark ? colors.panelMuted : colors.muted }}>{label}</Text>
         </>
       ) : (
         <>
-          <Text style={{ fontSize: 13, fontWeight: '600', color: dark ? colors.mutedOnDark : colors.muted }}>{label}</Text>
-          <Text style={{ fontSize: 17, fontWeight: '800', color: dark ? colors.white : colors.ink }}>{value}</Text>
+          <Text style={{ fontSize: 13, fontWeight: '600', color: dark ? colors.panelMuted : colors.muted }}>{label}</Text>
+          <Text style={{ fontSize: 17, fontWeight: '800', color: dark ? colors.onPanel : colors.ink }}>{value}</Text>
         </>
       )}
     </View>
@@ -253,7 +285,7 @@ export function PinDigits({ pin }: { pin: string }) {
   return (
     <View style={{ flexDirection: 'row', gap: 10 }} accessibilityLabel={`Ride PIN ${pin.split('').join(' ')}`}>
       {pin.split('').map((d, i) => (
-        <View key={i} style={{ width: 54, height: 62, borderRadius: 14, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center' }}>
+        <View key={i} style={{ width: 54, height: 62, borderRadius: 14, backgroundColor: colors.inkBg, alignItems: 'center', justifyContent: 'center' }}>
           <Text style={{ fontSize: 30, fontWeight: '800', color: colors.lime }}>{d}</Text>
         </View>
       ))}
@@ -298,8 +330,8 @@ export const ChipRow = ({ children }: { children: React.ReactNode }) => (
 
 export function Loading({ dark }: { dark?: boolean }) {
   return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: dark ? colors.ink : colors.white }}>
-      <ActivityIndicator color={dark ? colors.lime : colors.ink} />
+    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: dark ? colors.panel : colors.surface }}>
+      <ActivityIndicator color={dark ? colors.panelAccent : colors.ink} />
     </View>
   );
 }
@@ -313,7 +345,7 @@ export function Empty({ title, children }: { title: string; children?: React.Rea
   );
 }
 
-export const s = StyleSheet.create({
+const build = () => StyleSheet.create({
   button: { height: 56, borderRadius: radius.button, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 },
   buttonText: { fontSize: 16, fontWeight: '800' },
   label: { fontSize: 14, fontWeight: '700', color: colors.ink },
@@ -331,9 +363,13 @@ export const s = StyleSheet.create({
   sheet: { backgroundColor: colors.white, borderTopLeftRadius: radius.sheet, borderTopRightRadius: radius.sheet, paddingHorizontal: 20, paddingTop: 10, gap: 14, shadowColor: colors.ink, shadowOpacity: 0.12, shadowRadius: 18, shadowOffset: { width: 0, height: -4 }, elevation: 12 },
   grabber: { alignSelf: 'center', width: 40, height: 5, borderRadius: 3, backgroundColor: colors.lineStrong, marginBottom: 2 },
   lift: { shadowColor: colors.ink, shadowOpacity: 0.14, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 4 },
-  pillDark: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start', backgroundColor: colors.ink, borderRadius: 999, paddingHorizontal: 14, height: 38 },
+  pillDark: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start', backgroundColor: colors.panel, borderRadius: 999, paddingHorizontal: 14, height: 38, shadowColor: '#0B1426', shadowOpacity: 0.12, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 3 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   logoBox: { width: 36, height: 36, borderRadius: 12, backgroundColor: colors.lime, shadowColor: '#8CBE28', shadowOpacity: 0.35, shadowRadius: 8, shadowOffset: { width: 0, height: 6 }, elevation: 3 },
-  logoDot: { position: 'absolute', width: 9, height: 9, borderRadius: 5, borderWidth: 2.4, borderColor: colors.ink },
-  logoBar: { position: 'absolute', left: 14, right: 14, top: 17, height: 2.4, borderRadius: 2, backgroundColor: colors.ink, transform: [{ rotate: '-45deg' }] },
+  logoDot: { position: 'absolute', width: 9, height: 9, borderRadius: 5, borderWidth: 2.4, borderColor: colors.onLime },
+  logoBar: { position: 'absolute', left: 14, right: 14, top: 17, height: 2.4, borderRadius: 2, backgroundColor: colors.onLime, transform: [{ rotate: '-45deg' }] },
 });
+
+/** Shared styles. Rebuilt in place when the theme changes. */
+export const s = build();
+onThemeChange(() => Object.assign(s, build()));

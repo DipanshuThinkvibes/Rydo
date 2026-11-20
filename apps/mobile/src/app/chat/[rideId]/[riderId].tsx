@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { FlatList, KeyboardAvoidingView, Platform, Pressable, Text, TextInput, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { colors } from '@rydo/ui-tokens';
+import { colors } from '@/lib/theme';
 import { api, apiWithMeta, errText } from '@/lib/api';
 import { fmtTime, fmtWhen, shortName } from '@/lib/format';
 import { useData } from '@/lib/hooks';
@@ -84,8 +84,8 @@ export default function Chat() {
           ListEmptyComponent={msgs.data ? <Text style={[s.small, { textAlign: 'center', marginTop: 20 }]}>Say hello. Agree where you will meet.</Text> : undefined}
           renderItem={({ item }) => (
             <View style={{ alignSelf: item.mine ? 'flex-end' : 'flex-start', maxWidth: '82%', gap: 3 }}>
-              <View style={{ backgroundColor: item.mine ? colors.ink : colors.surface2, borderRadius: 18, borderBottomRightRadius: item.mine ? 6 : 18, borderBottomLeftRadius: item.mine ? 18 : 6, paddingHorizontal: 14, paddingVertical: 10 }}>
-                <Text style={{ fontSize: 15, lineHeight: 21, color: item.mine ? colors.white : colors.ink }}>{item.body}</Text>
+              <View style={{ backgroundColor: item.mine ? colors.inkBg : colors.surface2, borderRadius: 18, borderBottomRightRadius: item.mine ? 6 : 18, borderBottomLeftRadius: item.mine ? 18 : 6, paddingHorizontal: 14, paddingVertical: 10 }}>
+                <Text style={{ fontSize: 15, lineHeight: 21, color: item.mine ? colors.onInk : colors.ink }}>{item.body}</Text>
               </View>
               <Text style={[s.small, { fontSize: 11, alignSelf: item.mine ? 'flex-end' : 'flex-start' }]}>
                 {fmtTime(item.createdAt)}
@@ -130,7 +130,7 @@ export default function Chat() {
                 accessibilityLabel="Send"
                 disabled={sending || !text.trim()}
                 onPress={() => send(text)}
-                style={{ width: 50, height: 50, borderRadius: 16, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center', opacity: sending || !text.trim() ? 0.5 : 1 }}
+                style={{ width: 50, height: 50, borderRadius: 16, backgroundColor: colors.inkBg, alignItems: 'center', justifyContent: 'center', opacity: sending || !text.trim() ? 0.5 : 1 }}
               >
                 <Icon name="send" size={22} color={colors.lime} />
               </Pressable>

@@ -5,7 +5,7 @@ import { AuditService } from '../audit/audit.service';
 import { AppError } from '../common/app-error';
 import { ZodPipe } from '../common/zod.pipe';
 import { Auth, Org, type AuthContext, type OrgContext } from '../common/request-context';
-import { OrgScoped, RequireFeature } from '../tenancy/decorators';
+import { MembersOnly, OrgScoped, RequireFeature } from '../tenancy/decorators';
 import { RideGeneratorService } from './ride-generator.service';
 import { WaitlistService } from '../commute/waitlist.service';
 
@@ -13,6 +13,7 @@ import { WaitlistService } from '../commute/waitlist.service';
 @Controller()
 @OrgScoped()
 @RequireFeature('share')
+@MembersOnly()
 export class RidePlansController {
   constructor(
     private readonly prisma: PrismaService,

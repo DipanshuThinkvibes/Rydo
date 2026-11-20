@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Linking, Pressable, Text, View } from 'react-native';
 import { DOCUMENT_LABEL, type DocumentKindName } from '@rydo/shared';
-import { colors } from '@rydo/ui-tokens';
+import { colors } from '@/lib/theme';
 import { api, errText, RequestError } from '@/lib/api';
 import { Alert } from '@/lib/dialog';
 import { latestOf, mainVehicle, STATUS_LOOK, STEP_INFO, type DriverDocument, type DriverForReview } from '@/lib/driver-signup';

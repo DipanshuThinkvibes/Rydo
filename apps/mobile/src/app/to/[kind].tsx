@@ -3,7 +3,7 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { CommuteDayView, Place, SavedPlace } from '@rydo/shared';
-import { colors } from '@rydo/ui-tokens';
+import { colors } from '@/lib/theme';
 import { api } from '@/lib/api';
 import { fmtClock } from '@/lib/format';
 import { useData } from '@/lib/hooks';
@@ -79,23 +79,23 @@ export default function ToPlace() {
 
       <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 130, gap: 18 }} keyboardShouldPersistTaps="handled">
         {/* The trip: from → to */}
-        <View style={{ backgroundColor: colors.ink, borderRadius: 22, padding: 16, gap: 12 }}>
+        <View style={{ backgroundColor: colors.panel, borderRadius: 22, padding: 16, gap: 12 }}>
           <Pressable accessibilityRole="button" accessibilityLabel={`Start: ${from?.label ?? 'not set'}. Change`} onPress={() => setPicking(true)} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
             <View style={{ width: 16, height: 16, borderRadius: 8, borderWidth: 3, borderColor: colors.lime }} />
             <View style={{ flex: 1 }}>
-              <Text style={{ color: colors.mutedOnDark, fontSize: 12, fontWeight: '700' }}>FROM</Text>
-              <Text numberOfLines={1} style={{ color: from ? colors.white : colors.mutedOnDark, fontSize: 16, fontWeight: '800' }}>{from?.label ?? `Choose where you start`}</Text>
+              <Text style={{ color: colors.panelMuted, fontSize: 12, fontWeight: '700' }}>FROM</Text>
+              <Text numberOfLines={1} style={{ color: from ? colors.onPanel : colors.panelMuted, fontSize: 16, fontWeight: '800' }}>{from?.label ?? `Choose where you start`}</Text>
             </View>
-            <Text style={{ color: colors.lime, fontWeight: '800' }}>Change</Text>
+            <Text style={{ color: colors.panelAccent, fontWeight: '800' }}>Change</Text>
           </Pressable>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
             <View style={{ width: 15, height: 15, borderRadius: 3, backgroundColor: colors.lime }} />
             <View style={{ flex: 1 }}>
-              <Text style={{ color: colors.mutedOnDark, fontSize: 12, fontWeight: '700' }}>TO</Text>
-              <Text numberOfLines={1} style={{ color: destPlace ? colors.white : colors.mutedOnDark, fontSize: 16, fontWeight: '800' }}>{destPlace?.label ?? `Search your ${noun} address below`}</Text>
+              <Text style={{ color: colors.panelMuted, fontSize: 12, fontWeight: '700' }}>TO</Text>
+              <Text numberOfLines={1} style={{ color: destPlace ? colors.onPanel : colors.panelMuted, fontSize: 16, fontWeight: '800' }}>{destPlace?.label ?? `Search your ${noun} address below`}</Text>
             </View>
           </View>
-          {usualTime ? <Text style={{ color: colors.mutedOnDark, fontSize: 13 }}>Usually at {fmtClock(usualTime)} · from your commute plan</Text> : null}
+          {usualTime ? <Text style={{ color: colors.panelMuted, fontSize: 13 }}>Usually at {fmtClock(usualTime)} · from your commute plan</Text> : null}
         </View>
 
         <View style={{ gap: 6 }}>

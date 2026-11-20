@@ -1,6 +1,6 @@
 import { Platform, Pressable, Text, View } from 'react-native';
 import { Image } from 'expo-image';
-import { colors } from '@rydo/ui-tokens';
+import { colors } from '@/lib/theme';
 import { pick, type Picked } from '@/lib/photo';
 import { Icon } from './icons';
 import { Button, s } from './ui';

@@ -12,7 +12,12 @@ export interface MapRoute {
 export interface MapMarker {
   id: string;
   at: LatLng;
-  kind: 'start' | 'end' | 'pickup' | 'car' | 'me' | 'person';
+  /** place = a saved address shown as a bookmark: an icon in a pin with its name. */
+  kind: 'start' | 'end' | 'pickup' | 'car' | 'me' | 'person' | 'place';
+  /** Icon of a `place` marker. */
+  icon?: 'house' | 'building' | 'pin';
+  /** A `place` that is the person's default home or office (lime pin). */
+  isDefault?: boolean;
   /** Car marker: ink circle with a lime arrow (rider view) instead of lime with ink (driver view). */
   inkCar?: boolean;
   /** Pill text next to the marker (pickup / end), or the person's name (person). */

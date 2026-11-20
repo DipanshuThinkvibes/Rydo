@@ -1,6 +1,6 @@
 import { applyDecorators, SetMetadata, UseGuards } from '@nestjs/common';
 import type { OrgFeatures, OrgRoleName } from '@rydo/shared';
-import { ORG_FEATURE_KEY, ORG_ROLES_KEY, OrgGuard } from './org.guard';
+import { MEMBERS_ONLY_KEY, ORG_FEATURE_KEY, ORG_ROLES_KEY, OrgGuard } from './org.guard';
 import { PlatformAdminGuard } from './platform-admin.guard';
 import { OrgOrPlatformGuard } from './org-or-platform.guard';
 
@@ -11,6 +11,8 @@ export const OrgScoped = (...roles: OrgRoleName[]) => applyDecorators(SetMetadat
 export const PlatformAdmin = () => UseGuards(PlatformAdminGuard);
 /** Route only works when RYDO has switched this feature on for the company (set with @OrgScoped). */
 export const RequireFeature = (feature: keyof OrgFeatures) => SetMetadata(ORG_FEATURE_KEY, feature);
+/** Riding and driving (set with @OrgScoped): admin accounts are refused. `false` on a method lifts a class-level rule. */
+export const MembersOnly = (on = true) => SetMetadata(MEMBERS_ONLY_KEY, on);
 
 /** Works inside a company, and for RYDO Super Admins without one (owner console). */
 export const OrgOrPlatform = () => UseGuards(OrgOrPlatformGuard);

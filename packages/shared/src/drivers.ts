@@ -17,11 +17,24 @@ const plate = z
   .transform((s) => s.replace(/\s+/g, ' '))
   .pipe(z.string().regex(/^[A-Z]{2} ?\d{1,2} ?[A-Z]{0,3} ?\d{1,4}$/, 'Enter a plate like KA 01 AB 1234'));
 
+/** Body types a driver can pick for their car (any car fits one of them; OTHER when unsure). */
+export const CAR_TYPES = ['HATCHBACK', 'SEDAN', 'COMPACT_SUV', 'SUV', 'MUV', 'LUXURY', 'OTHER'] as const;
+export type CarType = (typeof CAR_TYPES)[number];
+export const CAR_TYPE_LABEL: Record<CarType, string> = {
+  HATCHBACK: 'Hatchback',
+  SEDAN: 'Sedan',
+  COMPACT_SUV: 'Compact SUV',
+  SUV: 'SUV',
+  MUV: 'MUV / MPV',
+  LUXURY: 'Luxury',
+  OTHER: 'Other',
+};
+
 export const vehicleSchema = z
   .object({
     type: z.enum(['CAR', 'BIKE']),
-    /** Hatchback / Sedan / SUV. Optional, cars only. */
-    carType: z.enum(['HATCHBACK', 'SEDAN', 'SUV']).optional(),
+    /** Body type (CAR_TYPES). Optional, cars only. */
+    carType: z.enum(CAR_TYPES).optional(),
     make: z.string().trim().min(2).max(40),
     model: z.string().trim().min(1).max(40),
     color: z.string().trim().min(3).max(30),

@@ -57,12 +57,12 @@ async function main() {
   const acme = await prisma.organization.upsert({
     where: { slug: 'acme' },
     update: {},
-    create: { name: 'Acme Tech', slug: 'acme', emailDomains: ['acme.test'], status: 'ACTIVE' },
+    create: { name: 'Acme Tech', slug: 'acme', emailDomains: ['acme.test'], status: 'ACTIVE', licenses: { create: [{ product: 'SHARE', notes: 'Demo licence' }] } },
   });
 
   const people: { email: string; name: string; status: 'ACTIVE' | 'PENDING'; roles: ('ORG_ADMIN' | 'HR_ADMIN' | 'OPS_ADMIN' | 'RIDER' | 'DRIVER')[]; gender?: 'FEMALE' | 'MALE' }[] = [
-    { email: 'hr@acme.test', name: 'Meera Iyer', status: 'ACTIVE', roles: ['ORG_ADMIN', 'HR_ADMIN', 'RIDER'] },
-    { email: 'ops@acme.test', name: 'Omkar Ops', status: 'ACTIVE', roles: ['OPS_ADMIN', 'RIDER'] },
+    { email: 'hr@acme.test', name: 'Meera Iyer', status: 'ACTIVE', roles: ['ORG_ADMIN', 'HR_ADMIN'] },
+    { email: 'ops@acme.test', name: 'Omkar Ops', status: 'ACTIVE', roles: ['OPS_ADMIN'] },
     { email: 'rahul@acme.test', name: 'Rahul M.', status: 'ACTIVE', roles: ['RIDER'], gender: 'MALE' },
     { email: 'sneha@acme.test', name: 'Sneha R.', status: 'ACTIVE', roles: ['RIDER', 'DRIVER'], gender: 'FEMALE' },
     { email: 'priya@acme.test', name: 'Priya S.', status: 'ACTIVE', roles: ['RIDER'], gender: 'FEMALE' },

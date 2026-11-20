@@ -18,6 +18,8 @@
 
 - [ ] Pick the document-check provider (Surepass / Cashfree / Signzy), add its adapter and key
 - [ ] Web Drive page: upload insurance, licence back and vehicle photos (web drivers can't be verified until then)
+- [ ] Web menu: hide ride/drive pages for admin accounts (API already refuses them with ADMIN_ACCOUNT)
+- [ ] Existing admins with rides or bookings: decide whether to cancel them (they can no longer manage them)
 
 ## Later
 - [ ] Pilot with one company, then App Store + Play Store

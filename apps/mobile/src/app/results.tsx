@@ -3,7 +3,7 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { Redirect, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { RideMatch } from '@rydo/shared';
-import { colors } from '@rydo/ui-tokens';
+import { colors } from '@/lib/theme';
 import { api, errText } from '@/lib/api';
 import { dayWord, fmtClock, fmtDistance, fmtTime, firstName, shortName, toPath } from '@/lib/format';
 import { draft } from '@/lib/places';
@@ -185,7 +185,7 @@ function MatchCard({ m, best, active, onPress, onDriver, preferred, onFav }: { m
           accessibilityLabel={preferred ? 'Remove preferred driver' : 'Save as preferred driver'}
           onPress={onFav}
           hitSlop={6}
-          style={{ width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: preferred ? '#FEF2F2' : colors.surface2 }}
+          style={{ width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: preferred ? colors.dangerBg : colors.surface2 }}
         >
           <Text style={{ fontSize: 18, color: preferred ? colors.danger : colors.muted }}>{preferred ? '♥' : '♡'}</Text>
         </Pressable>

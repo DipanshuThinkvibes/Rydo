@@ -6,6 +6,8 @@ import {
   clientSetupSchema,
   createOrgSchema,
   DEFAULT_ORG_SETTINGS,
+  LICENSE_INFO,
+  LICENSE_PRODUCTS,
   orgFeatures,
   platformUpdateOrgSchema,
   supportGrantSchema,
@@ -124,6 +126,14 @@ export class PlatformOrgsController {
           settings: b.settings as Prisma.InputJsonValue,
           features: b.features as Prisma.InputJsonValue,
           maxEmployees: b.maxEmployees,
+          // Every module switched on gets a licence (RYDO Share by default), so nothing works without one.
+          licenses: {
+            create: LICENSE_PRODUCTS.filter((p) => orgFeatures(b.features)[LICENSE_INFO[p].feature]).map((product) => ({
+              product,
+              issuedById: auth.userId,
+              expiresAt: b.licenseEndsOn ? new Date(`${b.licenseEndsOn}T23:59:59.999Z`) : null,
+            })),
+          },
           contactName: b.contact.name,
           contactEmail: b.contact.email,
           contactPhone: b.contact.phone ?? null,

@@ -4,7 +4,7 @@ import { Alert } from '@/lib/dialog';
 import { Redirect, router, type Href } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ID_PROOF_LABEL, type OrgRoleName } from '@rydo/shared';
-import { colors } from '@rydo/ui-tokens';
+import { colors } from '@/lib/theme';
 import { api, apiWithMeta, errText } from '@/lib/api';
 import { fmtTime, fmtWhen, isoDay, shortName } from '@/lib/format';
 import { useData } from '@/lib/hooks';
@@ -102,9 +102,9 @@ export default function Admin() {
             <View key={a.id} accessibilityRole="alert" style={{ backgroundColor: colors.danger, borderRadius: 22, padding: 18, gap: 8 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: colors.white }} />
-                <Text style={{ color: colors.white, fontSize: 13, fontWeight: '800', letterSpacing: 0.5 }}>SOS {a.status === 'ACTIVE' ? 'ACTIVE' : 'ACKNOWLEDGED'} · {fmtTime(a.createdAt)}</Text>
+                <Text style={{ color: colors.onInk, fontSize: 13, fontWeight: '800', letterSpacing: 0.5 }}>SOS {a.status === 'ACTIVE' ? 'ACTIVE' : 'ACKNOWLEDGED'} · {fmtTime(a.createdAt)}</Text>
               </View>
-              <Text style={{ color: colors.white, fontSize: 20, fontWeight: '800' }}>
+              <Text style={{ color: colors.onInk, fontSize: 20, fontWeight: '800' }}>
                 {a.byDriver ? `${shortName(a.driverName)} raised an SOS while driving` : `${shortName(a.raisedBy)} raised an SOS in ${shortName(a.driverName)}'s car`}
               </Text>
               <Text style={{ color: '#FFE4E4', fontSize: 14 }}>{a.plateNumber} · {a.from.split(',')[0]} → {a.to.split(',')[0]} · live location on the web Ops map</Text>
@@ -113,7 +113,7 @@ export default function Admin() {
                   <Button small variant="white" label="Acknowledge" style={{ flex: 1 }} loading={busy === `ack${a.id}`} onPress={() => act(`ack${a.id}`, () => api('POST', `/admin/sos/${a.id}/ack`))} />
                 ) : null}
                 <Pressable accessibilityRole="button" onPress={() => setResolving({ kind: 'sos', id: a.id })} style={{ flex: 1, height: 44, borderRadius: 14, borderWidth: 1.5, borderColor: colors.white, alignItems: 'center', justifyContent: 'center' }}>
-                  <Text style={{ color: colors.white, fontWeight: '800' }}>Mark resolved</Text>
+                  <Text style={{ color: colors.onInk, fontWeight: '800' }}>Mark resolved</Text>
                 </Pressable>
               </View>
             </View>
@@ -122,7 +122,7 @@ export default function Admin() {
           {data.onRoad != null ? (
             <View style={[s.pillDark, { height: 36 }]}>
               <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.lime }} />
-              <Text style={{ color: colors.white, fontWeight: '700', fontSize: 13 }}>{data.onRoad} on the road now</Text>
+              <Text style={{ color: colors.onPanel, fontWeight: '700', fontSize: 13 }}>{data.onRoad} on the road now</Text>
             </View>
           ) : null}
 
@@ -303,13 +303,13 @@ function AnnounceModal({ visible, onClose, onSend }: { visible: boolean; onClose
                 ['DRIVER', 'Drivers'],
               ] as const
             ).map(([k, l]) => (
-              <Pressable key={k} accessibilityRole="radio" accessibilityState={{ checked: who === k }} onPress={() => setWho(k)} style={{ height: 40, paddingHorizontal: 14, borderRadius: 20, justifyContent: 'center', backgroundColor: who === k ? colors.ink : colors.surface2 }}>
-                <Text style={{ fontWeight: '700', color: who === k ? colors.white : colors.ink }}>{l}</Text>
+              <Pressable key={k} accessibilityRole="radio" accessibilityState={{ checked: who === k }} onPress={() => setWho(k)} style={{ height: 40, paddingHorizontal: 14, borderRadius: 20, justifyContent: 'center', backgroundColor: who === k ? colors.inkBg : colors.surface2 }}>
+                <Text style={{ fontWeight: '700', color: who === k ? colors.onInk : colors.ink }}>{l}</Text>
               </Pressable>
             ))}
           </View>
           <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: email }} onPress={() => setEmail(!email)} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <View style={{ width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: colors.ink, backgroundColor: email ? colors.ink : colors.white, alignItems: 'center', justifyContent: 'center' }}>
+            <View style={{ width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: colors.ink, backgroundColor: email ? colors.inkBg : colors.white, alignItems: 'center', justifyContent: 'center' }}>
               {email ? <Text style={{ color: colors.lime, fontWeight: '800' }}>✓</Text> : null}
             </View>
             <Text style={s.strong}>Also send by email</Text>

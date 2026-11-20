@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { colors } from '@rydo/ui-tokens';
+import { colors } from '@/lib/theme';
 import { INFO_PAGES, type InfoBlock, type InfoSlug } from '@/lib/info-pages';
 import { BackButton, Button, s } from '@/components/ui';
 
@@ -59,7 +59,7 @@ function Block({ b }: { b: InfoBlock }) {
           <H2>{b.title}</H2>
           {b.steps.map(([t, d], i) => (
             <View key={t} style={{ flexDirection: 'row', gap: 14 }}>
-              <View style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center' }}>
+              <View style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: colors.inkBg, alignItems: 'center', justifyContent: 'center' }}>
                 <Text style={{ color: colors.lime, fontWeight: '800' }}>{i + 1}</Text>
               </View>
               <View style={{ flex: 1, gap: 2 }}>
@@ -89,13 +89,13 @@ function Block({ b }: { b: InfoBlock }) {
       );
     case 'price':
       return (
-        <View style={{ padding: 22, borderRadius: 24, backgroundColor: colors.ink, gap: 10 }}>
-          <Text style={{ color: colors.mutedOnDark, fontWeight: '700' }}>{b.label}</Text>
-          <Text style={{ color: colors.lime, fontSize: 44, fontWeight: '800' }}>{b.price}</Text>
-          <Text style={{ color: colors.white, fontSize: 15, lineHeight: 22 }}>{b.text}</Text>
+        <View style={{ padding: 22, borderRadius: 24, backgroundColor: colors.panel, gap: 10 }}>
+          <Text style={{ color: colors.panelMuted, fontWeight: '700' }}>{b.label}</Text>
+          <Text style={{ color: colors.panelAccent, fontSize: 44, fontWeight: '800' }}>{b.price}</Text>
+          <Text style={{ color: colors.onPanel, fontSize: 15, lineHeight: 22 }}>{b.text}</Text>
           {b.list.map((x) => (
-            <Text key={x} style={{ color: colors.white, fontSize: 15 }}>
-              <Text style={{ color: colors.lime, fontWeight: '800' }}>✓ </Text>
+            <Text key={x} style={{ color: colors.onPanel, fontSize: 15 }}>
+              <Text style={{ color: colors.panelAccent, fontWeight: '800' }}>✓ </Text>
               {x}
             </Text>
           ))}

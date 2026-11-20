@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Platform, Pressable, Text, View } from 'react-native';
-import { colors } from '@rydo/ui-tokens';
+import { colors } from '@/lib/theme';
 
 /**
  * Google OAuth client ids (Google Cloud → Credentials) from apps/mobile/.env. They are public ids, not secrets.

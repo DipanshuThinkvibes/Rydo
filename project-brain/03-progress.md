@@ -1,13 +1,13 @@
 ---
 project: RYDO
 status: active
-last_log: 2026-11-18
+last_log: 2026-11-20
 ---
 
 # Progress
 
 ## Current state
-Web-first build of Release 1 (RYDO Share, carpool for companies) is complete through Phase 5 on the web: admin portal, rider and driver screens with live Google maps, RYDO owner console (client onboarding, features, seat limits, support view, activity, health), Ops rides map, live trips (simulator, PIN boarding, SOS, share link, ratings), reports + CSV, company activity log, security hardening, load test, and a Docker staging kit with HTTPS and nightly backups. 99+ API e2e tests pass. Phase 1 gap APIs (issue reports, ride chat, feedback + surveys + insights, announcements, push registration + sending, emergency contacts, blocks, profile photo/rating card, car-type + AC filters) are built on branch dipanshu/rydo-api (see ENGAGEMENT_API.md in services/api); they have no web or mobile screens yet. Mobile app (Expo): all 14 screens of the RYDO Share prototype are built on the existing APIs (rider, driver, commute, admin; see journal 2026-11-18-anjali), not yet run on a phone; maps/icons drawn without packages, live data polled, driver GPS simulated. Payments and pricing are deliberately not built: everything is free for now. Ownership model: Thinkvibes runs RYDO; clients manage only their own company.
+Web-first build of Release 1 (RYDO Share, carpool for companies) is complete through Phase 5 on the web: admin portal, rider and driver screens with live Google maps, RYDO owner console (client onboarding, features, seat limits, support view, activity, health), Ops rides map, live trips (simulator, PIN boarding, SOS, share link, ratings), reports + CSV, company activity log, security hardening, load test, and a Docker staging kit with HTTPS and nightly backups. 99+ API e2e tests pass. Phase 1 gap APIs (issue reports, ride chat, feedback + surveys + insights, announcements, push registration + sending, emergency contacts, blocks, profile photo/rating card, car-type + AC filters) are built on branch dipanshu/rydo-api (see ENGAGEMENT_API.md in services/api); they have no web or mobile screens yet. Mobile app (Expo): all 14 screens of the RYDO Share prototype are built on the existing APIs (rider, driver, commute, admin; see journal 2026-11-18-anjali), not yet run on a phone; maps/icons drawn without packages, live data polled, driver GPS simulated. Mobile now mirrors the web pages (menu, account hub, admin, RYDO owner console with support view, light/dark theme). Admin accounts (ORG/HR/OPS) are admin-only: the API refuses ride and drive routes for them (2026-11-20). Payments and pricing are deliberately not built: everything is free for now. Ownership model: Thinkvibes runs RYDO; clients manage only their own company.
 
 ## Milestones
 - [x] Project brain, git, source review, architecture proposal, prototype v2

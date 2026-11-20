@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, Text, View } from 'react-native';
 import { Alert } from '@/lib/dialog';
-import { colors } from '@rydo/ui-tokens';
+import { colors } from '@/lib/theme';
 import { api, errText } from '@/lib/api';
+import { CAR_TYPE_LABEL, type CarType } from '@rydo/shared';
 import type { MemberCard as Card } from '@/lib/types';
 import { Avatar, Badge, Button, Label, Notice, s } from './ui';
 
@@ -68,7 +69,7 @@ export function MemberCard({ membershipId, onClose, onBlocked }: { membershipId:
                 </View>
               ))}
             </View>
-            {v ? <Text style={s.small}>Drives a {v.color} {v.make} {v.model}{v.carType ? ` (${v.carType.toLowerCase()})` : ''}{v.hasAc ? ' · AC' : ''}</Text> : null}
+            {v ? <Text style={s.small}>Drives a {v.color} {v.make} {v.model}{v.carType ? ` (${CAR_TYPE_LABEL[v.carType as CarType] ?? v.carType.toLowerCase()})` : ''}{v.hasAc ? ' · AC' : ''}</Text> : null}
             {card.rating.recentComments?.length ? (
               <View style={{ gap: 6 }}>
                 <Label>Recent comments</Label>

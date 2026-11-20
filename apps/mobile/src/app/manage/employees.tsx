@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Text, TextInput, View } from 'react-native';
 import { ID_PROOF_LABEL, ORG_ROLES, type OrgRoleName } from '@rydo/shared';
-import { colors } from '@rydo/ui-tokens';
+import { colors } from '@/lib/theme';
 import { Alert } from '@/lib/dialog';
 import { api, errText } from '@/lib/api';
 import { useData } from '@/lib/hooks';
@@ -131,7 +131,13 @@ export default function Employees() {
 
 function MemberPanel({ member, departments, canEditRoles, isMe, busy, act }: { member: Member; departments: Department[]; canEditRoles: boolean; isMe: boolean; busy: boolean; act: (fn: () => Promise<unknown>) => void }) {
   const [roles, setRoles] = useState<OrgRoleName[]>(member.roles);
-  const toggle = (r: OrgRoleName) => setRoles((rs) => (rs.includes(r) ? rs.filter((x) => x !== r) : [...rs, r]));
+  // Admin accounts can't ride or drive: picking an admin role drops Rider and Driver, and the other way round.
+  const toggle = (r: OrgRoleName) =>
+    setRoles((rs) => {
+      if (rs.includes(r)) return rs.filter((x) => x !== r);
+      const admin = (x: OrgRoleName) => x.endsWith('_ADMIN');
+      return [...rs.filter((x) => admin(x) === admin(r)), r];
+    });
   const changed = roles.length !== member.roles.length || roles.some((r) => !member.roles.includes(r));
   const suspend = () =>
     Alert.alert(`Suspend ${member.name}?`, 'Suspending removes access to RYDO at once. Ride history is kept.', [
@@ -156,6 +162,7 @@ function MemberPanel({ member, departments, canEditRoles, isMe, busy, act }: { m
               <Chip key={r} label={ROLE_LABEL[r]} selected={roles.includes(r)} onPress={() => toggle(r)} />
             ))}
           </ChipRow>
+          <Text style={[s.small, { fontSize: 12 }]}>Admin roles are for running the company: an admin account can't ride or drive. To carpool, they sign up with their own work email.</Text>
           {changed ? <Button small label="Save roles" disabled={busy || roles.length === 0} onPress={() => act(() => api('PATCH', `/admin/members/${member.id}/roles`, { roles }))} /> : null}
         </View>
       ) : null}

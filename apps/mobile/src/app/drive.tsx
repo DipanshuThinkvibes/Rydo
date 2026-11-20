@@ -3,7 +3,7 @@ import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native'
 import { Alert } from '@/lib/dialog';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { colors } from '@rydo/ui-tokens';
+import { colors } from '@/lib/theme';
 import { api, errText } from '@/lib/api';
 import { dayOf, fmtTime, fmtWhen, shortName, toPath } from '@/lib/format';
 import { useData, useNow } from '@/lib/hooks';
@@ -66,8 +66,8 @@ export default function Drive() {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.ink }}>
-      <RouteMap dark style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 330 }} routes={next ? [{ id: 'r', path, active: true }] : []} markers={markers} inset={{ top: 70, bottom: 40 }} />
+    <View style={{ flex: 1, backgroundColor: colors.panel }}>
+      <RouteMap style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 330 }} routes={next ? [{ id: 'r', path, active: true }] : []} markers={markers} inset={{ top: 70, bottom: 40 }} />
       <SafeAreaView edges={['top']} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 4 }}>
         <AccountButton dark />
         <ModeSwitch mode="drive" dark />
@@ -155,15 +155,15 @@ function Driving({ data, reload }: { data: DriveData; reload: () => void }) {
       </Card>
 
       {next ? (
-        <Card dark style={{ gap: 12, backgroundColor: colors.ink2 }} onPress={() => router.push({ pathname: '/driving/[rideId]', params: { rideId: next.id } })}>
+        <Card dark style={{ gap: 12, backgroundColor: colors.panel2 }} onPress={() => router.push({ pathname: '/driving/[rideId]', params: { rideId: next.id } })}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-            <Text style={{ color: colors.lime, fontSize: 12, fontWeight: '800', letterSpacing: 0.6 }}>{dayOf(next.departAt).toUpperCase()} · {fmtTime(next.departAt)}</Text>
-            <Text style={{ color: colors.mutedOnDark, fontSize: 12, fontWeight: '800' }}>{next.seatsBooked} OF {next.seatsTotal} SEATS BOOKED</Text>
+            <Text style={{ color: colors.panelAccent, fontSize: 12, fontWeight: '800', letterSpacing: 0.6 }}>{dayOf(next.departAt).toUpperCase()} · {fmtTime(next.departAt)}</Text>
+            <Text style={{ color: colors.panelMuted, fontSize: 12, fontWeight: '800' }}>{next.seatsBooked} OF {next.seatsTotal} SEATS BOOKED</Text>
           </View>
-          <Text style={{ color: colors.white, fontSize: 20, fontWeight: '800' }}>{next.from.split(',')[0]} → {next.to.split(',')[0]}</Text>
+          <Text style={{ color: colors.onPanel, fontSize: 20, fontWeight: '800' }}>{next.from.split(',')[0]} → {next.to.split(',')[0]}</Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             {next.riders.slice(0, 4).map((r, i) => <Avatar key={r.bookingId} name={r.name} size={34} tone={i % 2 ? 'pink' : 'blue'} />)}
-            <Text style={{ color: colors.mutedOnDark, fontSize: 13, marginLeft: 6, flex: 1 }}>{next.riders.length ? 'Pickups in order on your route' : 'No riders yet'}</Text>
+            <Text style={{ color: colors.panelMuted, fontSize: 13, marginLeft: 6, flex: 1 }}>{next.riders.length ? 'Pickups in order on your route' : 'No riders yet'}</Text>
           </View>
           <Button
             label={next.status === 'IN_PROGRESS' ? 'Continue trip' : canStart ? 'Start trip' : `You can start from ${fmtTime(new Date(new Date(next.departAt).getTime() - 30 * 60_000))}`}
@@ -174,9 +174,9 @@ function Driving({ data, reload }: { data: DriveData; reload: () => void }) {
           />
         </Card>
       ) : (
-        <Card dark style={{ backgroundColor: colors.ink2 }}>
-          <Text style={{ color: colors.white, fontSize: 18, fontWeight: '800' }}>No rides coming up</Text>
-          <Text style={{ color: colors.mutedOnDark, fontSize: 14 }}>Publish a ride and colleagues on your route can request a seat.</Text>
+        <Card dark style={{ backgroundColor: colors.panel2 }}>
+          <Text style={{ color: colors.onPanel, fontSize: 18, fontWeight: '800' }}>No rides coming up</Text>
+          <Text style={{ color: colors.panelMuted, fontSize: 14 }}>Publish a ride and colleagues on your route can request a seat.</Text>
         </Card>
       )}
 
@@ -193,7 +193,7 @@ function Driving({ data, reload }: { data: DriveData; reload: () => void }) {
 
       <Card onPress={() => router.push('/publish')} style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
         <View style={{ width: 46, height: 46, borderRadius: 14, backgroundColor: colors.lime, alignItems: 'center', justifyContent: 'center' }}>
-          <Icon name="plus" size={24} />
+          <Icon name="plus" size={24} color={colors.onLime} />
         </View>
         <View style={{ flex: 1 }}>
           <Text style={s.strong}>Publish a ride</Text>
@@ -216,13 +216,13 @@ function Driving({ data, reload }: { data: DriveData; reload: () => void }) {
         <View style={{ gap: 8 }}>
           <Label light>Your next rides</Label>
           {others.map((r) => (
-            <Pressable key={r.id} accessibilityRole="button" onPress={() => router.push({ pathname: '/driving/[rideId]', params: { rideId: r.id } })} style={{ backgroundColor: colors.ink2, borderRadius: 16, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <Pressable key={r.id} accessibilityRole="button" onPress={() => router.push({ pathname: '/driving/[rideId]', params: { rideId: r.id } })} style={{ backgroundColor: colors.panel2, borderRadius: 16, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
               <View style={{ flex: 1 }}>
-                <Text style={{ color: colors.white, fontWeight: '800', fontSize: 15 }}>{fmtWhen(r.departAt)}</Text>
-                <Text numberOfLines={1} style={{ color: colors.mutedOnDark, fontSize: 13 }}>{r.originLabel.split(',')[0]} → {r.destinationLabel.split(',')[0]}</Text>
+                <Text style={{ color: colors.onPanel, fontWeight: '800', fontSize: 15 }}>{fmtWhen(r.departAt)}</Text>
+                <Text numberOfLines={1} style={{ color: colors.panelMuted, fontSize: 13 }}>{r.originLabel.split(',')[0]} → {r.destinationLabel.split(',')[0]}</Text>
               </View>
               {r.pendingRequests > 0 ? <Badge tone="lime">{`${r.pendingRequests} new`}</Badge> : null}
-              <Text style={{ color: colors.mutedOnDark, fontWeight: '800' }}>{r.seatsBooked}/{r.seatsTotal}</Text>
+              <Text style={{ color: colors.panelMuted, fontWeight: '800' }}>{r.seatsBooked}/{r.seatsTotal}</Text>
             </Pressable>
           ))}
         </View>
@@ -232,19 +232,19 @@ function Driving({ data, reload }: { data: DriveData; reload: () => void }) {
         <View style={{ gap: 8 }}>
           <Label light>Your ride plans</Label>
           {plans.map((p) => (
-            <View key={p.id} style={{ backgroundColor: colors.ink2, borderRadius: 16, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <View key={p.id} style={{ backgroundColor: colors.panel2, borderRadius: 16, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
               <View style={{ flex: 1 }}>
-                <Text style={{ color: colors.white, fontWeight: '800', fontSize: 15 }}>
+                <Text style={{ color: colors.onPanel, fontWeight: '800', fontSize: 15 }}>
                   {p.departTime}
                   {p.returnTime ? ` · back ${p.returnTime}` : ''} · {p.oneOffDate ?? daysText(p.daysOfWeek)}
                 </Text>
-                <Text numberOfLines={1} style={{ color: colors.mutedOnDark, fontSize: 13 }}>
+                <Text numberOfLines={1} style={{ color: colors.panelMuted, fontSize: 13 }}>
                   {p.originLabel.split(',')[0]} → {p.destinationLabel.split(',')[0]} · {p.seats} seats{p.womenOnly ? ' · women only' : ''}
                 </Text>
               </View>
               {p.active ? (
-                <Pressable accessibilityRole="button" onPress={() => stopPlan(p)} style={{ paddingHorizontal: 12, height: 36, borderRadius: 12, borderWidth: 1.5, borderColor: colors.mutedOnDark, justifyContent: 'center' }}>
-                  <Text style={{ color: colors.white, fontWeight: '800', fontSize: 13 }}>Stop</Text>
+                <Pressable accessibilityRole="button" onPress={() => stopPlan(p)} style={{ paddingHorizontal: 12, height: 36, borderRadius: 12, borderWidth: 1.5, borderColor: colors.panelMuted, justifyContent: 'center' }}>
+                  <Text style={{ color: colors.onPanel, fontWeight: '800', fontSize: 13 }}>Stop</Text>
                 </Pressable>
               ) : (
                 <Badge tone="neutral">stopped</Badge>

@@ -3,7 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Alert } from '@/lib/dialog';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { colors } from '@rydo/ui-tokens';
+import { colors, isDark } from '@/lib/theme';
 import { api, errText } from '@/lib/api';
 import { dayWord, firstName, fmtTime, isoDay, shortName } from '@/lib/format';
 import { useData, useNow } from '@/lib/hooks';
@@ -34,16 +34,16 @@ export default function Requested() {
     // Pickup and drop times come from the match the rider just chose (same ride); otherwise the departure.
     const match = draft.chosen?.rideId === booking.ride.id ? draft.chosen : null;
     return (
-      <View style={{ flex: 1, backgroundColor: colors.ink }}>
-        <StatusBar style="light" />
+      <View style={{ flex: 1, backgroundColor: colors.panel }}>
+        <StatusBar style={isDark() ? "light" : "dark"} />
         <SafeAreaView style={{ flex: 1, padding: 20, justifyContent: 'space-between' }}>
           <View style={{ gap: 22, paddingTop: 40 }}>
             <View style={{ alignSelf: 'center', width: 96, height: 96, borderRadius: 26, backgroundColor: colors.lime, alignItems: 'center', justifyContent: 'center' }}>
-              <Icon name="check" size={52} />
+              <Icon name="check" size={52} color={colors.onLime} />
             </View>
             <View style={{ alignItems: 'center', gap: 6 }}>
-              <Text accessibilityRole="header" style={{ fontSize: 30, fontWeight: '800', color: colors.white }}>{firstName(driver)} accepted</Text>
-              <Text style={{ fontSize: 15, color: colors.mutedOnDark }}>Your seat is confirmed for {dayWord(isoDay(0, new Date(booking.ride.departAt)))}.</Text>
+              <Text accessibilityRole="header" style={{ fontSize: 30, fontWeight: '800', color: colors.onPanel }}>{firstName(driver)} accepted</Text>
+              <Text style={{ fontSize: 15, color: colors.panelMuted }}>Your seat is confirmed for {dayWord(isoDay(0, new Date(booking.ride.departAt)))}.</Text>
             </View>
             <Card style={{ gap: 14 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
@@ -66,9 +66,9 @@ export default function Requested() {
             <Pressable
               accessibilityRole="button"
               onPress={() => router.push({ pathname: '/chat/[rideId]/[riderId]', params: { rideId: booking.ride.id, riderId: 'me' } })}
-              style={({ pressed }) => ({ height: 56, borderRadius: 16, borderWidth: 1.5, borderColor: colors.ink2, alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.7 : 1 })}
+              style={({ pressed }) => ({ height: 56, borderRadius: 16, borderWidth: 1.5, borderColor: colors.panel2, alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.7 : 1 })}
             >
-              <Text style={{ color: colors.white, fontSize: 16, fontWeight: '800' }}>Message {firstName(driver)}</Text>
+              <Text style={{ color: colors.onPanel, fontSize: 16, fontWeight: '800' }}>Message {firstName(driver)}</Text>
             </Pressable>
           </View>
         </SafeAreaView>
@@ -82,7 +82,7 @@ export default function Requested() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.white, padding: 20, justifyContent: 'space-between' }}>
       <View style={{ gap: 22, paddingTop: 40 }}>
-        <View style={{ alignSelf: 'center', width: 96, height: 96, borderRadius: 26, backgroundColor: pending ? colors.ink : colors.surface2, alignItems: 'center', justifyContent: 'center' }}>
+        <View style={{ alignSelf: 'center', width: 96, height: 96, borderRadius: 26, backgroundColor: pending ? colors.inkBg : colors.surface2, alignItems: 'center', justifyContent: 'center' }}>
           <Icon name="clock" size={48} color={pending ? colors.lime : colors.ink} />
         </View>
         <View style={{ alignItems: 'center', gap: 6 }}>
@@ -97,7 +97,7 @@ export default function Requested() {
         </View>
         {pending && (
           <View style={{ height: 8, borderRadius: 4, backgroundColor: colors.surface2, overflow: 'hidden' }}>
-            <View style={{ height: 8, width: `${Math.max(0, Math.min(100, (left / total) * 100))}%`, backgroundColor: colors.ink, borderRadius: 4 }} />
+            <View style={{ height: 8, width: `${Math.max(0, Math.min(100, (left / total) * 100))}%`, backgroundColor: colors.inkBg, borderRadius: 4 }} />
           </View>
         )}
         {req ? (

@@ -5,7 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AppError } from '../common/app-error';
 import { ZodPipe } from '../common/zod.pipe';
 import { Auth, Org, type AuthContext, type OrgContext } from '../common/request-context';
-import { OrgScoped, RequireFeature } from '../tenancy/decorators';
+import { MembersOnly, OrgScoped, RequireFeature } from '../tenancy/decorators';
 import { MatchingService } from './matching.service';
 import { BookingService } from './booking.service';
 
@@ -13,6 +13,7 @@ import { BookingService } from './booking.service';
 @Controller()
 @OrgScoped()
 @RequireFeature('share')
+@MembersOnly()
 export class TripsController {
   constructor(
     private readonly prisma: PrismaService,

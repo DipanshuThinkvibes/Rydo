@@ -54,7 +54,8 @@ export type UpdateMe = z.infer<typeof updateMeSchema>;
 
 export interface MembershipSummary {
   id: string;
-  organization: { id: string; name: string; slug: string; features: OrgFeatures };
+  /** `features` already reflects the licences: a product is on only while its licence is valid. */
+  organization: { id: string; name: string; slug: string; features: OrgFeatures; licenses?: { product: string; state: string; expiresAt: string | null; daysLeft: number | null }[] };
   status: 'PENDING' | 'ACTIVE' | 'REJECTED' | 'SUSPENDED' | 'LEFT';
   roles: OrgRoleName[];
 }
@@ -63,15 +64,14 @@ export interface AuthResult {
   /** Mobile only. The web app gets httpOnly cookies instead. */
   accessToken?: string;
   refreshToken?: string;
-  user: { id: string; email: string; name: string; emailVerified?: boolean; isPlatformAdmin: boolean };
+  /** `platformRole` is set for RYDO staff: SUPER_ADMIN runs the owner console, SUPPORT is the support team. */
+  user: { id: string; email: string; name: string; emailVerified?: boolean; isPlatformAdmin: boolean; platformRole?: 'SUPER_ADMIN' | 'SUPPORT' | null };
   memberships: MembershipSummary[];
 }
 
 // ---------- Sign-up: find your company (public) ----------
 
-/** GET /auth/companies?q= : "Find your company" (active companies only, at most 5). */
-export const companySearchSchema = z.object({ q: z.string().trim().min(2, 'Type at least 2 letters').max(100) });
-/** A company on RYDO, with what its sign-up form offers (same shape as the web sign-up screen's CompanyInfo). */
+/** GET /public/companies?q= ("Find your company", active companies only, at most 8): a company and what its sign-up form offers. */
 export interface CompanyInfo {
   id: string;
   name: string;

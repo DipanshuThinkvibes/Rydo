@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, RequestError } from "@/lib/api";
@@ -8,11 +8,16 @@ import { useSession } from "@/lib/session";
 import { Button, Input, Logo } from "@/components/ui";
 import { GoogleButton, OrDivider } from "@/components/google-button";
 import { googleAuth } from "@/lib/google-auth";
+import { clearEnd, readEnd } from "@/lib/session-end";
 
 type Mode = "password" | "email" | "code";
 
+const noSubscribe = () => () => undefined;
+
 export default function SignInPage() {
   const router = useRouter();
+  // Why we are here: the website signs out after 2 hours without use, or the sign-in was ended elsewhere.
+  const endReason = useSyncExternalStore(noSubscribe, readEnd, () => null);
   const { reload } = useSession();
   const [mode, setMode] = useState<Mode>("password");
   const [email, setEmail] = useState("");
@@ -34,6 +39,7 @@ export default function SignInPage() {
   }
 
   const finish = async () => {
+    clearEnd();
     await reload();
     router.replace("/");
   };
@@ -91,6 +97,11 @@ export default function SignInPage() {
         <p className="mt-1.5 text-sm text-muted">
           {mode === "code" ? `We sent a 6-digit code to ${email}.` : "Use your work email. Riders, drivers and admins all sign in here."}
         </p>
+        {endReason && (
+          <p role="status" className="mt-5 flex items-start gap-2 rounded-2xl bg-warning-bg p-3 text-sm font-bold text-warning">
+            {endReason === "idle" ? "You were signed out because you were away for 2 hours. Sign in to carry on." : "Your session ended, for example because you were signed out on another device. Please sign in again."}
+          </p>
+        )}
         <form className="mt-6 flex flex-col gap-4" onSubmit={submit}>
           {mode !== "code" && (
             <Input id="email" label="Work email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" />
@@ -128,6 +139,7 @@ export default function SignInPage() {
               onCredential={(token) =>
                 run(async () => {
                   await googleAuth(token, "login");
+                  clearEnd();
                   await reload();
                   router.replace("/");
                 })

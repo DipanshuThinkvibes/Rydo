@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Text, TextInput, View } from 'react-native';
-import { colors } from '@rydo/ui-tokens';
+import { colors } from '@/lib/theme';
 import { api, errText, RequestError } from '@/lib/api';
 import { fmtWhen } from '@/lib/format';
 import { useData } from '@/lib/hooks';

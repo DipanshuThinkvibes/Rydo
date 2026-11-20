@@ -1,12 +1,13 @@
 import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { ORG_HEADER, SUPPORT_HEADER, orgFeatures, type OrgFeatures, type OrgRoleName } from '@rydo/shared';
+import { ORG_HEADER, SUPPORT_HEADER, applyLicenses, isAdminAccount, orgFeatures, type OrgFeatures, type OrgRoleName } from '@rydo/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppError } from '../common/app-error';
 import type { RydoRequest } from '../common/request-context';
 
 export const ORG_ROLES_KEY = 'rydo:org-roles';
 export const ORG_FEATURE_KEY = 'rydo:org-feature';
+export const MEMBERS_ONLY_KEY = 'rydo:members-only';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** Stand-in membership id for RYDO support (never matches a real row). */
 export const SUPPORT_MEMBERSHIP_ID = '00000000-0000-0000-0000-000000000000';
@@ -42,18 +43,27 @@ export class OrgGuard implements CanActivate {
 
     const membership = await this.prisma.membership.findUnique({
       where: { organizationId_userId: { organizationId: orgId, userId: req.auth!.userId } },
-      include: { roles: true, organization: { select: { status: true, features: true } } },
+      include: { roles: true, organization: { select: { status: true, features: true, licenses: { select: { product: true, status: true, startsAt: true, expiresAt: true } } } } },
     });
     if (!membership || membership.status !== 'ACTIVE' || membership.organization.status !== 'ACTIVE') {
       throw new AppError('MEMBERSHIP_NOT_ACTIVE', "You don't have access to this company.", 403);
     }
-    if (feature && !orgFeatures(membership.organization.features)[feature]) {
-      throw new AppError('FEATURE_OFF', 'This part of RYDO is not switched on for your company. Ask your admin.', 403);
+    if (feature) {
+      const switches = orgFeatures(membership.organization.features);
+      if (!applyLicenses(switches, membership.organization.licenses)[feature]) {
+        // Switched on, but the licence has ended or was paused: say so, so the admin knows to contact RYDO.
+        if (switches[feature]) throw new AppError('LICENSE_INACTIVE', "Your company's RYDO licence for this is not active. Ask your admin to contact RYDO.", 403);
+        throw new AppError('FEATURE_OFF', 'This part of RYDO is not switched on for your company. Ask your admin.', 403);
+      }
     }
 
     const roles = membership.roles.map((r) => r.role as OrgRoleName);
     if (needed.length && !needed.some((r) => roles.includes(r))) {
       throw new AppError('FORBIDDEN', "Your role can't do this.", 403);
+    }
+    // Admin accounts run the company and never ride or drive (decision 2026-11-20).
+    if (this.reflector.getAllAndOverride<boolean>(MEMBERS_ONLY_KEY, [ctx.getHandler(), ctx.getClass()]) && isAdminAccount(roles)) {
+      throw new AppError('ADMIN_ACCOUNT', "Admin accounts can't ride or drive. To carpool, sign up with your own work email.", 403);
     }
     req.org = { organizationId: orgId, membershipId: membership.id, roles };
     return true;

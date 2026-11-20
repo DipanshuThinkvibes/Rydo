@@ -4,7 +4,7 @@ import { Alert } from '@/lib/dialog';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { LiveRide } from '@rydo/shared';
-import { colors } from '@rydo/ui-tokens';
+import { colors } from '@/lib/theme';
 import { api, errText } from '@/lib/api';
 import { dayOf, etaSeconds, fmtDistance, fmtTime, firstName, metersBetween, progressAlong, shortName, toPath } from '@/lib/format';
 import { openLongStop, useData, useLiveRide, useNow } from '@/lib/hooks';
@@ -67,7 +67,7 @@ function BeforeStart({ live, ride, onChange }: { live: LiveRide; ride: ManagedRi
   if (path.length) markers.push({ id: 's', at: path[0], kind: 'start' }, { id: 'e', at: path[path.length - 1], kind: 'end', label: ride.to.split(',')[0] });
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.ink }}>
+    <View style={{ flex: 1, backgroundColor: colors.inkBg }}>
       <RouteMap dark style={{ position: 'absolute', left: 0, right: 0, top: 0, height: '45%' }} routes={[{ id: 'r', path, active: true }]} markers={markers} inset={{ top: 70, bottom: 20 }} />
       <SafeAreaView edges={['top']} style={{ paddingHorizontal: 16 }}>
         <BackButton />
@@ -190,17 +190,17 @@ function Navigate({ live, location, onChange }: { live: LiveRide; location: Live
   if (location) markers.push({ id: 'car', at: location, kind: 'car', headingDeg: location.headingDeg });
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.ink }}>
+    <View style={{ flex: 1, backgroundColor: colors.inkBg }}>
       <RouteMap dark style={{ position: 'absolute', left: 0, right: 0, top: 0, height: '52%' }} routes={[{ id: 'r', path, active: true }]} markers={markers} inset={{ top: 150, bottom: 20 }} />
       <SafeAreaView edges={['top']} style={{ paddingHorizontal: 16, gap: 10 }}>
         <View style={{ backgroundColor: colors.lime, borderRadius: 22, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-          <Icon name="turn" size={30} />
+          <Icon name="turn" size={30} color={colors.onLime} />
           <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 24, fontWeight: '800', color: colors.ink }}>{away != null ? fmtDistance(away) : current ? 'Pickup' : 'Drop-off'}</Text>
-            <Text numberOfLines={1} style={{ fontSize: 15, fontWeight: '600', color: colors.ink }}>Head to {current ? current.pickupLabel : live.ride.to}</Text>
+            <Text style={{ fontSize: 24, fontWeight: '800', color: colors.onLime }}>{away != null ? fmtDistance(away) : current ? 'Pickup' : 'Drop-off'}</Text>
+            <Text numberOfLines={1} style={{ fontSize: 15, fontWeight: '600', color: colors.onLime }}>Head to {current ? current.pickupLabel : live.ride.to}</Text>
           </View>
-          <Pressable accessibilityRole="button" accessibilityLabel="Close navigation" onPress={() => (router.canGoBack() ? router.back() : router.replace('/drive'))} style={{ width: 52, height: 52, borderRadius: 14, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center' }}>
-            <Icon name="close" size={22} color={colors.white} />
+          <Pressable accessibilityRole="button" accessibilityLabel="Close navigation" onPress={() => (router.canGoBack() ? router.back() : router.replace('/drive'))} style={{ width: 52, height: 52, borderRadius: 14, backgroundColor: colors.inkBg, alignItems: 'center', justifyContent: 'center' }}>
+            <Icon name="close" size={22} color={colors.onInk} />
           </Pressable>
         </View>
         {target ? (
@@ -292,7 +292,7 @@ function Navigate({ live, location, onChange }: { live: LiveRide; location: Live
             <Text style={{ fontWeight: '800', color: colors.ink, fontSize: 13 }}>{simulate ? 'Use GPS' : 'Simulate'}</Text>
           </Pressable>
           <Pressable accessibilityRole="button" accessibilityLabel="SOS" onPress={() => confirmSos(live.ride.id, onChange)} style={{ height: 40, paddingHorizontal: 14, borderRadius: 12, backgroundColor: colors.danger, justifyContent: 'center' }}>
-            <Text style={{ color: colors.white, fontWeight: '800' }}>SOS</Text>
+            <Text style={{ color: colors.onInk, fontWeight: '800' }}>SOS</Text>
           </Pressable>
         </View>
         {current ? (
@@ -324,9 +324,9 @@ function Finished({ live, onChange }: { live: LiveRide; onChange: () => void }) 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.white }}>
       <ScrollView contentContainerStyle={{ padding: 20, gap: 18 }}>
-        <View style={{ backgroundColor: colors.ink, borderRadius: 24, padding: 20, gap: 8 }}>
+        <View style={{ backgroundColor: colors.inkBg, borderRadius: 24, padding: 20, gap: 8 }}>
           <Badge tone="lime">RIDE COMPLETE{live.ride.completedAt ? ` · ${fmtTime(live.ride.completedAt)}` : ''}</Badge>
-          <Text style={{ color: colors.white, fontSize: 26, fontWeight: '800' }}>Thanks for sharing your car</Text>
+          <Text style={{ color: colors.onInk, fontSize: 26, fontWeight: '800' }}>Thanks for sharing your car</Text>
           <Text style={{ color: colors.mutedOnDark, fontSize: 15 }}>
             {live.riders.filter((r) => r.status === 'COMPLETED').length} colleague(s) rode with you to {live.ride.to.split(',')[0]}.
           </Text>

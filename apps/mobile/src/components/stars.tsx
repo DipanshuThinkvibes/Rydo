@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { colors } from '@rydo/ui-tokens';
+import { colors } from '@/lib/theme';
 import { Button } from './ui';
 
 const TAGS = ['On time', 'Safe driving', 'Friendly', 'Clean car', 'Good chat'];
@@ -21,7 +21,7 @@ export function Stars({ onRate, busy, forRider, compact }: { onRate: (stars: num
             accessibilityLabel={`${n} star${n > 1 ? 's' : ''}`}
             accessibilityState={{ checked: stars === n }}
             onPress={() => setStars(n)}
-            style={{ width: size, height: size, borderRadius: 14, borderWidth: 1.5, borderColor: n <= stars ? colors.ink : colors.lineStrong, backgroundColor: n <= stars ? colors.ink : colors.white, alignItems: 'center', justifyContent: 'center' }}
+            style={{ width: size, height: size, borderRadius: 14, borderWidth: 1.5, borderColor: n <= stars ? colors.ink : colors.lineStrong, backgroundColor: n <= stars ? colors.inkBg : colors.white, alignItems: 'center', justifyContent: 'center' }}
           >
             <Text style={{ fontSize: size * 0.45, color: n <= stars ? colors.lime : colors.muted }}>★</Text>
           </Pressable>
@@ -32,8 +32,8 @@ export function Stars({ onRate, busy, forRider, compact }: { onRate: (stars: num
           {(forRider ? RIDER_TAGS : TAGS).map((t) => {
             const on = tags.includes(t);
             return (
-              <Pressable key={t} accessibilityRole="button" accessibilityState={{ selected: on }} onPress={() => setTags((x) => (on ? x.filter((y) => y !== t) : [...x, t]))} style={{ height: 34, paddingHorizontal: 12, borderRadius: 17, justifyContent: 'center', backgroundColor: on ? colors.ink : colors.surface2 }}>
-                <Text style={{ fontSize: 13, fontWeight: '700', color: on ? colors.white : colors.ink }}>{t}</Text>
+              <Pressable key={t} accessibilityRole="button" accessibilityState={{ selected: on }} onPress={() => setTags((x) => (on ? x.filter((y) => y !== t) : [...x, t]))} style={{ height: 34, paddingHorizontal: 12, borderRadius: 17, justifyContent: 'center', backgroundColor: on ? colors.inkBg : colors.surface2 }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: on ? colors.onInk : colors.ink }}>{t}</Text>
               </Pressable>
             );
           })}

@@ -1,7 +1,7 @@
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { colors } from '@rydo/ui-tokens';
+import { colors } from '@/lib/theme';
 import { INFO_ORDER, INFO_PAGES } from '@/lib/info-pages';
 import { Icon } from '@/components/icons';
 import { BackButton, Card, s } from '@/components/ui';
@@ -31,10 +31,10 @@ export default function InfoHub() {
             </Pressable>
           ))}
         </Card>
-        <Card onPress={() => router.push('/contact')} style={[s.row, { backgroundColor: colors.ink }]}>
+        <Card onPress={() => router.push('/contact')} style={[s.row, { backgroundColor: colors.panel }]}>
           <View style={{ flex: 1 }}>
-            <Text style={[s.strong, { color: colors.white }]}>Contact us</Text>
-            <Text style={[s.small, { color: colors.mutedOnDark }]}>Bring RYDO to your company</Text>
+            <Text style={[s.strong, { color: colors.onPanel }]}>Contact us</Text>
+            <Text style={[s.small, { color: colors.panelMuted }]}>Bring RYDO to your company</Text>
           </View>
           <Icon name="next" size={22} color={colors.lime} />
         </Card>

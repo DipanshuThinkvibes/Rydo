@@ -1,4 +1,4 @@
-import type { DocumentCheckView, DocumentKindName, DriverStep, DriverStepName, LicenceClass } from '@rydo/shared';
+import type { CarType, DocumentCheckView, DocumentKindName, DriverStep, DriverStepName, LicenceClass } from '@rydo/shared';
 import { api } from './api';
 import { appendFile, type Picked } from './photo';
 import type { Vehicle } from './types';
@@ -22,7 +22,7 @@ export interface DriverDocument {
   expiringSoon: boolean;
 }
 
-export type DriverVehicle = Vehicle & { carType?: 'HATCHBACK' | 'SEDAN' | 'SUV' | null };
+export type DriverVehicle = Vehicle & { carType?: CarType | null };
 
 /** GET /driver/profile (null until the driver starts). */
 export interface DriverSignup {

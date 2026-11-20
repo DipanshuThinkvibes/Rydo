@@ -3,7 +3,7 @@ import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native'
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { DriverStep } from '@rydo/shared';
-import { colors } from '@rydo/ui-tokens';
+import { colors } from '@/lib/theme';
 import { api, errText } from '@/lib/api';
 import { Alert } from '@/lib/dialog';
 import { STATUS_LOOK, STEP_INFO, type DriverSignup } from '@/lib/driver-signup';
@@ -70,11 +70,11 @@ function Checklist({ profile, onChanged }: { profile: DriverSignup; onChanged: (
     <>
       <Card dark style={{ gap: 10 }}>
         <Badge tone={banner.tone === 'neutral' ? 'lime' : banner.tone}>{`${done} of ${steps.length} steps in`}</Badge>
-        <Text style={{ color: colors.white, fontSize: 20, fontWeight: '800' }}>{banner.title}</Text>
-        <Text style={{ color: colors.mutedOnDark, fontSize: 14, lineHeight: 20 }}>{banner.text}</Text>
+        <Text style={{ color: colors.onPanel, fontSize: 20, fontWeight: '800' }}>{banner.title}</Text>
+        <Text style={{ color: colors.panelMuted, fontSize: 14, lineHeight: 20 }}>{banner.text}</Text>
         <View style={{ flexDirection: 'row', gap: 4, marginTop: 4 }}>
           {steps.map((x) => (
-            <View key={x.key} style={{ flex: 1, height: 6, borderRadius: 3, backgroundColor: x.status === 'DONE' ? colors.lime : x.status === 'IN_REVIEW' ? '#FCD34D' : x.status === 'NEEDS_ATTENTION' ? colors.danger : colors.ink2 }} />
+            <View key={x.key} style={{ flex: 1, height: 6, borderRadius: 3, backgroundColor: x.status === 'DONE' ? colors.lime : x.status === 'IN_REVIEW' ? '#FCD34D' : x.status === 'NEEDS_ATTENTION' ? colors.danger : colors.panel2 }} />
           ))}
         </View>
       </Card>
@@ -101,8 +101,8 @@ function StepRow({ step, first }: { step: DriverStep; first: boolean }) {
       onPress={() => router.push({ pathname: '/driver-step/[step]', params: { step: step.key } })}
       style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, opacity: pressed ? 0.6 : 1, borderTopWidth: first ? 0 : 1, borderTopColor: colors.line }]}
     >
-      <View style={{ width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: step.status === 'DONE' ? colors.lime : step.status === 'NEEDS_ATTENTION' ? '#FEE2E2' : colors.surface2 }}>
-        {step.status === 'DONE' ? <Icon name="check" size={20} /> : <Icon name={info.icon} size={20} color={step.status === 'NEEDS_ATTENTION' ? colors.danger : colors.ink} />}
+      <View style={{ width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: step.status === 'DONE' ? colors.lime : step.status === 'NEEDS_ATTENTION' ? colors.dangerBg : colors.surface2 }}>
+        {step.status === 'DONE' ? <Icon name="check" size={20} color={colors.onLime} /> : <Icon name={info.icon} size={20} color={step.status === 'NEEDS_ATTENTION' ? colors.danger : colors.ink} />}
       </View>
       <View style={{ flex: 1, gap: 2 }}>
         <Text style={s.strong}>{info.title}</Text>

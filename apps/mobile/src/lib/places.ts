@@ -1,4 +1,4 @@
-import type { Place, PlaceDetails, PlaceSuggestion, RideMatch, RideSearch, SavedPlace } from '@rydo/shared';
+import type { CarType, Place, PlaceDetails, PlaceSuggestion, RideMatch, RideSearch, SavedPlace } from '@rydo/shared';
 import { api } from './api';
 import { addMinutes, isoDay, nowHHMM } from './format';
 import type { Office } from './types';
@@ -51,11 +51,17 @@ export interface Draft {
   /** When the rider wants to leave (HH:mm). */
   time: string;
   seats: number;
+  /** Search filters (Find a ride → Filters). */
   womenOnly: boolean;
-  ac: boolean;
+  vehicleType: 'ANY' | 'CAR' | 'BIKE';
+  ac: 'ANY' | 'AC' | 'NON_AC';
   /** Only these car types; empty = any. */
-  carTypes: ('HATCHBACK' | 'SEDAN' | 'SUV')[];
+  carTypes: CarType[];
 }
+
+/** How many filters are switched on (shown on the Filters button). */
+export const activeFilters = (d: Draft) => (d.womenOnly ? 1 : 0) + (d.vehicleType !== 'ANY' ? 1 : 0) + (d.ac !== 'ANY' ? 1 : 0) + (d.vehicleType !== 'BIKE' && d.carTypes.length ? 1 : 0);
+export const NO_FILTERS: Pick<Draft, 'womenOnly' | 'vehicleType' | 'ac' | 'carTypes'> = { womenOnly: false, vehicleType: 'ANY', ac: 'ANY', carTypes: [] };
 
 function nextQuarter() {
   const t = nowHHMM(20);
@@ -64,7 +70,7 @@ function nextQuarter() {
   return addMinutes(`${String(h).padStart(2, '0')}:00`, q);
 }
 
-const fresh = (): Draft => ({ pickup: null, drop: null, leaveNow: false, date: isoDay(1), time: '08:30', seats: 1, womenOnly: false, ac: false, carTypes: [] });
+const fresh = (): Draft => ({ pickup: null, drop: null, leaveNow: false, date: isoDay(1), time: '08:30', seats: 1, ...NO_FILTERS });
 
 export const draft: { value: Draft; search: RideSearch | null; results: RideMatch[]; chosen: RideMatch | null } = {
   value: fresh(),
@@ -91,7 +97,8 @@ export function searchBody(d: Draft): RideSearch | null {
     toTime: addMinutes(time, d.leaveNow ? 60 : 45),
     seats: d.seats,
     womenOnly: d.womenOnly,
-    ...(d.ac ? { ac: true } : {}),
-    ...(d.carTypes.length ? { carTypes: d.carTypes } : {}),
+    ...(d.vehicleType !== 'ANY' ? { vehicleType: d.vehicleType } : {}),
+    ...(d.ac !== 'ANY' ? { ac: d.ac === 'AC' } : {}),
+    ...(d.vehicleType !== 'BIKE' && d.carTypes.length ? { carTypes: d.carTypes } : {}),
   };
 }

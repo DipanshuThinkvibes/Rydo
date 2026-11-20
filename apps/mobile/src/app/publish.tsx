@@ -4,7 +4,7 @@ import { Alert } from '@/lib/dialog';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { Place, RoutePreview, SavedPlace } from '@rydo/shared';
-import { colors } from '@rydo/ui-tokens';
+import { colors } from '@/lib/theme';
 import { api, errText } from '@/lib/api';
 import { fmtClock, fmtKm, fmtMin } from '@/lib/format';
 import { commuteEnds, getOffices, getPlaces } from '@/lib/places';
@@ -91,7 +91,7 @@ export default function Publish() {
   const placeRow = (which: 'origin' | 'destination', p: Place | null) => (
     <Pressable accessibilityRole="button" accessibilityLabel={`${which === 'origin' ? 'From' : 'To'}: ${p?.label ?? 'not set'}`} onPress={() => setPicking(which)} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 4 }}>
       <View style={which === 'origin' ? { width: 16, height: 16, borderRadius: 8, borderWidth: 3, borderColor: colors.lime } : { width: 15, height: 15, borderRadius: 3, backgroundColor: colors.lime }} />
-      <Text numberOfLines={1} style={{ flex: 1, color: p ? colors.white : colors.mutedOnDark, fontSize: 16, fontWeight: '800' }}>{p ? p.label : which === 'origin' ? 'Where do you start?' : 'Where are you going?'}</Text>
+      <Text numberOfLines={1} style={{ flex: 1, color: p ? colors.onPanel : colors.panelMuted, fontSize: 16, fontWeight: '800' }}>{p ? p.label : which === 'origin' ? 'Where do you start?' : 'Where are you going?'}</Text>
     </Pressable>
   );
 
@@ -102,10 +102,10 @@ export default function Publish() {
         <Text accessibilityRole="header" style={s.h1}>Publish a ride</Text>
       </View>
       <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 130, gap: 22 }}>
-        <View style={{ backgroundColor: colors.ink, borderRadius: 22, padding: 18, gap: 10 }}>
+        <View style={{ backgroundColor: colors.panel, borderRadius: 22, padding: 18, gap: 10 }}>
           {placeRow('origin', origin)}
           {placeRow('destination', destination)}
-          <Text style={{ color: colors.mutedOnDark, fontSize: 14 }}>{preview ? `${fmtKm(preview.distanceMeters)} · about ${fmtMin(preview.durationSeconds)} · riders on this route get matched` : 'Tap a line to change it'}</Text>
+          <Text style={{ color: colors.panelMuted, fontSize: 14 }}>{preview ? `${fmtKm(preview.distanceMeters)} · about ${fmtMin(preview.durationSeconds)} · riders on this route get matched` : 'Tap a line to change it'}</Text>
         </View>
 
         <View style={{ gap: 12 }}>
@@ -159,7 +159,7 @@ export default function Publish() {
               const on = days.includes(n);
               return (
                 <Pressable key={d} accessibilityRole="checkbox" accessibilityLabel={d} accessibilityState={{ checked: on }} onPress={() => setDays((x) => (on ? x.filter((y) => y !== n) : [...x, n].sort()))} style={{ width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: on ? colors.lime : colors.white, borderWidth: 1.5, borderColor: on ? colors.lime : colors.lineStrong }}>
-                  <Text style={{ fontWeight: '800', color: colors.ink }}>{d}</Text>
+                  <Text style={{ fontWeight: '800', color: on ? colors.onLime : colors.ink }}>{d}</Text>
                 </Pressable>
               );
             })}

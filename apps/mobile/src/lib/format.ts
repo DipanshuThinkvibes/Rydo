@@ -142,3 +142,14 @@ export const etaSeconds = (meters: number) => meters / 6.5;
 
 /** Rough CO₂ saved by sharing one car trip (≈150 g per km). */
 export const co2Kg = (meters: number) => (meters / 1000) * 0.15;
+
+/** "Just now", "12 min ago", "Today, 8:40 AM", "Yesterday, 6:10 PM", "3 Nov, 9:00 AM" (same as the web). */
+export function fmtWhenFriendly(iso: string | Date, now: Date = new Date()): string {
+  const d = new Date(iso);
+  const mins = Math.round((now.getTime() - d.getTime()) / 60_000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins} min ago`;
+  if (isoDay(0, d) === isoDay(0, now)) return `Today, ${fmtTime(d)}`;
+  if (isoDay(0, d) === isoDay(-1, now)) return `Yesterday, ${fmtTime(d)}`;
+  return `${d.getDate()} ${MONTHS[d.getMonth()]}${d.getFullYear() === now.getFullYear() ? '' : ` ${d.getFullYear()}`}, ${fmtTime(d)}`;
+}

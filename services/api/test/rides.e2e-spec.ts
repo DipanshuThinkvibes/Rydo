@@ -45,8 +45,8 @@ describe('Ride plans and generation', () => {
   beforeAll(async () => {
     ({ app, messages, prisma } = await createApp());
     await resetDb(prisma);
-    orgs.A = (await prisma.organization.create({ data: { name: 'Company A', slug: 'a', emailDomains: ['a.test'], status: 'ACTIVE' } })).id;
-    orgs.B = (await prisma.organization.create({ data: { name: 'Company B', slug: 'b', emailDomains: ['b.test'], status: 'ACTIVE' } })).id;
+    orgs.A = (await prisma.organization.create({ data: { licenses: { create: [{ product: 'SHARE' }] }, name: 'Company A', slug: 'a', emailDomains: ['a.test'], status: 'ACTIVE' } })).id;
+    orgs.B = (await prisma.organization.create({ data: { licenses: { create: [{ product: 'SHARE' }] }, name: 'Company B', slug: 'b', emailDomains: ['b.test'], status: 'ACTIVE' } })).id;
     await prisma.$executeRaw`INSERT INTO offices (id, organization_id, name, address, location, is_default)
       VALUES (gen_random_uuid(), ${orgs.A}::uuid, 'Bellandur', 'ORR', ST_SetSRID(ST_MakePoint(${OFFICE.lng}, ${OFFICE.lat}), 4326)::geography, true)`;
     await person('rahul', 'A', ['RIDER', 'DRIVER'], 'VERIFIED');

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { DEFAULT_ORG_SETTINGS, orgFeatures, type OrgFeatures, type OrgSettings, type RideMatch, type RideSearch } from '@rydo/shared';
+import { DEFAULT_ORG_SETTINGS, orgFeatures, type OrgFeatures, type CarType, type OrgSettings, type RideMatch, type RideSearch } from '@rydo/shared';
 import { PrismaService } from '../prisma/prisma.service';
 
 interface Row {
@@ -19,7 +19,7 @@ interface Row {
   driverMembershipId: string;
   driverName: string;
   type: 'CAR' | 'BIKE';
-  carType: 'HATCHBACK' | 'SEDAN' | 'SUV' | null;
+  carType: CarType | null;
   make: string;
   model: string;
   color: string;

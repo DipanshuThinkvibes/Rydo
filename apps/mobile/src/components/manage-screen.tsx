@@ -3,7 +3,7 @@ import { KeyboardAvoidingView, Platform, RefreshControl, ScrollView, Text, View 
 import { Redirect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { OrgRoleName } from '@rydo/shared';
-import { colors } from '@rydo/ui-tokens';
+import { colors } from '@/lib/theme';
 import { useSession } from '@/lib/session';
 import { BackButton, Notice, s } from './ui';
 
@@ -59,7 +59,7 @@ export function Bars({ rows, unit = '' }: { rows: { label: string; value: number
             <Text style={[s.small, { color: colors.ink, fontWeight: '800' }]}>{r.value}{unit}</Text>
           </View>
           <View style={{ height: 8, borderRadius: 4, backgroundColor: colors.surface2 }}>
-            <View style={{ width: `${(r.value / max) * 100}%`, height: 8, borderRadius: 4, backgroundColor: colors.ink }} />
+            <View style={{ width: `${(r.value / max) * 100}%`, height: 8, borderRadius: 4, backgroundColor: colors.inkBg }} />
           </View>
         </View>
       ))}

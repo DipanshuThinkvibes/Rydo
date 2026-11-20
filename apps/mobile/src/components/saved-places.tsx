@@ -1,14 +1,14 @@
 import { useState } from 'react';
-import { Modal, Pressable, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import type { Place, SavedPlace } from '@rydo/shared';
-import { colors } from '@rydo/ui-tokens';
+import { colors } from '@/lib/theme';
 import { api, errText } from '@/lib/api';
 import { Alert } from '@/lib/dialog';
 import { officePlace } from '@/lib/places';
 import type { Office } from '@/lib/types';
 import { Icon } from './icons';
 import { PlacePicker, type Saved } from './place-picker';
-import { Badge, Button, Label, s } from './ui';
+import { Badge, Button, Label, s, SwitchRow } from './ui';
 
 type Kind = 'HOME' | 'OFFICE';
 
@@ -97,6 +97,7 @@ export function SavedPlaces({
       </Pressable>
 
       {mine.length === 0 && suggestions.length === 0 ? <Text style={s.small}>No {noun} address saved yet. Your default {noun} is used to find rides.</Text> : null}
+      {mine.length > 1 ? <Text style={s.small}>Your default {noun} is used for quick rides and for My week. Tap “Set as default” to change it.</Text> : null}
 
       {mine.map((p) => {
         const picked = selectedId ? p.id === selectedId : p.isDefault;
@@ -109,7 +110,7 @@ export function SavedPlaces({
           onPress={() => onSelect?.(p)}
           style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: 16, borderWidth: picked ? 2 : 1, borderColor: picked ? colors.ink : colors.line, backgroundColor: colors.white }}
         >
-          <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: p.isDefault ? colors.ink : colors.surface2, alignItems: 'center', justifyContent: 'center' }}>
+          <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: p.isDefault ? colors.inkBg : colors.surface2, alignItems: 'center', justifyContent: 'center' }}>
             <Icon name={tab === 'HOME' ? 'house' : 'building'} size={18} color={p.isDefault ? colors.lime : colors.ink} />
           </View>
           <View style={{ flex: 1, gap: 2 }}>
@@ -119,8 +120,16 @@ export function SavedPlaces({
             </View>
             <Text numberOfLines={1} style={s.small}>{p.address}</Text>
             {!p.isDefault ? (
-              <Pressable accessibilityRole="button" disabled={!!busy} onPress={() => run(`m${p.id}`, () => api('POST', `/me/places/${p.id}/default`))} hitSlop={6}>
-                <Text style={{ fontSize: 13, fontWeight: '800', color: colors.ink, textDecorationLine: 'underline' }}>{busy === `m${p.id}` ? 'Saving…' : 'Make default'}</Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Make ${p.name} your default ${noun}`}
+                disabled={!!busy}
+                onPress={() => run(`m${p.id}`, () => api('POST', `/me/places/${p.id}/default`))}
+                hitSlop={6}
+                style={{ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4, paddingHorizontal: 10, height: 30, borderRadius: 15, borderWidth: 1.5, borderColor: colors.lineStrong }}
+              >
+                <Icon name="star" size={13} color={colors.ink} />
+                <Text style={{ fontSize: 13, fontWeight: '800', color: colors.ink }}>{busy === `m${p.id}` ? 'Saving…' : 'Set as default'}</Text>
               </Pressable>
             ) : null}
           </View>
@@ -156,11 +165,12 @@ export function SavedPlaces({
   );
 }
 
-/** Rename, change the address, or switch between home and office. */
+/** Rename, change the address, switch between home, office and other, and make it the default. */
 function EditPlace({ place, onClose, onSaved }: { place: SavedPlace | null; onClose: () => void; onSaved: () => void }) {
   const [name, setName] = useState('');
   const [addr, setAddr] = useState<Place | null>(null);
   const [kind, setKind] = useState<SavedPlace['label']>('HOME');
+  const [makeDefault, setMakeDefault] = useState(false);
   const [picking, setPicking] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -172,6 +182,8 @@ function EditPlace({ place, onClose, onSaved }: { place: SavedPlace | null; onCl
         name: name.trim(),
         label: kind,
         ...(addr ? { address: addr.label, lat: addr.lat, lng: addr.lng } : {}),
+        // Only "make it the default": the old default stops being one. "Other" places have no default.
+        ...(makeDefault && kind !== 'OTHER' && !(place.isDefault && kind === place.label) ? { isDefault: true } : {}),
       });
       onSaved();
     } catch (e) {
@@ -192,10 +204,12 @@ function EditPlace({ place, onClose, onSaved }: { place: SavedPlace | null; onCl
         setName(place?.name ?? '');
         setAddr(null);
         setKind(place?.label ?? 'HOME');
+        setMakeDefault(!!place?.isDefault);
       }}
     >
       <Pressable accessibilityLabel="Close" onPress={onClose} style={{ flex: 1, backgroundColor: 'rgba(11,20,38,0.45)' }} />
-      <View style={{ backgroundColor: colors.white, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 36, gap: 14 }}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView keyboardShouldPersistTaps="handled" style={{ backgroundColor: colors.white, borderTopLeftRadius: 28, borderTopRightRadius: 28 }} contentContainerStyle={{ padding: 20, paddingBottom: 36, gap: 14 }}>
         <Text style={s.h2}>Edit address</Text>
         <Label>Name</Label>
         <TextInput value={name} onChangeText={setName} maxLength={60} accessibilityLabel="Name" placeholder="Home, Mom's place, Acme Tech…" placeholderTextColor={colors.muted} style={{ height: 52, borderRadius: 14, borderWidth: 1.5, borderColor: colors.lineStrong, backgroundColor: colors.surface, paddingHorizontal: 14, fontSize: 16, color: colors.ink }} />
@@ -205,18 +219,41 @@ function EditPlace({ place, onClose, onSaved }: { place: SavedPlace | null; onCl
           <Text numberOfLines={2} style={{ flex: 1, fontSize: 15, color: colors.ink }}>{addr?.label ?? place?.address}</Text>
           <Text style={{ fontWeight: '800', color: colors.ink }}>Change</Text>
         </Pressable>
-        <View style={{ flexDirection: 'row', gap: 8 }}>
-          {(['HOME', 'OFFICE', 'OTHER'] as const).map((k) => (
-            <Pressable key={k} accessibilityRole="radio" accessibilityState={{ checked: kind === k }} onPress={() => setKind(k)} style={{ height: 40, paddingHorizontal: 14, borderRadius: 20, justifyContent: 'center', backgroundColor: kind === k ? colors.ink : colors.surface2 }}>
-              <Text style={{ fontWeight: '700', color: kind === k ? colors.white : colors.ink }}>{k === 'HOME' ? 'Home' : k === 'OFFICE' ? 'Office' : 'Other'}</Text>
-            </Pressable>
-          ))}
+        <Label>Type</Label>
+        <View accessibilityRole="radiogroup" style={{ flexDirection: 'row', gap: 8 }}>
+          {(['HOME', 'OFFICE', 'OTHER'] as const).map((k) => {
+            const on = kind === k;
+            return (
+              <Pressable
+                key={k}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: on }}
+                onPress={() => {
+                  setKind(k);
+                  if (k === 'OTHER') setMakeDefault(false);
+                }}
+                hitSlop={4}
+                style={({ pressed }) => ({ flex: 1, height: 46, borderRadius: 14, flexDirection: 'row', gap: 6, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: on ? colors.ink : colors.lineStrong, backgroundColor: on ? colors.inkBg : pressed ? colors.surface2 : colors.white })}
+              >
+                <Icon name={k === 'HOME' ? 'house' : k === 'OFFICE' ? 'building' : 'pin'} size={16} color={on ? colors.lime : colors.ink} />
+                <Text style={{ fontWeight: '800', color: on ? colors.onInk : colors.ink }}>{k === 'HOME' ? 'Home' : k === 'OFFICE' ? 'Office' : 'Other'}</Text>
+              </Pressable>
+            );
+          })}
         </View>
+        {kind === 'OTHER' ? (
+          <Text style={s.small}>Other places show up when you search, but are never the default.</Text>
+        ) : place?.isDefault && kind === place.label ? (
+          <Text style={s.small}>This is your default {kind === 'HOME' ? 'home' : 'office'}. To change it, make another address the default.</Text>
+        ) : (
+          <SwitchRow label={`Make this my default ${kind === 'HOME' ? 'home' : 'office'}`} value={makeDefault} onChange={setMakeDefault} />
+        )}
         <View style={{ flexDirection: 'row', gap: 10 }}>
           <Button small variant="ghost" label="Cancel" style={{ flex: 1 }} onPress={onClose} />
           <Button small label="Save" style={{ flex: 1 }} loading={busy} disabled={!name.trim()} onPress={save} />
         </View>
-      </View>
+      </ScrollView>
+      </KeyboardAvoidingView>
       <PlacePicker visible={picking} title="New address" saved={saved} onClose={() => setPicking(false)} onPick={(p) => (setAddr(p), setPicking(false))} />
     </Modal>
   );

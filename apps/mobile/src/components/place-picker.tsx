@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Modal, Pressable, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { Place, PlaceSuggestion, SavedPlace } from '@rydo/shared';
-import { colors } from '@rydo/ui-tokens';
+import { colors } from '@/lib/theme';
 import { errText } from '@/lib/api';
 import { autocomplete, newPlaceSession, officePlace, placeFromSuggestion, savedPlace } from '@/lib/places';
 import type { Office } from '@/lib/types';
@@ -77,7 +77,7 @@ export function PlacePicker({ visible, title, saved, onPick, onClose }: { visibl
 
   const row = (key: string, icon: IconName, main: string, sub: string | undefined, onPress: () => void) => (
     <Pressable key={key} accessibilityRole="button" onPress={onPress} style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 12, opacity: pressed ? 0.6 : 1 })}>
-      <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: icon === 'building' ? colors.ink : colors.surface2, alignItems: 'center', justifyContent: 'center' }}>
+      <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: icon === 'building' ? colors.inkBg : colors.surface2, alignItems: 'center', justifyContent: 'center' }}>
         <Icon name={icon} size={20} color={icon === 'building' ? colors.lime : colors.ink} />
       </View>
       <View style={{ flex: 1 }}>

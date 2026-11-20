@@ -2,37 +2,36 @@ import { INestApplication } from '@nestjs/common';
 import { api, createApp, resetDb } from './helpers';
 import { PrismaService } from '../src/prisma/prisma.service';
 
-/** "Find your company" for the sign-up screens: public, active companies only, no employee data. */
-describe('Company search for sign-up', () => {
+/** The sign-up screen finds a company by name from the real database. */
+describe('Public company search', () => {
   let app: INestApplication;
   let prisma: PrismaService;
-  let org: string;
 
   beforeAll(async () => {
     ({ app, prisma } = await createApp());
     await resetDb(prisma);
-    org = (await prisma.organization.create({ data: { name: 'Thinkvibes', slug: 'cs', emailDomains: ['cs.test'], status: 'ACTIVE' } })).id;
-    await prisma.organization.create({ data: { name: 'Thinkvibes Labs', slug: 'cs-p', emailDomains: ['p-cs.test'], status: 'PENDING' } });
-    await prisma.department.createMany({ data: [{ organizationId: org, name: 'Sales' }, { organizationId: org, name: 'Engineering' }] });
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO offices (id, organization_id, name, address, location, is_default) VALUES (gen_random_uuid(), '${org}', 'Head office', 'ORR', ST_SetSRID(ST_MakePoint(77.68, 12.93), 4326)::geography, true)`,
-    );
+    const a = await prisma.organization.create({ data: { licenses: { create: [{ product: 'SHARE' }] }, name: 'Thinkvibes', slug: 'tv', emailDomains: ['thinkvibes.com'], status: 'ACTIVE', contactEmail: 'secret@tv.com' } });
+    await prisma.department.createMany({ data: [{ organizationId: a.id, name: 'Engineering' }, { organizationId: a.id, name: 'Design' }] });
+    await prisma.organization.create({ data: { licenses: { create: [{ product: 'SHARE' }] }, name: 'Thinkwaiting', slug: 'tw', emailDomains: ['tw.com'], status: 'PENDING' } });
   });
   afterAll(() => app.close());
 
-  it('finds active companies by name with domains, departments and offices', async () => {
-    const found = (await api(app).get('/api/v1/auth/companies?q=THINK').expect(200)).body.data;
-    expect(found).toEqual([{ id: org, name: 'Thinkvibes', domains: ['cs.test'], departments: ['Engineering', 'Sales'], offices: ['Head office'] }]);
-    // Spaces, case and the email domain all find it; LIKE wildcards are taken literally.
-    expect((await api(app).get('/api/v1/auth/companies?q=think%20vibes').expect(200)).body.data.map((c: { name: string }) => c.name)).toEqual(['Thinkvibes']);
-    expect((await api(app).get('/api/v1/auth/companies?q=cs.test').expect(200)).body.data.map((c: { name: string }) => c.name)).toEqual(['Thinkvibes']);
-    expect((await api(app).get('/api/v1/auth/companies?q=%25%25').expect(200)).body.data).toEqual([]);
-    await api(app).get('/api/v1/auth/companies?q=t').expect(400);
-    expect((await api(app).get('/api/v1/auth/companies?q=nobody').expect(200)).body.data).toEqual([]);
+  it('finds a live company without signing in, ignoring case, with only the sign-up details', async () => {
+    const r = (await api(app).get('/api/v1/public/companies?q=THINK').expect(200)).body.data;
+    expect(r).toHaveLength(1);
+    expect(r[0]).toMatchObject({ name: 'Thinkvibes', domains: ['thinkvibes.com'], departments: ['Design', 'Engineering'], offices: [] });
+    expect(JSON.stringify(r)).not.toContain('secret@tv.com');
   });
 
-  it('returns one company by id; unknown or pending ones are not found', async () => {
-    expect((await api(app).get(`/api/v1/auth/companies/${org}`).expect(200)).body.data.name).toBe('Thinkvibes');
-    await api(app).get('/api/v1/auth/companies/00000000-0000-4000-8000-000000000000').expect(404);
+  it('ignores spaces and finds a company by its email domain; wildcards are taken literally', async () => {
+    expect((await api(app).get('/api/v1/public/companies?q=think%20vibes').expect(200)).body.data.map((c: { name: string }) => c.name)).toEqual(['Thinkvibes']);
+    expect((await api(app).get('/api/v1/public/companies?q=thinkvibes.com').expect(200)).body.data.map((c: { name: string }) => c.name)).toEqual(['Thinkvibes']);
+    expect((await api(app).get('/api/v1/public/companies?q=%25%25').expect(200)).body.data).toEqual([]);
+  });
+
+  it('hides companies that are not live, and needs 2 letters', async () => {
+    expect((await api(app).get('/api/v1/public/companies?q=waiting').expect(200)).body.data).toEqual([]);
+    expect((await api(app).get('/api/v1/public/companies?q=t').expect(200)).body.data).toEqual([]);
+    expect((await api(app).get('/api/v1/public/companies').expect(200)).body.data).toEqual([]);
   });
 });

@@ -3,7 +3,7 @@ import { Platform, Text, View } from 'react-native';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import type { LatLng } from '@rydo/shared';
-import { colors } from '@rydo/ui-tokens';
+import { colors, isDark } from '@/lib/theme';
 import { initials } from '@/lib/format';
 import { Icon } from './icons';
 import type { MapMarker, RouteMapProps } from './route-map-types';
@@ -25,28 +25,16 @@ const DEFAULT_REGION = { latitude: 12.9352, longitude: 77.6245, latitudeDelta: 0
 
 const toCoord = (p: LatLng) => ({ latitude: p.lat, longitude: p.lng });
 
-/** Google "night" style in RYDO ink, for the driver screens. */
-const DARK_STYLE = [
-  { elementType: 'geometry', stylers: [{ color: '#0B1426' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#8A96AD' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#0B1426' }] },
-  { featureType: 'poi', stylers: [{ visibility: 'off' }] },
-  { featureType: 'transit', stylers: [{ visibility: 'off' }] },
-  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#1E2A44' }] },
-  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#2A3858' }] },
-  { featureType: 'road', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
-  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#16213A' }] },
-  { featureType: 'landscape.natural', elementType: 'geometry', stylers: [{ color: '#101B31' }] },
-];
-
-/** Light style close to the prototype: quiet POIs, soft roads. */
+/** Quiet map (no shop, transit or road icons) on both the light and the dark Google map. */
 const LIGHT_STYLE = [
   { featureType: 'poi.business', stylers: [{ visibility: 'off' }] },
   { featureType: 'transit', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
   { featureType: 'road', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
 ];
 
-export function RouteMap({ routes = [], markers = [], dark, style, inset, children }: RouteMapProps) {
+export function RouteMap({ routes = [], markers = [], dark: darkProp, style, inset, children }: RouteMapProps) {
+  // Follows the app theme unless a screen asks for a dark map (driver screens).
+  const dark = darkProp ?? isDark();
   const ref = useRef<MapView>(null);
   const [ready, setReady] = useState(false);
 
@@ -72,12 +60,15 @@ export function RouteMap({ routes = [], markers = [], dark, style, inset, childr
   const ordered = [...routes].sort((a, b) => Number(!!a.active) - Number(!!b.active));
 
   return (
-    <View style={[{ backgroundColor: dark ? colors.ink : '#EEF1F5', overflow: 'hidden' }, style]}>
+    <View style={[{ backgroundColor: dark ? colors.inkBg : '#EEF1F5', overflow: 'hidden' }, style]}>
       <MapView
+        // Google's own light or dark map, matching the app (the default follows the phone's setting).
+        // Screens redraw when the theme changes, so the map is always created with the right scheme.
+        userInterfaceStyle={dark ? 'dark' : 'light'}
         ref={ref}
         style={{ flex: 1 }}
         provider={useGoogle ? PROVIDER_GOOGLE : undefined}
-        customMapStyle={useGoogle ? (dark ? DARK_STYLE : LIGHT_STYLE) : undefined}
+        customMapStyle={useGoogle ? LIGHT_STYLE : undefined}
         initialRegion={DEFAULT_REGION}
         onMapReady={() => setReady(true)}
         showsUserLocation={false}
@@ -100,9 +91,7 @@ export function RouteMap({ routes = [], markers = [], dark, style, inset, childr
           ),
         )}
         {markers.map((m) => (
-          <Marker key={m.id} coordinate={toCoord(m.at)} anchor={anchorOf(m)} tracksViewChanges={m.kind === 'car'} zIndex={m.kind === 'car' ? 10 : 5}>
-            <Pin m={m} dark={!!dark} />
-          </Marker>
+          <SettledMarker key={m.id} m={m} dark={!!dark} />
         ))}
       </MapView>
       {children ? (
@@ -116,25 +105,63 @@ export function RouteMap({ routes = [], markers = [], dark, style, inset, childr
 
 /** Where on the marker view the map point sits (labels sit above their dot). */
 function anchorOf(m: MapMarker) {
+  if (m.kind === 'place') return { x: 0.5, y: 1 };
   if (m.label && (m.kind === 'pickup' || m.kind === 'end' || m.kind === 'start')) return { x: 0.5, y: 0.82 };
   return { x: 0.5, y: 0.5 };
 }
 
 /** Current location: a location pin in a white badge, with a soft blue halo. */
+/**
+ * Android draws a custom marker from a snapshot. Taken too early the snapshot is blank or half drawn,
+ * so a marker keeps redrawing for a moment after it appears (cars always redraw: they move).
+ */
+function SettledMarker({ m, dark }: { m: MapMarker; dark: boolean }) {
+  const [tracking, setTracking] = useState(true);
+  useEffect(() => {
+    setTracking(true);
+    const t = setTimeout(() => setTracking(false), 800);
+    return () => clearTimeout(t);
+  }, [m.kind, m.label, dark]);
+  return (
+    <Marker coordinate={toCoord(m.at)} anchor={anchorOf(m)} tracksViewChanges={m.kind === 'car' || tracking} zIndex={m.kind === 'car' ? 10 : m.kind === 'me' ? 8 : 5}>
+      <Pin m={m} dark={dark} />
+    </Marker>
+  );
+}
+
 function MeIcon() {
   return (
     <View accessibilityLabel="You are here" style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: 'rgba(47,107,255,0.16)', alignItems: 'center', justifyContent: 'center' }}>
-      <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.youAreHere }}>
+      <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.youAreHere }}>
         <Icon name="pin" size={20} color={colors.youAreHere} />
       </View>
     </View>
   );
 }
 
+/** A saved address on the map: its name in a small card above a pin with a house or building icon. */
+function Bookmark({ m }: { m: MapMarker }) {
+  const fill = m.isDefault ? colors.lime : '#FFFFFF';
+  const fg = m.isDefault ? colors.onLime : '#0B1426';
+  return (
+    <View accessibilityLabel={m.label ? `Saved place: ${m.label}` : 'Saved place'} style={{ alignItems: 'center' }}>
+      {m.label ? (
+        <View style={{ backgroundColor: '#FFFFFF', borderRadius: 10, paddingHorizontal: 8, height: 24, justifyContent: 'center', marginBottom: 3, borderWidth: 1, borderColor: '#D7DCE5' }}>
+          <Text numberOfLines={1} style={{ color: '#0B1426', fontSize: 12, fontWeight: '800', maxWidth: 140 }}>{m.label}</Text>
+        </View>
+      ) : null}
+      <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: fill, borderWidth: 2, borderColor: '#0B1426', alignItems: 'center', justifyContent: 'center' }}>
+        <Icon name={m.icon ?? 'pin'} size={17} color={fg} />
+      </View>
+      <View style={{ width: 0, height: 0, borderLeftWidth: 6, borderRightWidth: 6, borderTopWidth: 8, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: '#0B1426', marginTop: -1 }} />
+    </View>
+  );
+}
+
 function Label({ text }: { text: string }) {
   return (
-    <View style={{ backgroundColor: colors.ink, borderRadius: 999, paddingHorizontal: 12, height: 28, justifyContent: 'center', marginBottom: 6 }}>
-      <Text numberOfLines={1} style={{ color: colors.white, fontSize: 12, fontWeight: '800', maxWidth: 180 }}>{text}</Text>
+    <View style={{ backgroundColor: colors.inkBg, borderRadius: 999, paddingHorizontal: 12, height: 28, justifyContent: 'center', marginBottom: 6 }}>
+      <Text numberOfLines={1} style={{ color: colors.onInk, fontSize: 12, fontWeight: '800', maxWidth: 180 }}>{text}</Text>
     </View>
   );
 }
@@ -149,16 +176,18 @@ function Pin({ m, dark }: { m: MapMarker; dark: boolean }) {
   switch (m.kind) {
     case 'me':
       return <MeIcon />;
+    case 'place':
+      return <Bookmark m={m} />;
     case 'start':
       return withLabel(<View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: colors.white, borderWidth: 5, borderColor: colors.ink }} />);
     case 'pickup':
       return withLabel(<View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: colors.white, borderWidth: 6, borderColor: colors.ink }} />);
     case 'end':
-      return withLabel(<View style={{ width: 20, height: 20, borderRadius: 4, backgroundColor: colors.ink, borderWidth: 3, borderColor: dark ? colors.white : colors.lime }} />);
+      return withLabel(<View style={{ width: 20, height: 20, borderRadius: 4, backgroundColor: colors.inkBg, borderWidth: 3, borderColor: dark ? colors.white : colors.lime }} />);
     case 'car': {
       const ink = !!m.inkCar;
       return (
-        <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: ink ? colors.ink : colors.lime, borderWidth: 3, borderColor: ink ? colors.white : colors.ink, alignItems: 'center', justifyContent: 'center' }}>
+        <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: ink ? colors.inkBg : colors.lime, borderWidth: 3, borderColor: ink ? colors.white : colors.ink, alignItems: 'center', justifyContent: 'center' }}>
           <Text style={{ color: ink ? colors.lime : colors.ink, fontSize: 16, fontWeight: '800', transform: [{ rotate: `${m.headingDeg ?? 0}deg` }] }}>▲</Text>
         </View>
       );
