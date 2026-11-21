@@ -8,6 +8,7 @@ import { ReportsController } from './reports.controller';
 import { MembersController } from './members.controller';
 import { OrgController } from './org.controller';
 import { StructureController } from './structure.controller';
+import { InvitesController } from './invites.controller';
 
-@Module({ controllers: [PlatformOrgsController, PlatformInsightsController, PlatformPeopleController, PlatformImpactController, PlatformLicensesController, ReportsController, MembersController, OrgController, StructureController] })
+@Module({ controllers: [PlatformOrgsController, PlatformInsightsController, PlatformPeopleController, PlatformImpactController, PlatformLicensesController, ReportsController, MembersController, OrgController, StructureController, InvitesController] })
 export class AdminModule {}

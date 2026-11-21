@@ -1,12 +1,15 @@
 import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { ORG_HEADER, SUPPORT_HEADER, applyLicenses, orgFeatures, type OrgFeatures, type OrgRoleName } from '@rydo/shared';
+import { ADMIN_ACCOUNT_MESSAGE, ORG_HEADER, SUPPORT_HEADER, applyLicenses, isAdminAccount, orgFeatures, type OrgFeatures, type OrgRoleName } from '@rydo/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppError } from '../common/app-error';
+import { env } from '../config/env';
+import { releaseExpiredBlocks } from './platform-block';
 import type { RydoRequest } from '../common/request-context';
 
 export const ORG_ROLES_KEY = 'rydo:org-roles';
 export const ORG_FEATURE_KEY = 'rydo:org-feature';
+export const ADMIN_MAY_USE_KEY = 'rydo:admin-may-use';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** Stand-in membership id for RYDO support (never matches a real row). */
 export const SUPPORT_MEMBERSHIP_ID = '00000000-0000-0000-0000-000000000000';
@@ -37,13 +40,24 @@ export class OrgGuard implements CanActivate {
     if (typeof orgId !== 'string' || !UUID.test(orgId)) throw new AppError('ORG_REQUIRED', 'Choose a company first.', 400);
     const needed = this.reflector.getAllAndOverride<OrgRoleName[]>(ORG_ROLES_KEY, [ctx.getHandler(), ctx.getClass()]) ?? [];
     const feature = this.reflector.getAllAndOverride<keyof OrgFeatures | undefined>(ORG_FEATURE_KEY, [ctx.getHandler(), ctx.getClass()]);
+    const adminMayUse = !!this.reflector.get<boolean>(ADMIN_MAY_USE_KEY, ctx.getHandler());
 
     if (req.headers[SUPPORT_HEADER] === '1') return this.support(req, orgId, needed);
 
     const membership = await this.prisma.membership.findUnique({
       where: { organizationId_userId: { organizationId: orgId, userId: req.auth!.userId } },
-      include: { roles: true, organization: { select: { status: true, features: true, licenses: { select: { product: true, status: true, startsAt: true, expiresAt: true } } } } },
+      include: { roles: true, user: { select: { photoKey: true } }, organization: { select: { status: true, features: true, licenses: { select: { product: true, status: true, startsAt: true, expiresAt: true } } } } },
     });
+    // A temporary pause by RYDO ends by itself: put the person back and carry on as active.
+    if (membership && membership.status === 'SUSPENDED' && membership.platformBlockedAt && membership.platformBlockedUntil && membership.platformBlockedUntil <= new Date()) {
+      await releaseExpiredBlocks(this.prisma, { id: membership.id });
+      membership.status = 'ACTIVE';
+      membership.platformBlockedAt = null;
+    }
+    if (membership && membership.status === 'SUSPENDED' && membership.platformBlockedAt) {
+      const until = membership.platformBlockedUntil;
+      throw new AppError('MEMBERSHIP_NOT_ACTIVE', until ? `RYDO paused your access until ${until.toISOString().slice(0, 10)}. Contact RYDO support if you think this is a mistake.` : 'RYDO paused your access. Contact RYDO support if you think this is a mistake.', 403);
+    }
     if (!membership || membership.status !== 'ACTIVE' || membership.organization.status !== 'ACTIVE') {
       throw new AppError('MEMBERSHIP_NOT_ACTIVE', "You don't have access to this company.", 403);
     }
@@ -57,6 +71,15 @@ export class OrgGuard implements CanActivate {
     }
 
     const roles = membership.roles.map((r) => r.role as OrgRoleName);
+    // Carpool (finding, offering and joining rides) is for employee accounts. An admin account never uses it, so a company
+    // admin who also wants to ride signs in with a separate employee account. Admin screens that watch rides name their admin roles.
+    if (feature === 'share' && !adminMayUse && isAdminAccount(roles) && !needed.some((r) => isAdminAccount([r]))) {
+      throw new AppError('ADMIN_ACCOUNT', ADMIN_ACCOUNT_MESSAGE, 403);
+    }
+    // Everyone needs a profile photo to ride or drive: the driver checks the rider against it, and the rider checks the driver.
+    if (feature === 'share' && !adminMayUse && env().REQUIRE_PROFILE_PHOTO === 'true' && !membership.user.photoKey) {
+      throw new AppError('PHOTO_REQUIRED', 'Add your profile photo first. Riders and drivers use it to check who is who before a ride.', 403);
+    }
     if (needed.length && !needed.some((r) => roles.includes(r))) {
       throw new AppError('FORBIDDEN', "Your role can't do this.", 403);
     }

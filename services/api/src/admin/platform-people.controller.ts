@@ -1,14 +1,19 @@
-import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Query, Req } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { AppError } from '../common/app-error';
 import { ZodPipe } from '../common/zod.pipe';
-import { Auth, type AuthContext } from '../common/request-context';
-import { PlatformAdmin } from '../tenancy/decorators';
+import { Auth, type AuthContext, type RydoRequest } from '../common/request-context';
+import { PlatformStaff } from '../tenancy/decorators';
+import { releaseExpiredBlocks } from '../tenancy/platform-block';
+import { BLOCK_DAYS, SUPPORT_MAX_BLOCK_DAYS } from '@rydo/shared';
+import { NotificationsService } from '../notifications/notifications.service';
 
 const reasonSchema = z.object({ reason: z.string().trim().min(5, 'Give a short reason (at least 5 characters).').max(300) });
+/** How long to pause someone. Leave it out (null) to pause until RYDO lifts it: only the Super Admin can do that. */
+const blockSchema = reasonSchema.extend({ days: z.union([z.literal(1), z.literal(3), z.literal(7), z.literal(14), z.literal(30)]).nullable().optional() });
 const peopleQuery = z.object({
   orgId: z.string().uuid().optional(),
   q: z.string().trim().max(60).optional(),
@@ -44,11 +49,12 @@ export const shortName = (n: string) => {
  * but never phone numbers, full emails, ID proofs, places, rides or chats: only what is needed to act.
  */
 @Controller('admin/platform')
-@PlatformAdmin()
+@PlatformStaff()
 export class PlatformPeopleController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly notify: NotificationsService,
   ) {}
 
   private since() {
@@ -68,8 +74,15 @@ export class PlatformPeopleController {
     return m;
   }
 
+  /** Company names for the filters, for the whole RYDO team (the full company list is for the Super Admin only). */
+  @Get('people/companies')
+  async companies() {
+    return { data: await this.prisma.organization.findMany({ where: { status: { not: 'PENDING' } }, select: { id: true, name: true }, orderBy: { name: 'asc' } }) };
+  }
+
   @Get('people')
   async people(@Query(new ZodPipe(peopleQuery)) q: z.infer<typeof peopleQuery>) {
+    await releaseExpiredBlocks(this.prisma);
     const where: Prisma.MembershipWhereInput = { status: { not: 'PENDING' } };
     if (q.orgId) where.organizationId = q.orgId;
     if (q.status) where.status = q.status;
@@ -108,6 +121,7 @@ export class PlatformPeopleController {
             status: m.status,
             blocked: !!m.platformBlockedAt,
             blockedAt: m.platformBlockedAt,
+            blockedUntil: m.platformBlockedUntil,
             blockReason: m.platformBlockReason,
             reportsAgainst: c.total,
             recentReportsAgainst: c.recent,
@@ -141,6 +155,7 @@ export class PlatformPeopleController {
         status: m.status,
         blocked: !!m.platformBlockedAt,
         blockedAt: m.platformBlockedAt,
+        blockedUntil: m.platformBlockedUntil,
         blockReason: m.platformBlockReason,
         reportsAgainst: cnt.total,
         recentReportsAgainst: cnt.recent,
@@ -151,32 +166,52 @@ export class PlatformPeopleController {
     };
   }
 
-  /** Blocks one person in one company at once. The company's own admin cannot lift it. */
+  /**
+   * Pauses one person in one company at once. Give a length (1, 3, 7, 14 or 30 days) and it ends by itself; leave it out to pause
+   * until RYDO lifts it. Support can only pause for a limited time; open-ended pauses are for the Super Admin. The company's own
+   * admin cannot lift it. The person is told, with the date.
+   */
   @Post('people/:id/block')
   @HttpCode(200)
-  async block(@Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body(new ZodPipe(reasonSchema)) b: z.infer<typeof reasonSchema>) {
+  async block(@Auth() auth: AuthContext, @Req() req: RydoRequest, @Param('id', ParseUUIDPipe) id: string, @Body(new ZodPipe(blockSchema)) b: z.infer<typeof blockSchema>) {
+    const days = b.days ?? null;
+    if (req.platformRole === 'SUPPORT' && (days === null || days > SUPPORT_MAX_BLOCK_DAYS)) {
+      throw new AppError('FORBIDDEN', `Support can pause someone for up to ${SUPPORT_MAX_BLOCK_DAYS} days. A longer or open-ended pause is for the Super Admin.`, 403, { days: 'Choose a length' });
+    }
+    if (days !== null && !(BLOCK_DAYS as readonly number[]).includes(days)) throw new AppError('VALIDATION_ERROR', 'Choose 1, 3, 7, 14 or 30 days.', 400, { days: 'Choose a length' });
     const m = await this.prisma.membership.findUnique({ where: { id } });
     if (!m) throw new AppError('NOT_FOUND', 'Person not found.', 404);
     if (m.userId === auth.userId) throw new AppError('CONFLICT', "You can't block yourself.", 409);
     if (m.platformBlockedAt) throw new AppError('CONFLICT', 'This person is already blocked.', 409);
     if (m.status !== 'ACTIVE' && m.status !== 'SUSPENDED') throw new AppError('CONFLICT', `Only active or suspended people can be blocked (this one is ${m.status.toLowerCase()}).`, 409);
+    const now = new Date();
+    const until = days === null ? null : new Date(now.getTime() + days * 86_400_000);
     await this.prisma.$transaction(async (tx) => {
-      await tx.membership.update({ where: { id }, data: { status: 'SUSPENDED', platformBlockedAt: new Date(), platformBlockReason: b.reason, platformBlockedById: auth.userId } });
-      await this.audit.log({ organizationId: m.organizationId, actorUserId: auth.userId, action: 'PLATFORM_MEMBER_BLOCKED', entityType: 'membership', entityId: id, before: { status: m.status }, after: { status: 'SUSPENDED', reason: b.reason } }, tx);
-      await tx.notification.create({ data: { userId: m.userId, organizationId: m.organizationId, type: 'ACCOUNT_BLOCKED', title: 'Your RYDO access was paused', body: 'RYDO support paused your access to this company. Contact RYDO support if you think this is a mistake.' } });
+      await tx.membership.update({ where: { id }, data: { status: 'SUSPENDED', platformBlockedAt: now, platformBlockReason: b.reason, platformBlockedById: auth.userId, platformBlockedUntil: until } });
+      await this.audit.log({ organizationId: m.organizationId, actorUserId: auth.userId, action: 'PLATFORM_MEMBER_BLOCKED', entityType: 'membership', entityId: id, before: { status: m.status }, after: { status: 'SUSPENDED', reason: b.reason, days, until, by: req.platformRole } }, tx);
+      await tx.notification.create({
+        data: {
+          userId: m.userId,
+          organizationId: m.organizationId,
+          type: 'ACCOUNT_BLOCKED',
+          title: 'Your RYDO access was paused',
+          body: until ? `RYDO's team paused your access to this company until ${until.toISOString().slice(0, 10)}. It starts again by itself. Contact RYDO support if you think this is a mistake.` : 'RYDO support paused your access to this company. Contact RYDO support if you think this is a mistake.',
+        },
+      });
     });
-    return { data: { id, status: 'SUSPENDED', blocked: true } };
+    return { data: { id, status: 'SUSPENDED', blocked: true, blockedUntil: until } };
   }
 
   @Post('people/:id/unblock')
   @HttpCode(200)
-  async unblock(@Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body(new ZodPipe(reasonSchema)) b: z.infer<typeof reasonSchema>) {
+  async unblock(@Auth() auth: AuthContext, @Req() req: RydoRequest, @Param('id', ParseUUIDPipe) id: string, @Body(new ZodPipe(reasonSchema)) b: z.infer<typeof reasonSchema>) {
     const m = await this.prisma.membership.findUnique({ where: { id } });
     if (!m) throw new AppError('NOT_FOUND', 'Person not found.', 404);
     if (!m.platformBlockedAt) throw new AppError('CONFLICT', 'This person is not blocked.', 409);
+    if (req.platformRole === 'SUPPORT' && !m.platformBlockedUntil) throw new AppError('FORBIDDEN', 'Only the Super Admin can lift an open-ended pause.', 403);
     await this.prisma.$transaction(async (tx) => {
-      await tx.membership.update({ where: { id }, data: { status: 'ACTIVE', platformBlockedAt: null, platformBlockReason: null, platformBlockedById: null } });
-      await this.audit.log({ organizationId: m.organizationId, actorUserId: auth.userId, action: 'PLATFORM_MEMBER_UNBLOCKED', entityType: 'membership', entityId: id, before: { status: m.status, reason: m.platformBlockReason }, after: { status: 'ACTIVE', reason: b.reason } }, tx);
+      await tx.membership.update({ where: { id }, data: { status: 'ACTIVE', platformBlockedAt: null, platformBlockReason: null, platformBlockedById: null, platformBlockedUntil: null } });
+      await this.audit.log({ organizationId: m.organizationId, actorUserId: auth.userId, action: 'PLATFORM_MEMBER_UNBLOCKED', entityType: 'membership', entityId: id, before: { status: m.status, reason: m.platformBlockReason }, after: { status: 'ACTIVE', reason: b.reason, by: req.platformRole } }, tx);
       await tx.notification.create({ data: { userId: m.userId, organizationId: m.organizationId, type: 'ACCOUNT_UNBLOCKED', title: 'Your RYDO access is back', body: 'RYDO support restored your access to this company.' } });
     });
     return { data: { id, status: 'ACTIVE', blocked: false } };

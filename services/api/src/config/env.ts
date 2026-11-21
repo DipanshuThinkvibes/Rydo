@@ -30,6 +30,8 @@ const schema = z.object({
   REDIS_URL: z.string().url().optional(),
   /** 'true' behind a reverse proxy (Caddy/Nginx/load balancer), so the real client IP is used. */
   TRUST_PROXY: z.enum(['true', 'false']).default('false'),
+  /** 'true' = everyone needs a profile photo before using rides (so riders and drivers can check who is who). Tests switch it off. */
+  REQUIRE_PROFILE_PHOTO: z.enum(['true', 'false']).default('true'),
   /** Max JSON body. Small on purpose: no RYDO request needs more. */
   BODY_LIMIT: z.string().default('100kb'),
 });

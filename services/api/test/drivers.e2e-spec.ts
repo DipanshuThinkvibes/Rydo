@@ -72,11 +72,25 @@ describe('Driver verification', () => {
   });
 
   it('HR sees the driver in the review queue; other companies do not', async () => {
-    await upload('rahul', { kind: 'VEHICLE_RC', number: 'RC123456', expiresAt: nextYear, vehicleId }, Buffer.from('%PDF-1.4'), 'application/pdf').expect(201);
+    await upload('rahul', { kind: 'VEHICLE_RC', number: 'RC-KA01AB1234', expiresAt: nextYear, vehicleId }, Buffer.from('%PDF-1.4'), 'application/pdf').expect(201);
+    await upload('rahul', { kind: 'INSURANCE', number: 'POL-998877', expiresAt: nextYear, vehicleId }).expect(201);
+    // the rest of the checklist: profile photo, both sides of the licence, three vehicle photos, safety guidelines
+    const rahulUser = await prisma.membership.findUniqueOrThrow({ where: { id: ms.rahul } });
+    await prisma.user.update({ where: { id: rahulUser.userId }, data: { photoKey: 'users/rahul/photo.png' } });
+    await api(app).post('/api/v1/driver/guidelines').set(as('rahul', 'A')).send({ agree: true }).expect(200);
+    for (const kind of ['VEHICLE_PHOTO_FRONT', 'VEHICLE_PHOTO_SIDE', 'VEHICLE_PHOTO_INSIDE']) {
+      await api(app).post('/api/v1/driver/documents').set(as('rahul', 'A')).field('kind', kind).field('vehicleId', vehicleId).attach('file', png, { filename: 'p.png', contentType: 'image/png' }).expect(201);
+    }
+    await api(app).patch('/api/v1/driver/profile').set(as('rahul', 'A')).send({ details: { dateOfBirth: '1990-05-10', licenseClass: 'LMV' } }).expect(200);
+    await api(app).post('/api/v1/driver/documents').set(as('rahul', 'A')).field('kind', 'DRIVING_LICENSE').field('number', 'KA0120190001234').field('expiresAt', nextYear).attach('file', png, { filename: 'f.png', contentType: 'image/png' }).attach('fileBack', png, { filename: 'b.png', contentType: 'image/png' }).expect(201);
+    // HR hears nothing until the driver applies and the vehicle check passes
+    expect((await api(app).get('/api/v1/admin/drivers?status=PENDING').set(as('hrA', 'A')).expect(200)).body.data).toHaveLength(0);
+    await api(app).post('/api/v1/driver/application').set(as('rahul', 'A')).send({ dateOfBirth: '1990-05-10', licenseClass: 'LMV', drivingSince: 2012, declaration: true }).expect(200);
     const queue = (await api(app).get('/api/v1/admin/drivers?status=PENDING').set(as('hrA', 'A')).expect(200)).body.data;
     expect(queue).toHaveLength(1);
     expect(queue[0]).toMatchObject({ id: driverId, name: 'rahul person', needsReview: true });
-    expect(queue[0].documents).toHaveLength(2);
+    expect(queue[0].documents).toHaveLength(6);
+    expect(queue[0].vehicles[0]).toMatchObject({ checkStatus: 'VERIFIED' });
     expect((await api(app).get('/api/v1/admin/drivers').set(as('hrB', 'B')).expect(200)).body.data).toHaveLength(0);
     await api(app).post(`/api/v1/admin/drivers/${driverId}/verify`).set(as('hrB', 'B')).expect(404);
   });

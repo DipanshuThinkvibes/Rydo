@@ -6,7 +6,7 @@ import { api, selectedOrg, supportView, type SupportView } from "./api";
 import { IDLE_LIMIT_MS, SESSION_ENDED_EVENT, rememberEnd } from "./session-end";
 
 interface Me {
-  user: { id: string; email: string; name: string; isPlatformAdmin: boolean; platformRole?: "SUPER_ADMIN" | "SUPPORT" | null };
+  user: { id: string; email: string; name: string; isPlatformAdmin: boolean; platformRole?: "SUPER_ADMIN" | "SUPPORT" | null; /** false = no profile photo yet */ hasPhoto?: boolean };
   memberships: MembershipSummary[];
 }
 

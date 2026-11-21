@@ -27,6 +27,7 @@ export class RidePlansController {
     if (!driver || driver.status !== 'VERIFIED') throw new AppError('FORBIDDEN', 'Only drivers verified by HR can publish rides.', 403);
     const vehicle = driver.vehicles.find((v) => v.id === b.vehicleId && v.active);
     if (!vehicle) throw new AppError('NOT_FOUND', 'Vehicle not found.', 404);
+    if (vehicle.checkStatus !== 'VERIFIED') throw new AppError('CONFLICT', 'This vehicle has not passed the vehicle check yet. Open Vehicles and run the check first.', 409);
     if (b.seats > vehicle.seatCapacity) throw new AppError('VALIDATION_ERROR', `This ${vehicle.type === 'CAR' ? 'car' : 'bike'} has ${vehicle.seatCapacity} passenger seat(s).`, 400, { seats: `At most ${vehicle.seatCapacity}` });
     if (b.womenOnly) {
       const company = await this.prisma.organization.findUniqueOrThrow({ where: { id: org.organizationId } });

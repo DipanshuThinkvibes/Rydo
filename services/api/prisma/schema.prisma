@@ -53,6 +53,13 @@ enum MembershipStatus {
   LEFT      // offboarded
 }
 
+/// How a person got their account in a company.
+enum JoinMethod {
+  SELF_SIGNUP   // signed up on their own, then HR approved
+  INVITE_LINK   // used an invite link from HR (no approval step)
+  ADDED_BY_ADMIN // created by the company or RYDO
+}
+
 enum OrgRole {
   ORG_ADMIN
   HR_ADMIN
@@ -97,6 +104,24 @@ enum VehicleType {
 enum DocumentKind {
   DRIVING_LICENSE
   VEHICLE_RC
+  INSURANCE
+  VEHICLE_PHOTO_FRONT   // number plate readable
+  VEHICLE_PHOTO_SIDE    // the whole vehicle
+  VEHICLE_PHOTO_INSIDE  // seats visible
+}
+
+/// The vehicle check comes first: RYDO checks the vehicle and its papers, and only then is the driver sent to HR.
+enum VehicleCheckStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+  EXPIRED
+}
+
+enum DriverApplicationStatus {
+  DRAFT        // still filling it in
+  NEEDS_FIXES  // the vehicle check found problems the driver must fix
+  WITH_HR      // vehicle verified, waiting for the company HR to approve
 }
 
 enum DocumentStatus {
@@ -180,6 +205,7 @@ enum SosStatus {
 }
 
 enum IssueCategory {
+  IDENTITY_MISMATCH   // the person or vehicle did not match what the app showed
   UNSAFE_DRIVING
   HARASSMENT
   LATE_OR_NO_SHOW
@@ -379,11 +405,14 @@ model Membership {
   departmentId     String?          @map("department_id") @db.Uuid
   employeeCode     String?          @map("employee_code")
   status           MembershipStatus @default(PENDING)
+  joinedVia        JoinMethod       @default(SELF_SIGNUP) @map("joined_via")
+  inviteId         String?          @map("invite_id") @db.Uuid
   decidedById      String?          @map("decided_by_id") @db.Uuid   // HR admin membership
   decidedAt        DateTime?        @map("decided_at") @db.Timestamptz
   // Set when RYDO blocks this person in this company; only RYDO can lift it (the company admin cannot reactivate).
   platformBlockedAt   DateTime? @map("platform_blocked_at") @db.Timestamptz
   platformBlockReason String?   @map("platform_block_reason")
+  platformBlockedUntil DateTime? @map("platform_blocked_until") @db.Timestamptz // null = until RYDO lifts it
   platformBlockedById String?   @map("platform_blocked_by_id") @db.Uuid
   reliabilityScore Decimal          @default(100) @map("reliability_score") @db.Decimal(5, 2)
   // Rider preferences: { womenOnly, ac, quiet, noSmoking, autoRematch, autoBookCommute, usualToOffice, usualToHome }
@@ -422,6 +451,7 @@ model SavedPlace {
   name         String
   address      String
   location     Unsupported("geography(Point,4326)")
+  isDefault    Boolean                              @default(false) @map("is_default")
   createdAt    DateTime                             @default(now()) @map("created_at") @db.Timestamptz
 
   membership Membership @relation(fields: [membershipId], references: [id])
@@ -467,6 +497,14 @@ model DriverProfile {
   preferences  Json         @default("{}")
   verifiedById String?      @map("verified_by_id") @db.Uuid
   verifiedAt   DateTime?    @map("verified_at") @db.Timestamptz
+  // Application: details first, then the vehicle check, then HR.
+  applicationStatus DriverApplicationStatus @default(DRAFT) @map("application_status")
+  submittedAt       DateTime?               @map("submitted_at") @db.Timestamptz
+  dateOfBirth       DateTime?               @map("date_of_birth") @db.Date
+  licenseClass      String?                 @map("license_class")
+  drivingSince      Int?                    @map("driving_since")
+  declaredAt        DateTime?               @map("declared_at") @db.Timestamptz
+  guidelinesAcceptedAt DateTime?            @map("guidelines_accepted_at") @db.Timestamptz
   createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz
   updatedAt    DateTime     @updatedAt @map("updated_at") @db.Timestamptz
 
@@ -491,6 +529,12 @@ model Vehicle {
   hasAc           Boolean     @default(true) @map("has_ac")
   isDefault       Boolean     @default(false) @map("is_default")
   active          Boolean     @default(true)
+  manufactureYear Int?        @map("manufacture_year")
+  fuelType        String?     @map("fuel_type")
+  // The vehicle check: what was looked at, and the result. A vehicle must be VERIFIED before its driver goes to HR.
+  checkStatus     VehicleCheckStatus @default(PENDING) @map("check_status")
+  checkedAt       DateTime?   @map("checked_at") @db.Timestamptz
+  checkResults    Json?       @map("check_results")
   createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz
 
   driver    DriverProfile @relation(fields: [driverProfileId], references: [id])
@@ -508,6 +552,7 @@ model Document {
   vehicleId       String?        @map("vehicle_id") @db.Uuid   // set for VEHICLE_RC
   kind            DocumentKind
   storageKey      String         @map("storage_key")           // private bucket; served via short-lived signed URL
+  backStorageKey  String?        @map("back_storage_key")      // the back side of a licence or smart-card RC
   number          String?                                       // license / RC number as typed
   expiresAt       DateTime?      @map("expires_at") @db.Date
   status          DocumentStatus @default(PENDING)
@@ -1027,4 +1072,20 @@ model EmployeeRegistration {
 
   @@index([organizationId])
   @@map("employee_registrations")
+}
+
+/// A link HR shares so employees can create their own account without waiting for approval. Only the hash of the secret is kept. Ends after 24 hours.
+model OrgInvite {
+  id                  String    @id @default(uuid()) @db.Uuid
+  organizationId      String    @map("organization_id") @db.Uuid
+  tokenHash           String    @unique @map("token_hash")
+  createdByMembershipId String  @map("created_by_membership_id") @db.Uuid
+  expiresAt           DateTime  @map("expires_at") @db.Timestamptz
+  revokedAt           DateTime? @map("revoked_at") @db.Timestamptz
+  maxUses             Int       @default(100) @map("max_uses")
+  usedCount           Int       @default(0) @map("used_count")
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([organizationId, createdAt])
+  @@map("org_invites")
 }

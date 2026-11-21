@@ -192,9 +192,12 @@ export function Ring({ value, size = 52, stroke = 5, tone = "ink", children }: {
   );
 }
 
-export function Avatar({ name, tone = "sky", size = 44 }: { name: string; tone?: "sky" | "orange" | "lime" | "ink"; size?: number }) {
+export function Avatar({ name, tone = "sky", size = 44, photoUrl }: { name: string; tone?: "sky" | "orange" | "lime" | "ink"; size?: number; photoUrl?: string | null }) {
   const tones = { sky: "bg-[#DCE6FF] text-[#1E3A8A]", orange: "bg-[#FFEDD5] text-[#9A3412]", lime: "bg-lime text-ink", ink: "bg-ink text-lime" };
   const letters = name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("");
+  if (photoUrl)
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={photoUrl} alt={`Photo of ${name}`} className="shrink-0 rounded-full object-cover" style={{ width: size, height: size }} />;
   return (
     <span aria-hidden="true" className={`flex shrink-0 items-center justify-center rounded-full font-extrabold ${tones[tone]}`} style={{ width: size, height: size, fontSize: size * 0.36 }}>
       {letters}

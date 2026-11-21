@@ -16,7 +16,7 @@ export interface OrgContext {
   support?: boolean;
 }
 
-export type RydoRequest = Request & { auth?: AuthContext; org?: OrgContext };
+export type RydoRequest = Request & { auth?: AuthContext; org?: OrgContext; /** Set for RYDO's own team (Super Admin or Support) by PlatformStaffGuard. */ platformRole?: 'SUPER_ADMIN' | 'SUPPORT' };
 
 /** The signed-in user (set by JwtAuthGuard). */
 export const Auth = createParamDecorator((_: unknown, ctx: ExecutionContext) => ctx.switchToHttp().getRequest<RydoRequest>().auth!);

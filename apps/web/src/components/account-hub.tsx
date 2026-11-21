@@ -60,6 +60,11 @@ const ORDER: PersonaKey[] = ["OWNER", "SUPPORT", "ORG_ADMIN", "HR_ADMIN", "OPS_A
 export function usePersonas(): PersonaKey[] {
   const { me, org } = useSession();
   const held = new Set<PersonaKey>(org?.roles ?? []);
+  // An admin account does not ride or drive, so it has no rider or driver persona (an old mixed account shows as an admin).
+  if (org && [...held].some((r) => r === "ORG_ADMIN" || r === "HR_ADMIN" || r === "OPS_ADMIN")) {
+    held.delete("RIDER");
+    held.delete("DRIVER");
+  }
   if (me?.user.isPlatformAdmin) held.add("OWNER");
   else if (me?.user.platformRole === "SUPPORT") held.add("SUPPORT");
   return ORDER.filter((p) => held.has(p));
@@ -165,7 +170,7 @@ export function AccountFrame({ children }: { children: React.ReactNode }) {
     { href: "/account", label: "Profile", icon: "user", show: true },
     { href: "/settings", label: "Preferences", icon: "settings", show: true },
     { href: "/settings/security", label: "Security", icon: "shield", show: true },
-    { href: "/settings/safety", label: "Safety & privacy", icon: "alert", show: !!org },
+    { href: "/settings/safety", label: "Safety & privacy", icon: "alert", show: !!org && !personas.some((p) => p === "ORG_ADMIN" || p === "HR_ADMIN" || p === "OPS_ADMIN") },
     { href: "/settings/role", label: roleTab, icon: persona?.icon ?? "car", show: personas.length > 0 },
   ];
   const active = (href: string) => (href === "/settings" ? path === "/settings" : path === href);

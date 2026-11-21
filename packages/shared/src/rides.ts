@@ -54,8 +54,10 @@ export interface RideMatch {
   requestStatus: 'PENDING' | 'ACCEPTED' | null;
   /** The rider saved this driver as a preferred driver. */
   preferred: boolean;
-  driver: { membershipId: string; name: string; rating: number | null; ratingCount: number };
-  vehicle: { type: 'CAR' | 'BIKE'; carType: 'HATCHBACK' | 'SEDAN' | 'SUV' | null; make: string; model: string; color: string; plateNumber: string; hasAc: boolean };
+  /** `photoUrl` is the driver's profile photo, so the rider can check who arrives. */
+  driver: { membershipId: string; name: string; rating: number | null; ratingCount: number; photoUrl?: string | null };
+  /** `verified` = the vehicle passed RYDO's vehicle check. `photoUrl` = its front photo. */
+  vehicle: { type: 'CAR' | 'BIKE'; carType: 'HATCHBACK' | 'SEDAN' | 'SUV' | null; make: string; model: string; color: string; plateNumber: string; hasAc: boolean; verified?: boolean; photoUrl?: string | null };
   from: string;
   to: string;
   /** The driver's road route as an encoded polyline (simplified for maps). */

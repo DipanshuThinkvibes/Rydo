@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { boardSchema, locationBatchSchema, ratingSchema, resolveSosSchema, sosSchema, type RatingInput } from '@rydo/shared';
 import { ZodPipe } from '../common/zod.pipe';
 import { Auth, Org, type AuthContext, type OrgContext } from '../common/request-context';
-import { OrgScoped, RequireFeature } from '../tenancy/decorators';
+import { AdminMayUse, OrgScoped, RequireFeature } from '../tenancy/decorators';
 import { Public } from '../auth/public.decorator';
 import { TripService } from './trip.service';
 
@@ -15,6 +15,8 @@ import { TripService } from './trip.service';
 export class TripController {
   constructor(private readonly trips: TripService) {}
 
+  /** Read-only: the driver, the riders on the ride and company admins watching it. */
+  @AdminMayUse()
   @Get('rides/:id/live')
   live(@Org() org: OrgContext, @Param('id', ParseUUIDPipe) id: string) {
     return this.trips.live(org, id).then((data) => ({ data }));

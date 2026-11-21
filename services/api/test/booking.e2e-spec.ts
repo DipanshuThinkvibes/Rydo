@@ -33,7 +33,7 @@ describe('Matching and booking', () => {
     ms[key] = m.id;
     if (driver) {
       const p = await prisma.driverProfile.create({ data: { membershipId: m.id, status: 'VERIFIED' } });
-      vehicles[key] = (await prisma.vehicle.create({ data: { organizationId: orgs[org], driverProfileId: p.id, type: 'CAR', make: 'Honda', model: 'City', color: 'White', plateNumber: `KA 01 ${key.slice(0, 2).toUpperCase()} 1234`, seatCapacity: 3, isDefault: true } })).id;
+      vehicles[key] = (await prisma.vehicle.create({ data: { checkStatus: 'VERIFIED', organizationId: orgs[org], driverProfileId: p.id, type: 'CAR', make: 'Honda', model: 'City', color: 'White', plateNumber: `KA 01 ${key.slice(0, 2).toUpperCase()} 1234`, seatCapacity: 3, isDefault: true } })).id;
       await prisma.document.createMany({
         data: [
           { organizationId: orgs[org], driverProfileId: p.id, kind: 'DRIVING_LICENSE', storageKey: 'x', expiresAt: nextYear, status: 'APPROVED' },

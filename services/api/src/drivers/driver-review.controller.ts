@@ -9,7 +9,10 @@ import { Auth, Org, type AuthContext, type OrgContext } from '../common/request-
 import { OrgScoped } from '../tenancy/decorators';
 import { MESSAGE_ADAPTER, MessageAdapter } from '../adapters/message.adapter';
 import { STORAGE_ADAPTER, StorageAdapter } from '../adapters/storage.adapter';
+import { ageOn } from '@rydo/shared';
 import { documentView, expiryFlags, latestDocuments } from './documents';
+
+const LABEL: Record<string, string> = { DRIVING_LICENSE: 'license', VEHICLE_RC: 'RC', INSURANCE: 'insurance', VEHICLE_PHOTO_FRONT: 'front photo', VEHICLE_PHOTO_SIDE: 'side photo', VEHICLE_PHOTO_INSIDE: 'inside photo' };
 
 const include = {
   membership: { include: { user: { select: { name: true, email: true } }, department: { select: { name: true } } } },
@@ -38,6 +41,8 @@ export class DriverReviewController {
   async list(@Org() org: OrgContext, @Query(new ZodPipe(driverListQuerySchema)) q: z.infer<typeof driverListQuerySchema>) {
     const rows = await this.prisma.driverProfile.findMany({
       where: {
+        // HR only sees applications that were sent to them: the vehicle check has already passed.
+        applicationStatus: 'WITH_HR',
         membership: {
           organizationId: org.organizationId,
           ...(q.q ? { user: { OR: [{ name: { contains: q.q, mode: 'insensitive' } }, { email: { contains: q.q, mode: 'insensitive' } }] } } : {}),
@@ -58,10 +63,13 @@ export class DriverReviewController {
         email: p.membership.user.email,
         department: p.membership.department?.name ?? null,
         status: p.status,
+        applicationStatus: p.applicationStatus,
+        submittedAt: p.submittedAt,
+        details: { licenseClass: p.licenseClass, drivingSince: p.drivingSince, age: p.dateOfBirth ? ageOn(p.dateOfBirth) : null },
         verifiedAt: p.verifiedAt,
         needsReview,
         hasExpiryWarning: documents.some((d) => d.expiringSoon || d.expired),
-        vehicles: p.vehicles.map((v) => ({ id: v.id, type: v.type, make: v.make, model: v.model, color: v.color, plateNumber: v.plateNumber, seatCapacity: v.seatCapacity, hasAc: v.hasAc, isDefault: v.isDefault })),
+        vehicles: p.vehicles.map((v) => ({ id: v.id, type: v.type, make: v.make, model: v.model, color: v.color, plateNumber: v.plateNumber, seatCapacity: v.seatCapacity, hasAc: v.hasAc, isDefault: v.isDefault, manufactureYear: v.manufactureYear, fuelType: v.fuelType, checkStatus: v.checkStatus, checkedAt: v.checkedAt, checks: v.checkResults ?? [] })),
         documents,
       };
     });
@@ -71,11 +79,13 @@ export class DriverReviewController {
 
   /** A link that works for 2 minutes. Every view is written to the audit log. */
   @Get('documents/:id/view-url')
-  async viewUrl(@Auth() auth: AuthContext, @Org() org: OrgContext, @Param('id', ParseUUIDPipe) id: string) {
+  async viewUrl(@Auth() auth: AuthContext, @Org() org: OrgContext, @Param('id', ParseUUIDPipe) id: string, @Query('side') side?: string) {
     const doc = await this.prisma.document.findFirst({ where: { id, organizationId: org.organizationId } });
     if (!doc) throw new AppError('NOT_FOUND', 'Document not found.', 404);
-    const url = await this.storage.signedReadUrl(doc.storageKey, 120);
-    await this.audit.log({ organizationId: org.organizationId, actorUserId: auth.userId, action: 'DOCUMENT_VIEWED', entityType: 'document', entityId: id });
+    const key = side === 'back' ? doc.backStorageKey : doc.storageKey;
+    if (!key) throw new AppError('NOT_FOUND', 'This document has no back side.', 404);
+    const url = await this.storage.signedReadUrl(key, 120);
+    await this.audit.log({ organizationId: org.organizationId, actorUserId: auth.userId, action: 'DOCUMENT_VIEWED', entityType: 'document', entityId: id, after: side === 'back' ? { side: 'back' } : undefined });
     return { data: { url, expiresInSeconds: 120 } };
   }
 
@@ -88,14 +98,17 @@ export class DriverReviewController {
     const license = docs.find((d) => d.kind === 'DRIVING_LICENSE');
     const vehicle = p.vehicles.find((v) => v.isDefault) ?? p.vehicles[0];
     const rc = vehicle && docs.find((d) => d.kind === 'VEHICLE_RC' && d.vehicleId === vehicle.id);
+    const insurance = vehicle && docs.find((d) => d.kind === 'INSURANCE' && d.vehicleId === vehicle.id);
     const problems: string[] = [];
     if (!license) problems.push('driving license missing');
     if (!vehicle) problems.push('no vehicle added');
     else if (!rc) problems.push('vehicle RC missing');
-    for (const d of [license, rc]) {
+    if (vehicle && !insurance) problems.push('insurance missing');
+    if (vehicle && vehicle.checkStatus !== 'VERIFIED') problems.push('the vehicle has not passed the vehicle check');
+    for (const d of [license, rc, insurance]) {
       if (!d) continue;
-      if (d.status === 'REJECTED') problems.push(`${d.kind === 'DRIVING_LICENSE' ? 'license' : 'RC'} waiting for re-upload`);
-      if (expiryFlags(d.expiresAt).expired) problems.push(`${d.kind === 'DRIVING_LICENSE' ? 'license' : 'RC'} has expired`);
+      if (d.status === 'REJECTED') problems.push(`${LABEL[d.kind]} waiting for re-upload`);
+      if (expiryFlags(d.expiresAt).expired) problems.push(`${LABEL[d.kind]} has expired`);
     }
     if (problems.length) throw new AppError('CONFLICT', `Can't verify yet: ${problems.join(', ')}.`, 409);
 

@@ -65,6 +65,6 @@ export interface AuthResult {
   accessToken?: string;
   refreshToken?: string;
   /** `platformRole` is set for RYDO staff: SUPER_ADMIN runs the owner console, SUPPORT is the support team. */
-  user: { id: string; email: string; name: string; emailVerified?: boolean; isPlatformAdmin: boolean; platformRole?: 'SUPER_ADMIN' | 'SUPPORT' | null };
+  user: { id: string; email: string; name: string; emailVerified?: boolean; isPlatformAdmin: boolean; platformRole?: 'SUPER_ADMIN' | 'SUPPORT' | null; /** Every account needs a profile photo. */ hasPhoto?: boolean };
   memberships: MembershipSummary[];
 }

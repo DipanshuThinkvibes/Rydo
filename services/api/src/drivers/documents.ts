@@ -31,6 +31,7 @@ export function documentView(d: Document) {
     status: d.status,
     rejectReason: d.rejectReason,
     uploadedAt: d.createdAt,
+    hasBack: !!d.backStorageKey,
     ...expiryFlags(d.expiresAt),
   };
 }

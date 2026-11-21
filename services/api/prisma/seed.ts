@@ -61,8 +61,8 @@ async function main() {
   });
 
   const people: { email: string; name: string; status: 'ACTIVE' | 'PENDING'; roles: ('ORG_ADMIN' | 'HR_ADMIN' | 'OPS_ADMIN' | 'RIDER' | 'DRIVER')[]; gender?: 'FEMALE' | 'MALE' }[] = [
-    { email: 'hr@acme.test', name: 'Meera Iyer', status: 'ACTIVE', roles: ['ORG_ADMIN', 'HR_ADMIN', 'RIDER'] },
-    { email: 'ops@acme.test', name: 'Omkar Ops', status: 'ACTIVE', roles: ['OPS_ADMIN', 'RIDER'] },
+    { email: 'hr@acme.test', name: 'Meera Iyer', status: 'ACTIVE', roles: ['ORG_ADMIN', 'HR_ADMIN'] },
+    { email: 'ops@acme.test', name: 'Omkar Ops', status: 'ACTIVE', roles: ['OPS_ADMIN'] },
     { email: 'rahul@acme.test', name: 'Rahul M.', status: 'ACTIVE', roles: ['RIDER'], gender: 'MALE' },
     { email: 'sneha@acme.test', name: 'Sneha R.', status: 'ACTIVE', roles: ['RIDER', 'DRIVER'], gender: 'FEMALE' },
     { email: 'priya@acme.test', name: 'Priya S.', status: 'ACTIVE', roles: ['RIDER'], gender: 'FEMALE' },
@@ -91,14 +91,18 @@ async function main() {
   for (const d of drivers) {
     const m = await prisma.membership.findFirstOrThrow({ where: { organizationId: acme.id, user: { email: d.email } }, include: { user: true } });
     if (await prisma.driverProfile.findUnique({ where: { membershipId: m.id } })) continue;
-    const profile = await prisma.driverProfile.create({ data: { membershipId: m.id, status: d.status, verifiedAt: d.status === 'VERIFIED' ? new Date() : null } });
-    const vehicle = await prisma.vehicle.create({ data: { organizationId: acme.id, driverProfileId: profile.id, type: 'CAR', hasAc: true, isDefault: true, ...d.car } });
+    const profile = await prisma.driverProfile.create({
+      data: { membershipId: m.id, status: d.status, verifiedAt: d.status === 'VERIFIED' ? new Date() : null, applicationStatus: 'WITH_HR', submittedAt: new Date(), dateOfBirth: new Date('1992-04-15'), licenseClass: 'LMV', drivingSince: 2014 },
+    });
+    const vehicle = await prisma.vehicle.create({ data: { checkStatus: 'VERIFIED', organizationId: acme.id, driverProfileId: profile.id, type: 'CAR', hasAc: true, isDefault: true, ...d.car } });
     const docStatus = d.status === 'VERIFIED' ? 'APPROVED' : 'PENDING';
     const licenseKey = `orgs/${acme.id}/drivers/${profile.id}/driving_license-sample.pdf`;
     const rcKey = `orgs/${acme.id}/drivers/${profile.id}/vehicle_rc-sample.pdf`;
+    const insuranceKey = `orgs/${acme.id}/drivers/${profile.id}/insurance-sample.pdf`;
     try {
       await putSample(licenseKey, ['SAMPLE DRIVING LICENSE', `Name: ${m.user.name}`, 'DL No: KA0120190001234', `Valid till: ${d.licenseExpiry.toISOString().slice(0, 10)}`, 'Demo document - not real']);
       await putSample(rcKey, ['SAMPLE REGISTRATION CERTIFICATE', `Owner: ${m.user.name}`, `Reg No: ${d.car.plateNumber}`, `${d.car.make} ${d.car.model}, ${d.car.color}`, 'Demo document - not real']);
+      await putSample(insuranceKey, ['SAMPLE MOTOR INSURANCE POLICY', `Insured: ${m.user.name}`, `Vehicle: ${d.car.plateNumber}`, 'Demo document - not real']);
     } catch (e) {
       console.warn(`Could not upload sample documents (is storage running?): ${(e as Error).message}`);
     }
@@ -106,6 +110,7 @@ async function main() {
       data: [
         { organizationId: acme.id, driverProfileId: profile.id, kind: 'DRIVING_LICENSE', storageKey: licenseKey, number: 'KA0120190001234', expiresAt: d.licenseExpiry, status: docStatus },
         { organizationId: acme.id, driverProfileId: profile.id, vehicleId: vehicle.id, kind: 'VEHICLE_RC', storageKey: rcKey, number: `RC-${d.car.plateNumber.replace(/ /g, '')}`, expiresAt: d.rcExpiry, status: docStatus },
+        { organizationId: acme.id, driverProfileId: profile.id, vehicleId: vehicle.id, kind: 'INSURANCE', storageKey: insuranceKey, number: `POL-${d.car.plateNumber.replace(/ /g, '')}`, expiresAt: d.rcExpiry, status: docStatus },
       ],
     });
   }

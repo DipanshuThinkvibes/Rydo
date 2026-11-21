@@ -47,19 +47,19 @@ export default function ReportsPage() {
   const [error, setError] = useState<string>();
 
   useEffect(() => {
-    if (!me?.user.isPlatformAdmin) return;
-    api<Client[]>("GET", "/admin/platform/organizations").then(setClients, () => undefined);
+    if (!me?.user.platformRole) return;
+    api<Client[]>("GET", "/admin/platform/people/companies").then(setClients, () => undefined);
     api<Summary>("GET", "/admin/platform/reports/summary").then(setSummary, () => undefined);
   }, [me]);
   useEffect(() => {
-    if (!me?.user.isPlatformAdmin) return;
+    if (!me?.user.platformRole) return;
     const p = new URLSearchParams({ page: String(page) });
     if (org) p.set("orgId", org);
     if (status) p.set("status", status);
     api<Result>("GET", `/admin/platform/reports?${p}`).then(setData, (e) => setError(e instanceof Error ? e.message : "Could not load."));
   }, [me, org, status, page]);
 
-  if (!me?.user.isPlatformAdmin) return <Notice tone="error">RYDO owner team only.</Notice>;
+  if (!me?.user.platformRole) return <Notice tone="error">RYDO team only.</Notice>;
   const pages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
 
   const tiles = summary

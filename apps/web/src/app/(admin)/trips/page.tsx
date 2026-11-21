@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { LatLng } from "@rydo/shared";
 import { api, RequestError } from "@/lib/api";
 import { useSession } from "@/lib/session";
@@ -11,6 +12,7 @@ import { Avatar, Badge, Button, EmptyState, Notice, PageHeader, Skeleton } from 
 import { Icon } from "@/components/icons";
 import { Pin, Plate } from "@/components/trip-bits";
 import { MapView, type MapMarker, type MapRoute } from "@/components/map/map-view";
+import { MismatchDialog } from "@/components/mismatch-dialog";
 import { RiderLive, Stars, useLiveRide } from "@/components/trip-live";
 
 interface Booking {
@@ -25,7 +27,7 @@ interface Booking {
   pin: string | null;
   lateCancel: boolean;
   costShareEstimate: number | null;
-  ride: { id: string; departAt: string; status: string; from: string; to: string; driverName: string; driverMembershipId: string; ratedDriver: boolean; vehicle: { make: string; model: string; color: string; plateNumber: string } };
+  ride: { id: string; departAt: string; status: string; from: string; to: string; driverName: string; driverMembershipId: string; ratedDriver: boolean; driverPhotoUrl?: string | null; vehicle: { make: string; model: string; color: string; plateNumber: string; verified?: boolean; photoUrl?: string | null } };
 }
 interface Req {
   id: string;
@@ -35,18 +37,20 @@ interface Req {
   matchScore: number | null;
   createdAt: string;
   expiresAt: string;
-  ride: { id: string; departAt: string; from: string; to: string; driverName: string; plateNumber: string };
+  ride: { id: string; departAt: string; from: string; to: string; driverName: string; driverPhotoUrl?: string | null; plateNumber: string; vehicleVerified?: boolean };
 }
 
 const reqLabel = { PENDING: "waiting for driver", ACCEPTED: "accepted", DECLINED: "declined", EXPIRED: "no answer", CANCELLED: "cancelled" };
 
 export default function TripsPage() {
   const { org } = useSession();
+  const router = useRouter();
   const [bookings, setBookings] = useState<Booking[] | null>(null);
   const [requests, setRequests] = useState<Req[]>([]);
   const [msg, setMsg] = useState<{ tone: "ok" | "error"; text: string }>();
   const [busy, setBusy] = useState<string | null>(null);
   const [picked, setPicked] = useState<string | null>(null);
+  const [reporting, setReporting] = useState<{ id: string; name: string } | null>(null);
   const now = useNow(1000);
 
   const fetchAll = useCallback(() => Promise.all([api<Booking[]>("GET", "/me/bookings"), api<Req[]>("GET", "/me/requests")]), []);
@@ -129,12 +133,17 @@ export default function TripsPage() {
                       </span>
                     </div>
                     <div className="flex items-center gap-3">
-                      <Avatar name={b.ride.driverName} size={40} />
+                      <Avatar name={b.ride.driverName} size={64} photoUrl={b.ride.driverPhotoUrl} />
                       <span className="min-w-0 text-sm">
                         <span className="block font-extrabold">{b.ride.driverName}</span>
                         {["CONFIRMED", "BOARDED"].includes(b.status) && <Link href={`/messages/${b.ride.id}`} className="text-sm font-extrabold underline">Message driver</Link>}
                         <span className="flex flex-wrap items-center gap-1.5 text-muted">{b.ride.vehicle.color} {b.ride.vehicle.make} {b.ride.vehicle.model} <Plate plate={b.ride.vehicle.plateNumber} /></span>
+                        <Badge tone={b.ride.vehicle.verified ? "success" : "warning"}>{b.ride.vehicle.verified ? "verified vehicle" : "vehicle not verified"}</Badge>
                       </span>
+                      {b.ride.vehicle.photoUrl && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={b.ride.vehicle.photoUrl} alt={`${b.ride.vehicle.make} ${b.ride.vehicle.model}`} className="ml-auto h-16 w-24 shrink-0 rounded-xl object-cover" />
+                      )}
                     </div>
                     <p className="flex items-center gap-2 text-sm">
                       <Icon name="locate" size={16} className="text-muted" />
@@ -163,6 +172,7 @@ export default function TripsPage() {
                     >
                       Cancel booking
                     </Button>}
+                    {b.status === "CONFIRMED" && <button type="button" onClick={(e) => { e.stopPropagation(); setReporting({ id: b.id, name: b.ride.driverName }); }} className="w-fit text-sm font-extrabold text-danger underline">Driver or vehicle does not match? Cancel and report</button>}
                   </article>
                 );
               })}
@@ -177,7 +187,7 @@ export default function TripsPage() {
                 return (
                   <article key={r.id} className="flex animate-rise flex-col gap-3 overflow-hidden rounded-[22px] bg-white p-4 shadow-soft">
                     <div className="flex flex-wrap items-center gap-3">
-                      <Avatar name={r.ride.driverName} tone="orange" size={40} />
+                      <Avatar name={r.ride.driverName} tone="orange" size={48} photoUrl={r.ride.driverPhotoUrl} />
                       <span className="flex min-w-0 flex-1 flex-col">
                         <span className="font-extrabold">{r.ride.driverName} · {fmtWhen(r.ride.departAt)}</span>
                         <span className="text-sm text-muted">Pickup {r.pickupLabel}{r.matchScore ? ` · ${r.matchScore}% match` : ""}</span>
@@ -241,6 +251,7 @@ export default function TripsPage() {
           </MapView>
         </div>
       </div>
+      {reporting && <MismatchDialog bookingId={reporting.id} role="RIDER" who={reporting.name} onClose={() => setReporting(null)} onDone={() => { setReporting(null); router.push("/ride"); }} />}
     </section>
   );
 }

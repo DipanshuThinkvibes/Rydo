@@ -35,24 +35,32 @@ export class CommuteService {
   async home(membershipId: string): Promise<Place | null> {
     const [h] = await this.prisma.$queryRaw<Place[]>`
       SELECT name AS label, ST_Y(location::geometry) AS lat, ST_X(location::geometry) AS lng FROM saved_places
-      WHERE membership_id = ${membershipId}::uuid AND label = 'HOME' ORDER BY created_at DESC LIMIT 1`;
+      WHERE membership_id = ${membershipId}::uuid AND label = 'HOME' ORDER BY is_default DESC, created_at DESC LIMIT 1`;
     return h ?? null;
   }
 
+  /** Sets the default home: updates it in place, or saves a new default home (other saved homes stay). */
   async setHome(org: Org, p: Place) {
-    await this.prisma.$transaction([
-      this.prisma.$executeRaw`DELETE FROM saved_places WHERE membership_id = ${org.membershipId}::uuid AND label = 'HOME'`,
-      this.prisma.$executeRaw`
-        INSERT INTO saved_places (id, membership_id, label, name, address, location, created_at)
-        VALUES (gen_random_uuid(), ${org.membershipId}::uuid, 'HOME', ${p.label}, ${p.label}, ST_SetSRID(ST_MakePoint(${p.lng}, ${p.lat}), 4326)::geography, now())`,
-    ]);
+    const n = await this.prisma.$executeRaw`
+      UPDATE saved_places SET name = ${p.label}, address = ${p.label}, location = ST_SetSRID(ST_MakePoint(${p.lng}, ${p.lat}), 4326)::geography
+      WHERE membership_id = ${org.membershipId}::uuid AND label = 'HOME' AND is_default`;
+    if (n === 0) {
+      await this.prisma.$executeRaw`
+        INSERT INTO saved_places (id, membership_id, label, name, address, location, is_default, created_at)
+        VALUES (gen_random_uuid(), ${org.membershipId}::uuid, 'HOME', ${p.label}, ${p.label}, ST_SetSRID(ST_MakePoint(${p.lng}, ${p.lat}), 4326)::geography, true, now())`;
+    }
     return this.home(org.membershipId);
   }
 
-  private async office(organizationId: string): Promise<Place | null> {
+  /** The person's default saved office, else the company's default office. */
+  private async office(org: Org): Promise<Place | null> {
+    const [mine] = await this.prisma.$queryRaw<Place[]>`
+      SELECT name AS label, ST_Y(location::geometry) AS lat, ST_X(location::geometry) AS lng FROM saved_places
+      WHERE membership_id = ${org.membershipId}::uuid AND label = 'OFFICE' ORDER BY is_default DESC, created_at DESC LIMIT 1`;
+    if (mine) return mine;
     const [o] = await this.prisma.$queryRaw<Place[]>`
       SELECT name AS label, ST_Y(location::geometry) AS lat, ST_X(location::geometry) AS lng FROM offices
-      WHERE organization_id = ${organizationId}::uuid ORDER BY is_default DESC, name LIMIT 1`;
+      WHERE organization_id = ${org.organizationId}::uuid ORDER BY is_default DESC, name LIMIT 1`;
     return o ?? null;
   }
 
@@ -124,7 +132,7 @@ export class CommuteService {
 
   /** Finds rides for every office day in the next `horizon` days that has no ride yet. */
   async plan(org: Org, horizon = 7) {
-    const [home, office] = await Promise.all([this.home(org.membershipId), this.office(org.organizationId)]);
+    const [home, office] = await Promise.all([this.home(org.membershipId), this.office(org)]);
     if (!home) throw new AppError('CONFLICT', 'Set your home first, so RYDO knows where to pick you up.', 409);
     if (!office) throw new AppError('CONFLICT', 'Your company has no office on RYDO yet. Ask your admin to add one.', 409);
     const week = await this.week(org, horizon);

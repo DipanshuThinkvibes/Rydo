@@ -265,7 +265,7 @@ export default function FindRidePage() {
                   className={`flex animate-rise cursor-pointer flex-col gap-4 rounded-[22px] border-2 bg-white p-4 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lift ${active ? "border-ink" : "border-transparent"}`}
                 >
                   <div className="flex items-center gap-3">
-                    <Avatar name={m.driver.name} />
+                    <Avatar name={m.driver.name} size={56} photoUrl={m.driver.photoUrl} />
                     <span className="flex min-w-0 flex-1 flex-col">
                       <span className="flex items-center gap-2 font-extrabold">
                         <span className="truncate">{m.driver.name}</span>
@@ -273,6 +273,7 @@ export default function FindRidePage() {
                       </span>
                       <span className="flex flex-wrap items-center gap-1.5 text-sm text-muted">
                         {m.vehicle.color} {m.vehicle.make} {m.vehicle.model} <Plate plate={m.vehicle.plateNumber} />
+                        {m.vehicle.verified && <Badge tone="success">verified vehicle</Badge>}
                       </span>
                     </span>
                     {(() => {
