@@ -45,6 +45,7 @@ describe('Profile photo is required', () => {
   it('everything else still works without a photo: signing in, the account, and uploading the photo itself', async () => {
     const me = (await api(app).get('/api/v1/me').set(w.as('priya')).expect(200)).body.data;
     expect(me.user.hasPhoto).toBe(false);
+    expect(me.user.photoRequired).toBe(true);
     await api(app).get('/api/v1/me/profile').set(w.as('priya')).expect(200);
     await api(app).get('/api/v1/me/notifications').set(w.as('priya')).expect(200);
     await api(app).post('/api/v1/me/photo/file').set(w.as('priya')).attach('file', png, { filename: 'me.png', contentType: 'image/png' }).expect(200);
@@ -56,6 +57,16 @@ describe('Profile photo is required', () => {
     await api(app).get('/api/v1/me/preferred-drivers').set(w.as('priya')).expect(200);
     // someone else without a photo is still held back
     expect((await api(app).post('/api/v1/rides/search').set(w.as('kiran')).send(search)).status).toBe(403);
+  });
+
+  it('with REQUIRE_PROFILE_PHOTO=false nobody is held back, and /me tells the apps the photo is optional', async () => {
+    e.REQUIRE_PROFILE_PHOTO = 'false';
+    try {
+      expect((await api(app).get('/api/v1/me').set(w.as('kiran')).expect(200)).body.data.user).toMatchObject({ hasPhoto: false, photoRequired: false });
+      await api(app).post('/api/v1/rides/search').set(w.as('kiran')).send(search).expect(200);
+    } finally {
+      e.REQUIRE_PROFILE_PHOTO = 'true';
+    }
   });
 
   it('removing the photo takes the permission away again', async () => {

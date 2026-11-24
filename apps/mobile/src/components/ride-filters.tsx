@@ -8,14 +8,17 @@ import { Button, Chip, Label, s, SwitchRow } from './ui';
 
 type Filters = Pick<Draft, 'womenOnly' | 'vehicleType' | 'ac' | 'carTypes'>;
 
-/** Small segmented choice: Any / Car / Bike, Any / AC / Non-AC. */
-function Segment<T extends string>({ value, options, onChange }: { value: T; options: { value: T; label: string }[]; onChange: (v: T) => void }) {
+/**
+ * Small segmented choice: Car / Bike, AC / Non-AC. Nothing picked = no preference;
+ * tapping the picked option again unpicks it (back to `none`).
+ */
+function Segment<T extends string>({ value, none, options, onChange }: { value: T; none: T; options: { value: T; label: string }[]; onChange: (v: T) => void }) {
   return (
     <View accessibilityRole="radiogroup" style={{ flexDirection: 'row', padding: 4, borderRadius: 14, backgroundColor: colors.surface2 }}>
       {options.map((o) => {
         const on = o.value === value;
         return (
-          <Pressable key={o.value} accessibilityRole="radio" accessibilityState={{ checked: on }} onPress={() => onChange(o.value)} style={[{ flex: 1, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center' }, on && { backgroundColor: colors.white, ...s.lift }]}>
+          <Pressable key={o.value} accessibilityRole="radio" accessibilityState={{ checked: on }} onPress={() => onChange(on ? none : o.value)} style={[{ flex: 1, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center' }, on && { backgroundColor: colors.white, ...s.lift }]}>
             <Text style={{ fontSize: 14, fontWeight: on ? '800' : '600', color: on ? colors.ink : colors.muted }}>{o.label}</Text>
           </Pressable>
         );
@@ -41,7 +44,7 @@ export function FiltersButton({ d, onPress }: { d: Draft; onPress: () => void })
           <Text style={{ fontSize: 13, fontWeight: '800', color: colors.onLime }}>{n}</Text>
         </View>
       ) : (
-        <Text style={s.small}>Any ride</Text>
+        <Text style={s.small}>No filters</Text>
       )}
       <Icon name="next" size={18} color={colors.muted} />
     </Pressable>
@@ -72,13 +75,14 @@ export function RideFilters({ visible, d, womenOnlyAllowed, onApply, onClose }: 
             <Label>Vehicle</Label>
             <Segment
               value={f.vehicleType}
+              none="ANY"
               options={[
-                { value: 'ANY', label: 'Any' },
                 { value: 'CAR', label: 'Car' },
                 { value: 'BIKE', label: 'Bike' },
               ]}
               onChange={(vehicleType) => setF({ ...f, vehicleType, ...(vehicleType === 'BIKE' ? { carTypes: [], ac: 'ANY' as const } : {}) })}
             />
+            {f.vehicleType === 'ANY' ? <Text style={s.small}>Pick one, or leave both off to see cars and bikes.</Text> : null}
           </View>
 
           {!bike ? (
@@ -91,20 +95,21 @@ export function RideFilters({ visible, d, womenOnlyAllowed, onApply, onClose }: 
                     return <Chip key={t} tone="lime" label={CAR_TYPE_LABEL[t]} selected={on} onPress={() => setF({ ...f, carTypes: on ? f.carTypes.filter((x) => x !== t) : [...f.carTypes, t] })} />;
                   })}
                 </View>
-                <Text style={s.small}>{f.carTypes.length ? 'Only these car types. Bikes and cars without a type are hidden.' : 'Any car type.'}</Text>
+                <Text style={s.small}>{f.carTypes.length ? 'Only these car types. Bikes and cars without a type are hidden.' : 'All car types.'}</Text>
               </View>
 
               <View style={{ gap: 10 }}>
                 <Label>Air conditioning</Label>
                 <Segment
                   value={f.ac}
+                  none="ANY"
                   options={[
-                    { value: 'ANY', label: 'Any' },
                     { value: 'AC', label: 'AC' },
                     { value: 'NON_AC', label: 'Non-AC' },
                   ]}
                   onChange={(ac) => setF({ ...f, ac })}
                 />
+                {f.ac === 'ANY' ? <Text style={s.small}>Leave both off to see AC and non-AC rides.</Text> : null}
               </View>
             </>
           ) : null}

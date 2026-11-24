@@ -14,7 +14,7 @@ import { googleAuth } from "@/lib/google-auth";
 
 type Step = 1 | 2 | 3 | 4;
 const STEPS = ["Your company", "Your details", "Verify email", "Done"];
-const blank: EmployeeDetails = { fullName: "", workEmail: "", phone: "", idType: "AADHAAR", idNumber: "", employeeId: "", managerName: "", managerEmail: "", department: "", designation: "", office: "" };
+const blank: EmployeeDetails = { fullName: "", workEmail: "", phone: "", gender: "", idType: "AADHAAR", idNumber: "", employeeId: "", managerName: "", managerEmail: "", department: "", designation: "", office: "" };
 
 /** Left panel on wide screens: where you are in the sign-up. */
 function Progress({ step }: { step: Step }) {

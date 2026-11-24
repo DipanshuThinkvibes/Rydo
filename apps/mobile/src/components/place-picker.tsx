@@ -7,6 +7,7 @@ import { errText } from '@/lib/api';
 import { autocomplete, newPlaceSession, officePlace, placeFromSuggestion, savedPlace } from '@/lib/places';
 import type { Office } from '@/lib/types';
 import { Icon, type IconName } from './icons';
+import { DEFAULT_PIN, PinAdjust } from './pin-picker';
 import { Label, Notice, RoundButton } from './ui';
 
 export interface Saved {
@@ -33,9 +34,15 @@ export function buildSaved(places: SavedPlace[], offices: Office[], current?: Pl
   return [...(current ? [{ key: 'here', title: 'Current location', sub: 'Where you are now', icon: 'pin' as const, place: current }] : []), ...mine, ...company];
 }
 
-/** Full-screen search for a place: saved places first, then Google suggestions from the API. */
+/**
+ * Full-screen search for a place: saved places first, then Google suggestions from the API.
+ * A search result, the current location or "Set location on map" opens a map with a movable pin to mark the exact spot.
+ */
 export function PlacePicker({ visible, title, saved, onPick, onClose }: { visible: boolean; title: string; saved: Saved[]; onPick: (p: Place) => void; onClose: () => void }) {
   const [q, setQ] = useState('');
+  /** Set while the pin is being placed on the map. */
+  const [adjust, setAdjust] = useState<Place | null>(null);
+  const here = saved.find((sv) => sv.key === 'here')?.place ?? null;
   const [items, setItems] = useState<PlaceSuggestion[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -46,6 +53,7 @@ export function PlacePicker({ visible, title, saved, onPick, onClose }: { visibl
     setQ('');
     setItems([]);
     setError(undefined);
+    setAdjust(null);
     session.current = newPlaceSession();
   }, [visible]);
 
@@ -67,7 +75,7 @@ export function PlacePicker({ visible, title, saved, onPick, onClose }: { visibl
   const pick = async (s: PlaceSuggestion) => {
     setBusy(true);
     try {
-      onPick(await placeFromSuggestion(s, session.current));
+      setAdjust(await placeFromSuggestion(s, session.current));
     } catch (e) {
       setError(errText(e));
     } finally {
@@ -88,8 +96,12 @@ export function PlacePicker({ visible, title, saved, onPick, onClose }: { visibl
   );
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose} presentationStyle="pageSheet">
+    <Modal visible={visible} animationType="slide" onRequestClose={() => (adjust ? setAdjust(null) : onClose())} presentationStyle="pageSheet">
       <SafeAreaView style={{ flex: 1, backgroundColor: colors.white }}>
+        {adjust ? (
+          <PinAdjust start={adjust} here={here} title={title} onBack={() => setAdjust(null)} onConfirm={onPick} />
+        ) : (
+        <>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16 }}>
           <RoundButton icon="close" label="Close" onPress={onClose} size={44} />
           <Text style={{ fontSize: 20, fontWeight: '800', color: colors.ink }}>{title}</Text>
@@ -114,15 +126,19 @@ export function PlacePicker({ visible, title, saved, onPick, onClose }: { visibl
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 40 }}
           keyExtractor={(i) => i.placeId}
           ListHeaderComponent={
-            q.trim().length < 2 && saved.length ? (
+            q.trim().length < 2 ? (
               <View style={{ paddingTop: 18 }}>
-                <Label>Saved</Label>
-                {saved.map((sv) => row(sv.key, sv.icon, sv.title, sv.sub, () => onPick(sv.place)))}
+                {row('map', 'pin', 'Set location on map', 'Drop a pin at a gate or landmark', () => setAdjust({ label: 'Pinned location', ...(here ?? DEFAULT_PIN) }))}
+                {saved.length ? <Label>Saved</Label> : null}
+                {/* The current location is only roughly right: place the pin on the exact spot. Saved addresses are exact already. */}
+                {saved.map((sv) => row(sv.key, sv.icon, sv.title, sv.sub, () => (sv.key === 'here' ? setAdjust(sv.place) : onPick(sv.place))))}
               </View>
             ) : undefined
           }
           renderItem={({ item }) => row(item.placeId, 'pin', item.main, item.secondary, () => pick(item))}
         />
+        </>
+        )}
       </SafeAreaView>
     </Modal>
   );

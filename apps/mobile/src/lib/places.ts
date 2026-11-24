@@ -1,4 +1,4 @@
-import type { CarType, Place, PlaceDetails, PlaceSuggestion, RideMatch, RideSearch, SavedPlace } from '@rydo/shared';
+import type { CarType, LatLng, Place, PlaceDetails, PlaceSuggestion, ReverseGeocode, RideMatch, RideSearch, SavedPlace } from '@rydo/shared';
 import { api } from './api';
 import { addMinutes, isoDay, nowHHMM } from './format';
 import type { Office } from './types';
@@ -41,6 +41,16 @@ export async function placeFromSuggestion(s: PlaceSuggestion, session: string): 
   return { label: d.label || s.main, lat: d.lat, lng: d.lng };
 }
 
+/** The street address under a dropped pin (null when none is known). */
+export const reverseGeocode = (at: LatLng) => api<ReverseGeocode>('GET', `/maps/reverse?lat=${at.lat.toFixed(6)}&lng=${at.lng.toFixed(6)}`).then((r) => r.label);
+
+/** Metres between two spots (good enough for "did the pin move"). */
+export function metresBetween(a: LatLng, b: LatLng) {
+  const r = 6371000, rad = (d: number) => (d * Math.PI) / 180;
+  const h = Math.sin(rad(b.lat - a.lat) / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(rad(b.lng - a.lng) / 2) ** 2;
+  return 2 * r * Math.asin(Math.sqrt(h));
+}
+
 // ── Ride search draft: shared by Plan your ride → Results → Request ──
 
 export interface Draft {
@@ -48,7 +58,7 @@ export interface Draft {
   drop: Place | null;
   leaveNow: boolean;
   date: string;
-  /** When the rider wants to leave (HH:mm). */
+  /** When the rider wants to leave (HH:mm), typed by the rider; '' until typed. */
   time: string;
   seats: number;
   /** Search filters (Find a ride → Filters). */
@@ -70,7 +80,7 @@ function nextQuarter() {
   return addMinutes(`${String(h).padStart(2, '0')}:00`, q);
 }
 
-const fresh = (): Draft => ({ pickup: null, drop: null, leaveNow: false, date: isoDay(1), time: '08:30', seats: 1, ...NO_FILTERS });
+const fresh = (): Draft => ({ pickup: null, drop: null, leaveNow: false, date: isoDay(1), time: '', seats: 1, ...NO_FILTERS });
 
 export const draft: { value: Draft; search: RideSearch | null; results: RideMatch[]; chosen: RideMatch | null } = {
   value: fresh(),
@@ -85,7 +95,7 @@ export function updateDraft(p: Partial<Draft>) {
 
 /** The search body for the API: a window from 15 min before to 45 min after the wanted time. */
 export function searchBody(d: Draft): RideSearch | null {
-  if (!d.pickup || !d.drop) return null;
+  if (!d.pickup || !d.drop || (!d.leaveNow && !d.time)) return null;
   const date = d.leaveNow ? isoDay(0) : d.date;
   const time = d.leaveNow ? nextQuarter() : d.time;
   const from = d.leaveNow ? nowHHMM() : addMinutes(time, -15);

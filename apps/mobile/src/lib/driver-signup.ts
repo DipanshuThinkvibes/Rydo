@@ -27,6 +27,9 @@ export type DriverVehicle = Vehicle & { carType?: CarType | null };
 export interface DriverSignup {
   id: string;
   status: 'PENDING' | 'VERIFIED' | 'REJECTED' | 'EXPIRED';
+  /** DRAFT = not sent yet, WITH_HR = request sent and waiting for HR, NEEDS_FIXES = sent too early (papers missing). */
+  applicationStatus: 'DRAFT' | 'NEEDS_FIXES' | 'WITH_HR';
+  submittedAt: string | null;
   approvalMode: 'MANUAL' | 'AUTO_TEAM';
   preferences: Partial<Record<'ac' | 'noSmoking' | 'quiet' | 'musicOk' | 'womenRidersOnly', boolean>>;
   verifiedAt: string | null;
@@ -73,6 +76,15 @@ export const STATUS_LOOK: Record<DriverStep['status'], { label: string; tone: 's
   TODO: { label: 'to do', tone: 'neutral' },
   NEEDS_ATTENTION: { label: 'needs attention', tone: 'danger' },
 };
+
+/** Steps that must be in before the request can go to HR (the API checks the same). */
+export const NEEDED_FOR_HR: DriverStepName[] = ['LICENCE', 'VEHICLE', 'RC', 'INSURANCE'];
+
+/** POST /driver/application: sends the request to HR once the papers are in. */
+export interface ApplyResult {
+  sentToHr: boolean;
+  checks: { code: string; passed: boolean; label: string; detail: string }[];
+}
 
 /** "✓ …", "! …", "✗ …" notes from the records check, split into level and text. */
 export const noteParts = (n: string) => ({ level: n.startsWith('✓') ? 'ok' : n.startsWith('✗') ? 'fail' : 'warn', text: n.slice(2) }) as const;

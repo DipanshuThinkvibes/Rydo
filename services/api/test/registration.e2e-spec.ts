@@ -8,6 +8,7 @@ const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g;
 const details = (w: World, over: object = ({} as object)) => ({
   fullName: 'Anita Verma',
   phone: '98765 43210',
+  gender: 'FEMALE',
   idType: 'AADHAAR',
   idLast4: '0124',
   employeeId: 'RG-10234',
@@ -70,7 +71,7 @@ describe('Employee registration request', () => {
     expect(sent.find((m) => m.to === email())?.text).toContain('we will email you');
 
     const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
-    expect(user).toMatchObject({ name: 'Anita Verma', phone: '9876543210' });
+    expect(user).toMatchObject({ name: 'Anita Verma', phone: '9876543210', gender: 'FEMALE' });
     const m = await prisma.membership.findFirstOrThrow({ where: { userId } });
     expect(m).toMatchObject({ employeeCode: 'RG-10234', status: 'PENDING' });
     expect(await prisma.auditLog.count({ where: { action: 'REGISTRATION_SUBMITTED' } })).toBe(1);
@@ -111,6 +112,12 @@ describe('Employee registration request', () => {
     expect((await prisma.employeeRegistration.findFirstOrThrow()).designation).toBe('Senior engineer');
     const s = (await api(app).get('/api/v1/me/registration').set(bearer()).expect(200)).body.data;
     expect(s.submittedAt).toBeTruthy();
+  });
+
+  it('asks for gender (used for women-only rides)', async () => {
+    const { gender: _g, ...noGender } = details(w) as Record<string, unknown>;
+    const res = await api(app).post('/api/v1/me/registration').set(bearer()).send(noGender).expect(400);
+    expect(res.body.error.fields.gender).toBe('Choose your gender');
   });
 
   it('checks every field, including the manager belonging to the same company', async () => {

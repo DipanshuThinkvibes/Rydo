@@ -58,7 +58,7 @@ describe('Security', () => {
   });
 
   it('extra fields are ignored: nobody makes themself a RYDO admin or changes RYDO-only settings', async () => {
-    await api(app).patch('/api/v1/me').set(as('riderA')).send({ name: 'Rider A', isPlatformAdmin: true, email: 'evil@x.test' }).expect(200);
+    await api(app).patch('/api/v1/me').set(as('riderA')).send({ isPlatformAdmin: true, email: 'evil@x.test' }).expect(200);
     const u = await prisma.user.findUniqueOrThrow({ where: { email: 'ridera@a.test' }, include: { platformRoles: true } });
     expect(u.platformRoles).toHaveLength(0);
     await api(app).patch('/api/v1/admin/org').set(as('adminA')).send({ name: 'A Co', status: 'SUSPENDED', features: { share: false }, maxEmployees: 99999 }).expect(200);

@@ -35,7 +35,7 @@ describe('Google sign-in and sign-up', () => {
     it('lets that person finish registering, which asks the company HR to approve', async () => {
       const t = (await google(app, { idToken: gtoken(`new.hire@${w.domain}`), mode: 'signup', expectDomain: w.domain }).expect(200)).body.data.accessToken;
       const reg = await api(app).post('/api/v1/me/registration').set('Authorization', `Bearer ${t}`).send({
-        fullName: 'New Hire', phone: '9876543210', idType: 'PAN', idLast4: '234F', employeeId: 'GO-1', designation: 'Engineer', department: 'Eng', office: 'HQ', managerName: 'Boss Person', managerEmail: `boss@${w.domain}`,
+        fullName: 'New Hire', phone: '9876543210', gender: 'OTHER', idType: 'PAN', idLast4: '234F', employeeId: 'GO-1', designation: 'Engineer', department: 'Eng', office: 'HQ', managerName: 'Boss Person', managerEmail: `boss@${w.domain}`,
       }).expect(200);
       expect(reg.body.data).toMatchObject({ status: 'PENDING', company: 'goo Co' });
       expect(await prisma.notification.count({ where: { type: 'REGISTRATION_REQUEST' } })).toBeGreaterThan(0);

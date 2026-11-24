@@ -25,6 +25,9 @@ export function decodePolyline(encoded: string): LatLng[] {
   return points;
 }
 
+/** A leading Open Location Code ("WJCV+GR3, ") in a Google address. */
+export const PLUS_CODE_PREFIX = /^[23456789CFGHJMPQRVWX]{2,8}\+[23456789CFGHJMPQRVWX]{2,3},\s*/;
+
 /** Google Maps Platform: Places API (New) and Routes API. Server key only; it never reaches the apps. */
 @Injectable()
 export class GoogleMapsAdapter implements MapsAdapter {
@@ -81,5 +84,23 @@ export class GoogleMapsAdapter implements MapsAdapter {
     const r = res.routes?.[0];
     if (!r) throw new AppError('MAPS_UNAVAILABLE', 'No road route found between these places.', HttpStatus.UNPROCESSABLE_ENTITY);
     return { distanceMeters: r.distanceMeters, durationSeconds: parseInt(r.duration, 10), path: decodePolyline(r.polyline.encodedPolyline) };
+  }
+
+  /** Geocoding API (reverse): the nearest street address. Needs the Geocoding API enabled for the server key. */
+  async reverse(at: LatLng): Promise<string | null> {
+    const key = env().GOOGLE_MAPS_API_KEY;
+    if (!key) throw new AppError('MAPS_UNAVAILABLE', 'Maps are not set up yet (GOOGLE_MAPS_API_KEY is empty).', HttpStatus.SERVICE_UNAVAILABLE);
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${at.lat},${at.lng}&region=in&key=${encodeURIComponent(key)}`;
+    const res = await fetch(url);
+    type Res = { status: string; error_message?: string; results?: { formatted_address: string; types?: string[] }[] };
+    const body = res.ok ? ((await res.json()) as Res) : null;
+    if (body?.status === 'OK') {
+      // Prefer a real street address over a Plus Code ("WJCV+GR3, Agara Village, …"), and drop that code if it leads.
+      const best = body.results?.find((r) => !r.types?.includes('plus_code')) ?? body.results?.[0];
+      return best ? best.formatted_address.replace(PLUS_CODE_PREFIX, '') || best.formatted_address : null;
+    }
+    if (body?.status === 'ZERO_RESULTS') return null;
+    this.log.warn(`Google geocode ${res.status} ${body?.status ?? ''}: ${(body?.error_message ?? '').slice(0, 200)}`);
+    throw new AppError('MAPS_UNAVAILABLE', "Couldn't look up this address. You can still use the pin.", HttpStatus.BAD_GATEWAY);
   }
 }

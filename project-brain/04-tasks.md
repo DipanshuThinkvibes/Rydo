@@ -1,6 +1,7 @@
 # Tasks
 
 ## Now
+- [ ] Before the pilot: set `REQUIRE_PROFILE_PHOTO=true` again in Anjali's local `.env` (switched off 2026-11-24 for testing)
 - [ ] Everyone who ran our old `20261121100000_driver_signup` migration (Anjali's dev and test databases): reset the local database, because that migration was replaced by `20261121100000_document_records_check` in the merge with dipanshu/rydo-web
 - [ ] Owner: rotate the Google Maps key that is in git history (first commit, services/api/.env.test) and use a separate server key for Places/Routes
 - [ ] Screens (web + mobile) for the new APIs: ride chat, issue reports, feedback form + admin feedback dashboard, surveys, announcements, emergency contacts, profile photo and rating card, car-type/AC filters

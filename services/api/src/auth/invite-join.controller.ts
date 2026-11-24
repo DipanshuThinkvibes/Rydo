@@ -80,7 +80,7 @@ export class InviteJoinController {
         // Count the use first, so two people cannot take the last place at once.
         const taken = await tx.$executeRaw`UPDATE org_invites SET used_count = used_count + 1 WHERE id = ${invite.id}::uuid AND used_count < max_uses AND revoked_at IS NULL AND expires_at > now()`;
         if (!taken) throw new AppError('INVITE_EXPIRED', 'This invite link is no longer open. Ask your HR team for a new one.', 410);
-        const user = await tx.user.create({ data: { email: b.email, name: b.fullName, phone: b.phone, passwordHash } });
+        const user = await tx.user.create({ data: { email: b.email, name: b.fullName, phone: b.phone, gender: b.gender, passwordHash } });
         const m = await tx.membership.create({ data: { organizationId: org.id, userId: user.id, status: 'ACTIVE', joinedVia: 'INVITE_LINK', inviteId: invite.id, employeeCode: b.employeeId, roles: { create: [{ role: 'RIDER' }] } } });
         await tx.employeeRegistration.create({ data: { organizationId: org.id, userId: user.id, membershipId: m.id, fullName: b.fullName, phone: b.phone, idType: b.idType, idLast4: b.idLast4, employeeId: b.employeeId, designation: b.designation, department: b.department, office: b.office, managerName: b.managerName, managerEmail: b.managerEmail, notifiedAt: new Date() } });
         return { userId: user.id, membershipId: m.id };

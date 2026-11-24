@@ -38,4 +38,9 @@ export class CountingMapsAdapter implements MapsAdapter {
     this.usage.hit(this.provider, 'routes');
     return this.inner.route(origin, destination, stops);
   }
+
+  reverse(at: LatLng) {
+    this.usage.hit(this.provider, 'reverse_geocode');
+    return this.inner.reverse(at);
+  }
 }

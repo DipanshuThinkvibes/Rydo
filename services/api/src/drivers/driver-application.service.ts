@@ -8,11 +8,15 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { latestDocuments } from './documents';
 import { runVehicleCheck, type CheckOutcome } from './vehicle-check';
 
+/** What must be uploaded before the request can go to HR. Everything else the check finds is shown to HR to decide on. */
+const NEEDED_FOR_HR = ['LICENSE_PRESENT', 'RC_PRESENT', 'INSURANCE_PRESENT'];
+
 const include = { vehicles: { where: { active: true } }, documents: true, membership: { include: { user: { select: { name: true, email: true, photoKey: true } } } } } as const;
 
 /**
- * Becoming a driver, in order: the driver fills in details, adds a vehicle and uploads papers; RYDO checks the vehicle
- * (and the licence) first; only when every check passes is the company's HR asked to approve the person.
+ * Becoming a driver: the driver fills in details, adds a vehicle and uploads the licence, RC and insurance, then sends a
+ * request to the company's HR. RYDO's automatic vehicle check runs too, but only as information for HR: HR approves
+ * (or asks for new uploads), and approving makes the person a driver who can publish rides.
  */
 @Injectable()
 export class DriverApplicationService {
@@ -54,7 +58,7 @@ export class DriverApplicationService {
     return outcome;
   }
 
-  /** The driver applies: save the details, check the vehicle, and only if everything passes send the application to HR. */
+  /** The driver applies: save the details, run the vehicle check, and send the request to HR once the papers are in. */
   async apply(driverProfileId: string, actorUserId: string, body: DriverApply) {
     const p0 = await this.load(driverProfileId);
     const vehicle = p0.vehicles.find((v) => v.isDefault) ?? p0.vehicles[0];
@@ -69,9 +73,10 @@ export class DriverApplicationService {
     const orgId = p0.membership.organizationId;
     const name = p0.membership.user.name;
 
-    if (!outcome.passed) {
+    const failed = outcome.checks.filter((c) => !c.passed);
+    if (failed.some((c) => NEEDED_FOR_HR.includes(c.code))) {
       await this.prisma.driverProfile.update({ where: { id: driverProfileId }, data: { applicationStatus: 'NEEDS_FIXES' } });
-      await this.audit.log({ organizationId: orgId, actorUserId, action: 'DRIVER_APPLICATION_NEEDS_FIXES', entityType: 'driver_profile', entityId: driverProfileId, after: { failed: outcome.checks.filter((c) => !c.passed).map((c) => c.code) } });
+      await this.audit.log({ organizationId: orgId, actorUserId, action: 'DRIVER_APPLICATION_NEEDS_FIXES', entityType: 'driver_profile', entityId: driverProfileId, after: { failed: failed.map((c) => c.code) } });
       return { sentToHr: false, outcome };
     }
 
@@ -80,30 +85,35 @@ export class DriverApplicationService {
       // A driver HR turned away, or whose papers lapsed, goes back into HR's queue.
       data: { applicationStatus: 'WITH_HR', submittedAt: new Date(), ...(p0.status === 'REJECTED' || p0.status === 'EXPIRED' ? { status: 'PENDING' } : {}) },
     });
-    await this.audit.log({ organizationId: orgId, actorUserId, action: 'DRIVER_APPLIED', entityType: 'driver_profile', entityId: driverProfileId, after: { vehicle: vehicle.plateNumber } });
-    // HR hears only now: the vehicle is already verified.
+    await this.audit.log({ organizationId: orgId, actorUserId, action: 'DRIVER_APPLIED', entityType: 'driver_profile', entityId: driverProfileId, after: { vehicle: vehicle.plateNumber, ...(failed.length ? { checksToReview: failed.map((c) => c.code) } : {}) } });
+    const checks = failed.length
+      ? `${failed.length} automatic ${failed.length === 1 ? 'check needs' : 'checks need'} a look for ${vehicle.plateNumber}`
+      : `Vehicle checks passed for ${vehicle.plateNumber}`;
     await this.notices.notifyAdmins(
       orgId,
-      { type: 'DRIVER_APPLICATION', title: `${name} applied to be a driver`, body: `Vehicle checks passed for ${vehicle.plateNumber}. Open Drivers to review the documents and approve.`, data: { driverProfileId }, email: true },
+      { type: 'DRIVER_APPLICATION', title: `${name} applied to be a driver`, body: `${checks}. Open Drivers to review the documents and approve.`, data: { driverProfileId }, email: true },
       ['HR_ADMIN', 'ORG_ADMIN'],
     );
-    await this.notices.notifyMembership(p0.membershipId, { type: 'DRIVER_APPLICATION_SENT', title: 'Your vehicle is verified', body: 'Your application is with your company HR now. We will tell you when they decide.', email: true });
+    await this.notices.notifyMembership(
+      p0.membershipId,
+      outcome.passed
+        ? { type: 'DRIVER_APPLICATION_SENT', title: 'Your vehicle is verified', body: 'Your application is with your company HR now. We will tell you when they decide.', email: true }
+        : { type: 'DRIVER_APPLICATION_SENT', title: 'Your request is with HR', body: 'Your company HR will check your papers and approve you. We will tell you when they decide.', email: true },
+    );
     return { sentToHr: true, outcome };
   }
 
   /**
-   * New or renewed papers: if the person is already with HR, check the vehicle again. A driver who is not yet verified and
-   * now fails goes back to fixing things (and leaves HR's queue); a verified driver keeps their status, only the vehicle is held.
+   * New or renewed papers: if the person is already with HR (or verified), check the vehicle again so HR sees fresh results.
+   * The request stays with HR: HR decides, not the automatic check.
    */
   async recheckIfSubmitted(driverProfileId: string, vehicleId: string | null) {
     const p = await this.load(driverProfileId);
     const vehicle = p.vehicles.find((v) => v.id === vehicleId) ?? p.vehicles.find((v) => v.isDefault) ?? p.vehicles[0];
     if (!vehicle) return null;
     if (p.applicationStatus !== 'WITH_HR' && p.status !== 'VERIFIED') return null;
-    const outcome = await this.checkVehicle(driverProfileId, vehicle.id);
-    if (!outcome.passed && p.status !== 'VERIFIED') {
-      await this.prisma.driverProfile.update({ where: { id: driverProfileId }, data: { applicationStatus: 'NEEDS_FIXES' } });
-    }
-    return outcome;
+    // HR already approved this vehicle: a renewal keeps it usable; only a different vehicle needs its own check.
+    if (p.status === 'VERIFIED' && vehicle.checkStatus === 'VERIFIED') return null;
+    return this.checkVehicle(driverProfileId, vehicle.id);
   }
 }

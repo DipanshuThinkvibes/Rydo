@@ -2,6 +2,7 @@ import { INestApplication } from '@nestjs/common';
 import { OrgRole } from '@prisma/client';
 import { api, createApp, FakeMessages, resetDb, signIn } from './helpers';
 import { decodePolyline } from '@rydo/shared';
+import { PLUS_CODE_PREFIX } from '../src/adapters/google-maps.adapter';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { RideGeneratorService } from '../src/rides/ride-generator.service';
 import { DocumentExpiryService } from '../src/drivers/document-expiry.service';
@@ -60,6 +61,17 @@ describe('Ride plans and generation', () => {
     const res = await api(app).get('/api/v1/maps/autocomplete?q=Bellandur&session=abcdefgh1234').set(as('rahul', 'A')).expect(200);
     expect(res.body.data[0]).toMatchObject({ placeId: 'fake-1', main: 'Bellandur' });
     await api(app).get('/api/v1/maps/autocomplete?q=Bellandur&session=abcdefgh1234').set({ Authorization: `Bearer ${tokens.rahul}` }).expect(400);
+  });
+
+  it('turns a dropped pin into an address (the movable pin), and checks the spot', async () => {
+    const res = await api(app).get('/api/v1/maps/reverse?lat=12.9116&lng=77.6474').set(as('rahul', 'A')).expect(200);
+    expect(res.body.data).toEqual({ label: 'Near 12.9116, 77.6474, Bengaluru' });
+    expect((await api(app).get('/api/v1/maps/reverse?lat=-10&lng=77').set(as('rahul', 'A')).expect(200)).body.data).toEqual({ label: null });
+    await api(app).get('/api/v1/maps/reverse?lat=99&lng=77').set(as('rahul', 'A')).expect(400);
+    await api(app).get('/api/v1/maps/reverse?lat=12.9&lng=77.6').expect(401);
+    // Google sometimes leads with a Plus Code; the adapter strips it.
+    expect('WJCV+GR3, Agara Village, HSR Layout'.replace(PLUS_CODE_PREFIX, '')).toBe('Agara Village, HSR Layout');
+    expect('1024, 27th Main, HSR Layout'.replace(PLUS_CODE_PREFIX, '')).toBe('1024, 27th Main, HSR Layout');
   });
 
   it('previews a road route as an encoded line', async () => {

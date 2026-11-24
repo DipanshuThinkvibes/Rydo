@@ -214,7 +214,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             {licenseNote.text}
           </div>
         )}
-        <main id="main" tabIndex={-1} className="flex-1 p-4 outline-none sm:p-6">{me.user.hasPhoto === false && !support ? <PhotoGate name={me.user.name ?? ""} onDone={() => void reload()} onSignOut={leave} /> : isAdmin && EMPLOYEE_PATHS.some((p) => path === p || path.startsWith(p + "/")) ? <AdminAccountNotice home={can("HR_ADMIN", "ORG_ADMIN") ? "/employees" : "/ops"} onSignOut={leave} /> : children}</main>
+        <main id="main" tabIndex={-1} className="flex-1 p-4 outline-none sm:p-6">{me.user.hasPhoto === false && me.user.photoRequired !== false && !support ? <PhotoGate name={me.user.name ?? ""} onDone={() => void reload()} onSignOut={leave} /> : isAdmin && EMPLOYEE_PATHS.some((p) => path === p || path.startsWith(p + "/")) ? <AdminAccountNotice home={can("HR_ADMIN", "ORG_ADMIN") ? "/employees" : "/ops"} onSignOut={leave} /> : children}</main>
       </div>
     </div>
   );

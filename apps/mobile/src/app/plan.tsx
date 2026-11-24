@@ -13,12 +13,9 @@ import type { Office } from '@/lib/types';
 import { Icon } from '@/components/icons';
 import { buildSaved, PlacePicker, type Saved } from '@/components/place-picker';
 import { FiltersButton, RideFilters } from '@/components/ride-filters';
+import { TimeField } from '@/components/time-field';
 import { BackButton, Button, Chip, ChipRow, Label, Notice, RoundButton, s } from '@/components/ui';
 
-const TIMES = Array.from({ length: 65 }, (_, i) => {
-  const t = 6 * 60 + i * 15; // 06:00 … 22:00
-  return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
-});
 const DAYS = Array.from({ length: 7 }, (_, i) => isoDay(i));
 
 /** Prototype screen 3: pickup, drop, when, seats and preferences. */
@@ -33,6 +30,12 @@ export default function PlanRide() {
   const [busy, setBusy] = useState(false);
   const [filtering, setFiltering] = useState(false);
   const [error, setError] = useState<string>();
+  /** The typed time is a real time (the draft keeps the last good one). */
+  const [timeOk, setTimeOk] = useState(true);
+  const hasTime = !!d.time;
+  const nowHHMM = () => new Date().toTimeString().slice(0, 5);
+  const timePast = !d.leaveNow && hasTime && d.date === isoDay(0) && d.time < nowHHMM();
+  const timeBad = !d.leaveNow && (!hasTime || !timeOk || timePast);
 
   useEffect(() => {
     getOffices().then(setOffices, () => undefined);
@@ -53,7 +56,7 @@ export default function PlanRide() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current?.lat, current?.lng]);
 
-  const when = d.leaveNow ? 'Now' : `${dayLabel(d.date)}, ${fmtClock(d.time)}`;
+  const when = d.leaveNow ? 'Now' : hasTime ? `${dayLabel(d.date)}, ${fmtClock(d.time)}` : dayLabel(d.date);
 
   async function find() {
     const body = searchBody(d);
@@ -121,11 +124,16 @@ export default function PlanRide() {
               <ChipRow>
                 {DAYS.map((day) => <Chip rect key={day} label={dayLabel(day)} selected={d.date === day} onPress={() => set({ date: day })} />)}
               </ChipRow>
-              <ChipRow>
-                {TIMES.filter((t) => d.date !== isoDay(0) || t >= new Date().toTimeString().slice(0, 5)).map((t) => (
-                  <Chip rect key={t} label={fmtClock(t)} selected={d.time === t} onPress={() => set({ time: t })} />
-                ))}
-              </ChipRow>
+              <TimeField
+                label="Leave at"
+                value={d.time || null}
+                onChange={(t) => {
+                  setTimeOk(!!t);
+                  // Cleared field: no time. A half-typed time keeps the last good one until it is fixed.
+                  if (t) set({ time: t });
+                }}
+                error={timeOk && timePast ? 'That time has already passed today. Type a later time or pick another day.' : undefined}
+              />
             </>
           )}
         </View>
@@ -177,7 +185,7 @@ export default function PlanRide() {
       </ScrollView>
 
       <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 30, backgroundColor: colors.white, borderTopWidth: 1, borderTopColor: colors.line }}>
-        <Button label={`Find rides · ${when}`} loading={busy} disabled={!d.pickup || !d.drop} onPress={find} />
+        <Button label={`Find rides · ${when}`} loading={busy} disabled={!d.pickup || !d.drop || timeBad} onPress={find} />
       </View>
 
       <PlacePicker

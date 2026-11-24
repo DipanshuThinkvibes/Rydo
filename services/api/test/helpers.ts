@@ -58,6 +58,10 @@ export class FakeMaps implements MapsAdapter {
   async place(placeId: string) {
     return { placeId, label: 'Fake place', address: 'Fake address, Bengaluru', lat: 12.93, lng: 77.62 };
   }
+  /** Out at sea (lat < 0) there is no address. */
+  async reverse(at: LatLng) {
+    return at.lat < 0 ? null : `Near ${at.lat.toFixed(4)}, ${at.lng.toFixed(4)}, Bengaluru`;
+  }
   async route(a: LatLng, b: LatLng) {
     this.calls++;
     const r = 6371000, rad = (d: number) => (d * Math.PI) / 180;
@@ -69,20 +73,22 @@ export class FakeMaps implements MapsAdapter {
 }
 
 /**
- * Government records for tests: put a licence or vehicle in `licences` / `vehicles` to make it "found";
- * anything else is "not found". Set `down` to make every check "unavailable".
+ * Government records for tests. Off by default, like DOC_CHECK_PROVIDER=off: every check is "unavailable".
+ * Set `on` and put a licence or vehicle in `licences` / `vehicles` to make it "found"; anything else is then "not found".
+ * Set `down` to make every check "unavailable" again.
  */
 export class FakeDocumentCheck implements DocumentCheckAdapter {
   licences = new Map<string, LicenceRecord>();
   vehicles = new Map<string, VehicleRecord>();
+  on = false;
   down = false;
   async checkLicence({ number }: { number: string; dateOfBirth: string }): Promise<CheckOutcome<LicenceRecord>> {
-    if (this.down) return { kind: 'unavailable', reason: 'Provider down.' };
+    if (!this.on || this.down) return { kind: 'unavailable', reason: 'Provider down.' };
     const r = this.licences.get(number);
     return r ? { kind: 'found', record: r } : { kind: 'notFound' };
   }
   async checkVehicle({ plateNumber }: { plateNumber: string }): Promise<CheckOutcome<VehicleRecord>> {
-    if (this.down) return { kind: 'unavailable', reason: 'Provider down.' };
+    if (!this.on || this.down) return { kind: 'unavailable', reason: 'Provider down.' };
     const r = this.vehicles.get(plateNumber);
     return r ? { kind: 'found', record: r } : { kind: 'notFound' };
   }

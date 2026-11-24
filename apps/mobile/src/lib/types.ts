@@ -71,6 +71,8 @@ export interface DriverDoc {
 export interface DriverProfile {
   id: string;
   status: 'PENDING' | 'VERIFIED' | 'REJECTED' | 'EXPIRED';
+  /** WITH_HR once the driver has sent the request to HR. */
+  applicationStatus?: 'DRAFT' | 'NEEDS_FIXES' | 'WITH_HR';
   vehicles: Vehicle[];
   documents: DriverDoc[];
 }

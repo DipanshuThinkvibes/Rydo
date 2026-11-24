@@ -8,6 +8,7 @@ const form = (domain: string, over: Record<string, unknown> = {}) => ({
   email: `nina@${domain}`,
   password: 'Sunrise2026',
   phone: '9876543210',
+  gender: 'MALE',
   idType: 'PAN',
   idLast4: '4F2K',
   employeeId: 'EMP-501',

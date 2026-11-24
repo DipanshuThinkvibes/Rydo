@@ -30,13 +30,18 @@ export default function ProfilePage() {
   const phoneVal = phone ?? profile?.phone ?? "";
   const genderVal = gender ?? profile?.gender ?? "UNDISCLOSED";
 
+  // Name, phone and gender come from sign-up and are fixed. Only a phone or gender that was never given can be added (once).
+  const canAddPhone = !!org && !!profile && !profile.phone;
+  const canAddGender = !!org && !!profile && (profile.gender ?? "UNDISCLOSED") === "UNDISCLOSED";
+  const adding = (canAddPhone && !!phoneVal.trim()) || (canAddGender && genderVal !== "UNDISCLOSED");
+
   async function saveProfile(e: React.FormEvent) {
     e.preventDefault();
     setPFields({});
     setPMsg(undefined);
     setSaving(true);
     try {
-      await api("PATCH", "/me", { name: nameVal, ...(org ? { gender: genderVal, phone: phoneVal.trim() ? phoneVal : null } : {}) });
+      await api("PATCH", "/me", { ...(canAddPhone && phoneVal.trim() ? { phone: phoneVal } : {}), ...(canAddGender && genderVal !== "UNDISCLOSED" ? { gender: genderVal } : {}) });
       await Promise.all([reloadProfile(), reload()]);
       setName(null);
       setPhone(null);
@@ -98,20 +103,21 @@ export default function ProfilePage() {
         <Section id="profile" icon="user" title="Profile" sub={org ? "This is how colleagues see you. Your phone number stays private." : "Your name as RYDO staff and colleagues see it."}>
           <form onSubmit={saveProfile} className="flex flex-col gap-4">
             <div className="grid gap-4 sm:grid-cols-2">
-              <Input id="p-name" label="Name" required value={nameVal} onChange={(e) => setName(e.target.value)} error={pFields.name} />
-              {org && <Input id="p-phone" label="Phone (private)" value={phoneVal} onChange={(e) => setPhone(e.target.value)} placeholder="+91 98765 43210" error={pFields.phone} />}
+              <Input id="p-name" label="Name" readOnly disabled value={nameVal} error={pFields.name} />
+              {org && <Input id="p-phone" label="Phone (private)" readOnly={!canAddPhone} disabled={!canAddPhone} value={phoneVal} onChange={(e) => setPhone(e.target.value)} placeholder="+91 98765 43210" error={pFields.phone} />}
             </div>
             {org && (
-              <Select id="p-gender" label="Gender (only used for women-only rides)" value={genderVal} onChange={(e) => setGender(e.target.value)}>
+              <Select id="p-gender" label="Gender (only used for women-only rides)" disabled={!canAddGender} value={genderVal} onChange={(e) => setGender(e.target.value)}>
                 <option value="UNDISCLOSED">Prefer not to say</option>
                 <option value="FEMALE">Female</option>
                 <option value="MALE">Male</option>
                 <option value="OTHER">Other</option>
               </Select>
             )}
+            <p className="text-sm text-muted">{canAddPhone || canAddGender ? "You can add a missing phone or gender once. After that, ask your HR team to change your details." : "Your name, phone and gender come from sign-up. Ask your HR team if something is wrong."}</p>
             {pMsg && <Notice tone={pMsg.tone}>{pMsg.text}</Notice>}
             <div className="flex flex-wrap items-center gap-2">
-              <Button type="submit" loading={saving}>Save profile</Button>
+              {(canAddPhone || canAddGender) && <Button type="submit" loading={saving} disabled={!adding}>Save</Button>}
               {profile?.photoUrl && <Button type="button" variant="ghost" onClick={removePhoto}>Remove photo</Button>}
             </div>
           </form>

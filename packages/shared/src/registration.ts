@@ -14,6 +14,8 @@ export const registrationSchema = z.object({
     .string()
     .transform((s) => s.replace(/\D/g, '').slice(-10))
     .pipe(z.string().regex(/^[6-9]\d{9}$/, 'Enter a 10-digit mobile number')),
+  /** Used only for women-only rides. Cannot be changed later in the profile. */
+  gender: z.enum(['FEMALE', 'MALE', 'OTHER', 'UNDISCLOSED'], { message: 'Choose your gender' }),
   idType: z.enum(ID_PROOF_TYPES, { message: 'Choose your ID proof' }),
   idLast4: z
     .string()

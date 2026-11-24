@@ -13,6 +13,8 @@ const base = z.object({
   SMTP_PASS: z.string().optional(),
   MAIL_FROM: z.string().default('RYDO <no-reply@rydo.local>'),
   S3_ENDPOINT: z.string().optional(),
+  /** Address put in signed file links when it differs from S3_ENDPOINT, e.g. the PC's Wi-Fi address so a phone can open photos in development. */
+  S3_PUBLIC_ENDPOINT: z.string().optional(),
   S3_REGION: z.string().default('ap-south-1'),
   S3_ACCESS_KEY: z.string().default(''),
   S3_SECRET_KEY: z.string().default(''),

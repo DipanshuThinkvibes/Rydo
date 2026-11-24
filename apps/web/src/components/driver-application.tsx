@@ -73,8 +73,8 @@ function Tracker({ p, failed }: { p: DriverProfile | null; failed: boolean }) {
   const withHr = p?.applicationStatus === "WITH_HR";
   const stages = [
     { label: "Apply", hint: "Seven short steps", done: withHr || p?.status === "VERIFIED" },
-    { label: "Vehicle check", hint: failed || p?.applicationStatus === "NEEDS_FIXES" ? "Things to fix" : "Checked by RYDO first", done: withHr || p?.status === "VERIFIED", bad: failed || p?.applicationStatus === "NEEDS_FIXES" },
-    { label: "HR approval", hint: withHr ? (p?.status === "REJECTED" ? "HR asked for a re-upload" : "With your company HR") : "Then your HR approves", done: p?.status === "VERIFIED" },
+    { label: "Send to HR", hint: failed || p?.applicationStatus === "NEEDS_FIXES" ? "Papers missing" : "Licence, vehicle, RC, insurance", done: withHr || p?.status === "VERIFIED", bad: failed || p?.applicationStatus === "NEEDS_FIXES" },
+    { label: "HR approval", hint: withHr ? (p?.status === "REJECTED" ? "HR asked for a re-upload" : "With your company HR") : "Your HR approves you", done: p?.status === "VERIFIED" },
     { label: "Ready to drive", hint: "Offer rides", done: p?.status === "VERIFIED" },
   ];
   const current = stages.findIndex((s) => !s.done);
@@ -302,6 +302,8 @@ export function DriverApplication({ initial, onVerified }: { initial: DriverProf
     { n: 7, title: "Safety and guidelines", sub: "Short read, then agree", icon: "flag", done: !!r?.guidelines },
   ];
   const done = r?.stepsDone ?? 0;
+  // The request can go to HR once these are in; HR sees the rest (and the automatic vehicle check) and decides.
+  const papersIn = !!(r?.license && r?.vehicle && r?.rc && r?.insurance);
 
   async function sendToHr() {
     const res = await run(() => api<ApplyResult>("POST", "/driver/application", {}));
@@ -310,7 +312,7 @@ export function DriverApplication({ initial, onVerified }: { initial: DriverProf
 
   return (
     <div className="flex flex-col gap-4">
-      <Tracker p={p} failed={!!result && !result.passed} />
+      <Tracker p={p} failed={!!result && !result.sentToHr} />
       {msg && <Notice tone={msg.tone}>{msg.text}</Notice>}
 
       {step === null && (
@@ -318,7 +320,7 @@ export function DriverApplication({ initial, onVerified }: { initial: DriverProf
           <Card className="flex flex-col gap-3">
             <span className="w-fit rounded-full bg-lime px-3 py-1 text-xs font-extrabold text-ink">{done} of 7 steps in</span>
             <h2 className="text-2xl font-extrabold">Offer your empty seats</h2>
-            <p className="text-sm text-muted">Drive colleagues who live on your route. Finish these steps in any order; we check your vehicle first, then your HR checks the rest before your first ride.</p>
+            <p className="text-sm text-muted">Drive colleagues who live on your route. Finish these steps in any order, then send a request to your HR. Once HR approves you, you can publish rides.</p>
             <div className="grid grid-cols-7 gap-1.5" aria-hidden="true">
               {rows.map((x) => <span key={x.n} className={`h-1.5 rounded-full ${x.done ? "bg-ink" : "bg-line-strong"}`} />)}
             </div>
@@ -344,11 +346,11 @@ export function DriverApplication({ initial, onVerified }: { initial: DriverProf
           <RideRules p={p} ensure={ensure} setP={setP} run={run} />
 
           <Card className="flex flex-col gap-3">
-            <Button className="h-12" loading={busy} disabled={!r?.canApply} onClick={sendToHr}>Check my vehicle and send to HR</Button>
-            <p className="text-xs text-muted">{r?.canApply ? "We check your vehicle and papers first. If everything passes, your company HR is asked to approve you. If something is wrong, we tell you exactly what to fix and HR hears nothing yet." : "Finish all seven steps to send your application."}</p>
+            <Button className="h-12" loading={busy} disabled={!papersIn} onClick={sendToHr}>Send request to HR</Button>
+            <p className="text-xs text-muted">{papersIn ? "Your company HR checks your papers and approves you. Our automatic vehicle check is shown to them to help." : "Add your licence, vehicle, RC and insurance to send your request."}</p>
           </Card>
 
-          {result && !result.passed && (
+          {result && !result.sentToHr && (
             <Card className="flex flex-col gap-3 ring-1 ring-warning/40">
               <h3 className="flex items-center gap-2 text-lg font-extrabold"><Icon name="alert" size={18} className="text-warning" /> We found {result.checks.filter((c) => !c.passed).length} {result.checks.filter((c) => !c.passed).length === 1 ? "thing" : "things"} to fix</h3>
               <p className="text-sm text-muted">Nothing was sent to HR. Fix these and send again.</p>

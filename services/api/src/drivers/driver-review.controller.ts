@@ -107,7 +107,8 @@ export class DriverReviewController {
   }
 
   /**
-   * Approves the latest documents and lets the person publish rides. A government records check that FAILED needs
+   * HR approves the request: the latest documents are approved, the vehicle counts as verified (HR has looked at it, so
+   * the automatic vehicle check is advice, not a gate) and the person can publish rides. A government records check that FAILED needs
    * ignoreFailedChecks: true (HR has looked at the photos); that choice is in the audit log.
    */
   @Post('drivers/:id/verify')
@@ -124,7 +125,6 @@ export class DriverReviewController {
     if (!vehicle) problems.push('no vehicle added');
     else if (!rc) problems.push('vehicle RC missing');
     if (vehicle && !insurance) problems.push('insurance missing');
-    if (vehicle && vehicle.checkStatus !== 'VERIFIED') problems.push('the vehicle has not passed the vehicle check');
     for (const d of [license, rc, insurance]) {
       if (!d) continue;
       if (d.status === 'REJECTED') problems.push(`${LABEL[d.kind]} waiting for re-upload`);
@@ -139,8 +139,9 @@ export class DriverReviewController {
     await this.prisma.$transaction(async (tx) => {
       await tx.document.updateMany({ where: { id: { in: docs.filter((d) => d.status === 'PENDING').map((d) => d.id) } }, data: { status: 'APPROVED', reviewedById: org.membershipId, reviewedAt: new Date(), rejectReason: null } });
       await tx.driverProfile.update({ where: { id }, data: { status: 'VERIFIED', verifiedById: org.membershipId, verifiedAt: new Date() } });
+      if (vehicle && vehicle.checkStatus !== 'VERIFIED') await tx.vehicle.update({ where: { id: vehicle.id }, data: { checkStatus: 'VERIFIED', checkedAt: new Date() } });
       await tx.membershipRole.upsert({ where: { membershipId_role: { membershipId: p.membershipId, role: 'DRIVER' } }, update: {}, create: { membershipId: p.membershipId, role: 'DRIVER' } });
-      await this.audit.log({ organizationId: org.organizationId, actorUserId: auth.userId, action: 'DRIVER_VERIFIED', entityType: 'driver_profile', entityId: id, before: { status: p.status }, after: { status: 'VERIFIED', ...(failedChecks.length ? { verifiedDespiteFailedChecks: failedChecks.map((d) => d.kind) } : {}) } }, tx);
+      await this.audit.log({ organizationId: org.organizationId, actorUserId: auth.userId, action: 'DRIVER_VERIFIED', entityType: 'driver_profile', entityId: id, before: { status: p.status }, after: { status: 'VERIFIED', ...(vehicle && vehicle.checkStatus !== 'VERIFIED' ? { vehicleApprovedDespiteCheck: vehicle.plateNumber } : {}), ...(failedChecks.length ? { verifiedDespiteFailedChecks: failedChecks.map((d) => d.kind) } : {}) } }, tx);
     });
     await this.messages.sendEmail({ to: p.membership.user.email, subject: "You're a verified RYDO driver", text: 'Your HR team checked your license and RC. You can now publish rides in the RYDO app.' });
     return { data: { id, status: 'VERIFIED' } };

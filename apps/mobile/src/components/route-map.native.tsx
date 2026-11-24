@@ -18,7 +18,7 @@ export type { MapMarker, MapRoute } from './route-map-types';
 
 const inExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 const iosGoogleKey = (Constants.expoConfig?.ios?.config as { googleMapsApiKey?: string } | undefined)?.googleMapsApiKey;
-const useGoogle = Platform.OS === 'android' || (Platform.OS === 'ios' && !!iosGoogleKey && !inExpoGo);
+export const useGoogle = Platform.OS === 'android' || (Platform.OS === 'ios' && !!iosGoogleKey && !inExpoGo);
 
 /** Bengaluru: where the map opens before any point is known. */
 const DEFAULT_REGION = { latitude: 12.9352, longitude: 77.6245, latitudeDelta: 0.09, longitudeDelta: 0.09 };
@@ -26,7 +26,7 @@ const DEFAULT_REGION = { latitude: 12.9352, longitude: 77.6245, latitudeDelta: 0
 const toCoord = (p: LatLng) => ({ latitude: p.lat, longitude: p.lng });
 
 /** Quiet map (no shop, transit or road icons) on both the light and the dark Google map. */
-const LIGHT_STYLE = [
+export const LIGHT_STYLE = [
   { featureType: 'poi.business', stylers: [{ visibility: 'off' }] },
   { featureType: 'transit', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
   { featureType: 'road', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },

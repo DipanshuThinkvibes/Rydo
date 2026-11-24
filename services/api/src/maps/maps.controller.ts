@@ -1,6 +1,6 @@
 import { Controller, Get, Inject, Param, Query } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { autocompleteQuerySchema, encodePolyline, routeQuerySchema, type RoutePreview } from '@rydo/shared';
+import { autocompleteQuerySchema, encodePolyline, reverseQuerySchema, routeQuerySchema, type ReverseGeocode, type RoutePreview } from '@rydo/shared';
 import { z } from 'zod';
 import { ZodPipe } from '../common/zod.pipe';
 import { OrgOrPlatform } from '../tenancy/decorators';
@@ -25,6 +25,13 @@ export class MapsController {
   @Get('places/:placeId')
   async place(@Param('placeId') placeId: string, @Query('session') session = '') {
     return { data: await this.maps.place(placeId.slice(0, 300), session.slice(0, 64)) };
+  }
+
+  /** The address under the movable pin (marking an exact gate or doorstep). Called once the pin stops moving. */
+  @Get('reverse')
+  @Throttle({ default: { limit: 60, ttl: 60_000 } })
+  async reverse(@Query(new ZodPipe(reverseQuerySchema)) q: z.infer<typeof reverseQuerySchema>): Promise<{ data: ReverseGeocode }> {
+    return { data: { label: await this.maps.reverse({ lat: q.lat, lng: q.lng }) } };
   }
 
   /** Road route preview (driver publishing a ride). Returned as an encoded polyline. */

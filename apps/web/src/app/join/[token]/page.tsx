@@ -10,7 +10,7 @@ import { Logo, Notice, Skeleton } from "@/components/ui";
 
 interface InviteInfo { company: string; domains: string[]; departments: string[]; offices: string[]; expiresAt: string }
 
-const blank: EmployeeDetails = { fullName: "", workEmail: "", phone: "", idType: "AADHAAR", idNumber: "", employeeId: "", managerName: "", managerEmail: "", department: "", designation: "", office: "" };
+const blank: EmployeeDetails = { fullName: "", workEmail: "", phone: "", gender: "", idType: "AADHAAR", idNumber: "", employeeId: "", managerName: "", managerEmail: "", department: "", designation: "", office: "" };
 
 /** The form behind an HR invite link. Submitting creates the account at once: no approval step. Links end after 24 hours. */
 export default function JoinPage() {
@@ -31,6 +31,7 @@ export default function JoinPage() {
       email: d.workEmail,
       password,
       phone: d.phone,
+      gender: d.gender,
       idType: d.idType,
       idLast4: d.idNumber.slice(-4),
       employeeId: d.employeeId,

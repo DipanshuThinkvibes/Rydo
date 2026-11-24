@@ -318,16 +318,19 @@ function RequestPopup({ ride, onDone }: { ride: ManagedRide; onDone: () => void 
 
 /** Not a verified driver yet: status and the way into driver sign-up (vehicle + documents on the phone). */
 function BecomeDriver({ profile }: { profile: DriverProfile | null; onStart: () => void }) {
+  const withHr = profile?.status === 'PENDING' && profile.applicationStatus === 'WITH_HR';
   const text = !profile
-    ? 'Offer your empty seats to colleagues on your route and share the running cost. Add your vehicle and photos of your license and RC; your HR team checks them.'
-    : profile.status === 'PENDING'
-      ? 'Your HR team is checking your documents. You can publish rides once you are verified. Missing something? Finish it in driver sign-up.'
+    ? 'Offer your empty seats to colleagues on your route and share the running cost. Add your vehicle, licence, RC and insurance, then send a request to your HR.'
+    : withHr
+      ? 'Your request is with your HR team. You can publish rides once they approve you.'
+      : profile.status === 'PENDING'
+        ? 'Finish driver sign-up and send your request to HR. You can publish rides once HR approves you.'
       : profile.status === 'REJECTED'
         ? 'HR asked you to upload a document again. Open driver sign-up to see the reason and upload a new photo.'
         : 'A document has expired. Upload the renewed one in driver sign-up.';
   return (
     <Card style={{ gap: 12 }}>
-      <Badge tone={profile?.status === 'PENDING' ? 'warning' : profile ? 'danger' : 'neutral'}>{!profile ? 'Not a driver yet' : profile.status === 'PENDING' ? 'Waiting for HR' : 'Action needed'}</Badge>
+      <Badge tone={withHr ? 'warning' : profile && profile.status !== 'PENDING' ? 'danger' : 'neutral'}>{!profile ? 'Not a driver yet' : withHr ? 'Waiting for HR' : profile.status === 'PENDING' ? 'Not sent yet' : 'Action needed'}</Badge>
       <Text style={s.h2}>{!profile ? 'Become a driver' : 'Driver verification'}</Text>
       <Text style={s.body}>{text}</Text>
       <Button label={!profile ? 'Start driver sign-up' : 'Open driver sign-up'} variant="lime" onPress={() => router.push('/driver-setup')} />

@@ -44,9 +44,18 @@ export type SetPassword = z.infer<typeof setPasswordSchema>;
 /** Request body for POST /auth/refresh (mobile; web sends the cookie) */
 export const refreshSchema = z.object({ refreshToken: z.string().min(20).optional() });
 
+/** Genders a person can give at sign-up. Used only for women-only rides. */
+export const GENDERS = ['FEMALE', 'MALE', 'OTHER', 'UNDISCLOSED'] as const;
+export type GenderName = (typeof GENDERS)[number];
+export const GENDER_LABEL: Record<GenderName, string> = { FEMALE: 'Female', MALE: 'Male', OTHER: 'Other', UNDISCLOSED: 'Prefer not to say' };
+
+/**
+ * PATCH /me. Name, phone and gender come from sign-up and cannot be changed here afterwards (HR knows who people are);
+ * a phone or gender that was never given can still be added once.
+ */
 export const updateMeSchema = z.object({
   name: z.string().trim().min(1).max(100).optional(),
-  gender: z.enum(['FEMALE', 'MALE', 'OTHER', 'UNDISCLOSED']).optional(),
+  gender: z.enum(GENDERS).optional(),
   /** Never shown to other people. null clears it. */
   phone: z.string().trim().regex(/^\+?[0-9 ()-]{7,20}$/, 'Enter a valid phone number').nullable().optional(),
 });
@@ -65,7 +74,7 @@ export interface AuthResult {
   accessToken?: string;
   refreshToken?: string;
   /** `platformRole` is set for RYDO staff: SUPER_ADMIN runs the owner console, SUPPORT is the support team. */
-  user: { id: string; email: string; name: string; emailVerified?: boolean; isPlatformAdmin: boolean; platformRole?: 'SUPER_ADMIN' | 'SUPPORT' | null; /** Every account needs a profile photo. */ hasPhoto?: boolean };
+  user: { id: string; email: string; name: string; emailVerified?: boolean; isPlatformAdmin: boolean; platformRole?: 'SUPER_ADMIN' | 'SUPPORT' | null; /** Every account needs a profile photo. */ hasPhoto?: boolean; /** false when REQUIRE_PROFILE_PHOTO is switched off (testing). */ photoRequired?: boolean };
   memberships: MembershipSummary[];
 }
 

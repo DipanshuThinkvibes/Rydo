@@ -149,9 +149,9 @@ describe('Auth (email OTP)', () => {
     const jar = cookies.map((c) => c.split(';')[0]).join('; ');
 
     await api(app).get('/api/v1/me').set('Cookie', jar).expect(200);
-    const blocked = await api(app).patch('/api/v1/me').set('Cookie', jar).send({ name: 'Web Admin' }).expect(403);
+    const blocked = await api(app).patch('/api/v1/me').set('Cookie', jar).send({}).expect(403);
     expect(blocked.body.error.code).toBe('FORBIDDEN');
-    const ok = await api(app).patch('/api/v1/me').set('Cookie', jar).set('x-csrf-token', csrf).send({ name: 'Web Admin' }).expect(200);
-    expect(ok.body.data.user.name).toBe('Web Admin');
+    const ok = await api(app).patch('/api/v1/me').set('Cookie', jar).set('x-csrf-token', csrf).send({}).expect(200);
+    expect(ok.body.data.user.email).toBeDefined();
   });
 });

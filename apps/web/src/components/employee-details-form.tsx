@@ -26,6 +26,7 @@ export function DetailsStep({ company, initial, onBack, onSubmit, viaGoogle, wit
     if (!isEmail(x.workEmail)) e.workEmail = "Enter your work email";
     else if (!company.domains.includes(emailDomain(x.workEmail))) e.workEmail = `Use your ${company.name} email (ends with @${company.domains[0]})`;
     if (!isValidIndianMobile(x.phone)) e.phone = "Enter a 10-digit mobile number";
+    if (!x.gender) e.gender = "Choose your gender";
     const idError = ID_PROOFS[x.idType].check(x.idNumber);
     if (idError) e.idNumber = idError;
     if (!isValidEmployeeId(x.employeeId)) e.employeeId = "Enter your employee ID (letters and numbers)";
@@ -87,6 +88,16 @@ export function DetailsStep({ company, initial, onBack, onSubmit, viaGoogle, wit
             <input id="f-phone" type="tel" inputMode="numeric" autoComplete="tel-national" placeholder="98765 43210" value={d.phone} onChange={(e) => set("phone", digitsOnly(e.target.value).slice(0, 10))} aria-invalid={errors.phone ? true : undefined} className="h-12 min-w-0 flex-1 rounded-2xl border-[1.5px] border-line-strong bg-surface px-4 text-base font-semibold outline-none focus:border-ink focus:bg-white" />
           </div>
           {errors.phone ? <span className="text-sm font-semibold text-danger">{errors.phone}</span> : <span className="text-xs text-muted">Private. Never shown to other employees.</span>}
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Select id="f-gender" label="Gender" value={d.gender} onChange={(e) => set("gender", e.target.value)} aria-invalid={errors.gender ? true : undefined}>
+            <option value="" disabled>Choose</option>
+            <option value="FEMALE">Female</option>
+            <option value="MALE">Male</option>
+            <option value="OTHER">Other</option>
+            <option value="UNDISCLOSED">Prefer not to say</option>
+          </Select>
+          {errors.gender ? <span className="text-sm font-semibold text-danger">{errors.gender}</span> : <span className="text-xs text-muted">Used only for women-only rides. You cannot change it later.</span>}
         </div>
         <Select id="f-idType" label="ID proof" value={d.idType} onChange={(e) => { setD((cur) => ({ ...cur, idType: e.target.value as IdType, idNumber: "" })); setErrors((cur) => ({ ...cur, idNumber: "" })); }}>
           {ID_TYPES.map((t) => <option key={t} value={t}>{ID_PROOFS[t].label}</option>)}

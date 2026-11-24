@@ -10,14 +10,11 @@ import { draft } from '@/lib/places';
 import { Icon } from '@/components/icons';
 import { MemberCard } from '@/components/member-card';
 import { RouteMap, type MapMarker } from '@/components/route-map';
-import { Badge, BackButton, Button, Chip, ChipRow, Empty, Label, Notice, s, Sheet, Switch } from '@/components/ui';
-
-type Filter = 'all' | 'car' | 'bike' | 'women';
+import { Badge, BackButton, Button, Empty, Label, Notice, s, Sheet, Switch } from '@/components/ui';
 
 /** Prototype screen 4: matching rides on the map with "why this match". */
 export default function Results() {
   const search = draft.search;
-  const [filter, setFilter] = useState<Filter>('all');
   const [selected, setSelected] = useState<string | null>(draft.chosen?.rideId ?? null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ tone: 'ok' | 'error'; text: string }>();
@@ -43,10 +40,9 @@ export default function Results() {
 
   const shown = useMemo(
     () =>
-      draft.results.filter((m) => !blocked.includes(m.driver.membershipId)).filter((m) =>
-        filter === 'car' ? m.vehicle.type === 'CAR' : filter === 'bike' ? m.vehicle.type === 'BIKE' : filter === 'women' ? m.womenOnly : true,
-      ),
-    [filter, blocked],
+      // Filters are chosen before searching (Find a ride → Filters); the results already match them.
+      draft.results.filter((m) => !blocked.includes(m.driver.membershipId)),
+    [blocked],
   );
   const chosen = shown.find((m) => m.rideId === selected) ?? shown[0];
   if (!search) return <Redirect href="/plan" />;
@@ -83,7 +79,7 @@ export default function Results() {
     }
   }
 
-  const title = draft.value.leaveNow ? 'Rides leaving now' : `Rides for ${dayWord(search.date)}, ${fmtClock(draft.value.time)}`;
+  const title = draft.value.leaveNow ? 'Rides leaving now' : `Rides for ${dayWord(search.date)}${draft.value.time ? `, ${fmtClock(draft.value.time)}` : ''}`;
   const state = chosen?.requestStatus;
 
   return (
@@ -104,16 +100,6 @@ export default function Results() {
           <Text accessibilityRole="header" style={[s.h2, { flex: 1 }]}>{title}</Text>
           <Text style={s.small}>{shown.length} {shown.length === 1 ? 'ride' : 'rides'}</Text>
         </View>
-        <ChipRow>
-          {(
-            [
-              ['all', 'All'],
-              ['car', 'Car'],
-              ['bike', 'Bike'],
-              ['women', 'Women-only'],
-            ] as const
-          ).map(([k, l]) => <Chip key={k} label={l} selected={filter === k} onPress={() => setFilter(k)} />)}
-        </ChipRow>
 
         <ScrollView contentContainerStyle={{ gap: 12, paddingBottom: 110 }} showsVerticalScrollIndicator={false}>
           {msg ? <Notice tone={msg.tone}>{msg.text}</Notice> : null}
@@ -121,7 +107,7 @@ export default function Results() {
             <Empty title="No rides match yet">Try another time or day. Or join the waitlist: when a seat opens on this route, you get it first.</Empty>
           )}
           {shown.map((m, i) => (
-            <MatchCard key={m.rideId} m={m} best={i === 0 && filter === 'all'} active={m.rideId === chosen?.rideId} onPress={() => setSelected(m.rideId)} onDriver={() => setCard(m.driver.membershipId)} preferred={fav[m.driver.membershipId] ?? m.preferred} onFav={() => toggleFav(m)} />
+            <MatchCard key={m.rideId} m={m} best={i === 0} active={m.rideId === chosen?.rideId} onPress={() => setSelected(m.rideId)} onDriver={() => setCard(m.driver.membershipId)} preferred={fav[m.driver.membershipId] ?? m.preferred} onFav={() => toggleFav(m)} />
           ))}
           <View style={{ gap: 10, padding: 16, borderRadius: 20, backgroundColor: colors.surface }}>
             <Text style={s.strong}>{shown.length ? 'Nothing quite right?' : 'Join the waitlist'}</Text>

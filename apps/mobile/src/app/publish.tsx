@@ -6,20 +6,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { Place, RoutePreview, SavedPlace } from '@rydo/shared';
 import { colors } from '@/lib/theme';
 import { api, errText } from '@/lib/api';
-import { fmtClock, fmtKm, fmtMin } from '@/lib/format';
+import { fmtKm, fmtMin } from '@/lib/format';
 import { commuteEnds, getOffices, getPlaces } from '@/lib/places';
 import { useSession } from '@/lib/session';
 import type { DriverProfile, Office } from '@/lib/types';
 import { buildSaved, PlacePicker, type Saved } from '@/components/place-picker';
-import { BackButton, Button, Chip, ChipRow, Label, Notice, s, Stepper, Switch } from '@/components/ui';
+import { TimeField } from '@/components/time-field';
+import { BackButton, Button, Chip, Label, Notice, s, Stepper, Switch } from '@/components/ui';
 
-const quarter = (from: number, to: number) =>
-  Array.from({ length: (to - from) * 4 + 1 }, (_, i) => {
-    const t = from * 60 + i * 15;
-    return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
-  });
-const MORNING = quarter(6, 12);
-const EVENING = quarter(15, 22);
 const DAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
 
 /** Prototype screen 12: publish a one-off or repeating ride. */
@@ -31,9 +25,12 @@ export default function Publish() {
   const [origin, setOrigin] = useState<Place | null>(null);
   const [destination, setDestination] = useState<Place | null>(null);
   const [picking, setPicking] = useState<'origin' | 'destination' | null>(null);
-  const [depart, setDepart] = useState('08:30');
+  // Times are typed by the driver; nothing is suggested. null = not typed yet (or not a real time).
+  const [depart, setDepart] = useState<string | null>(null);
   const [withReturn, setWithReturn] = useState(true);
-  const [back, setBack] = useState('18:30');
+  const [back, setBack] = useState<string | null>(null);
+  const returnBeforeLeave = withReturn && !!depart && !!back && back <= depart;
+  const timesOk = !!depart && (!withReturn || (!!back && !returnBeforeLeave));
   const [vehicleId, setVehicleId] = useState<string | null>(null);
   const [seats, setSeats] = useState(3);
   const [days, setDays] = useState([1, 2, 3, 4, 5]);
@@ -109,8 +106,7 @@ export default function Publish() {
         </View>
 
         <View style={{ gap: 12 }}>
-          <Label>Leave at</Label>
-          <ChipRow>{MORNING.map((t) => <Chip rect key={t} label={fmtClock(t)} selected={depart === t} onPress={() => setDepart(t)} />)}</ChipRow>
+          <TimeField label="Leave at" value={depart} onChange={setDepart} />
         </View>
 
         <View style={{ gap: 12 }}>
@@ -118,7 +114,7 @@ export default function Publish() {
             <Text style={s.strong}>Return trip in the evening</Text>
             <Switch label="Return trip in the evening" value={withReturn} onChange={setWithReturn} />
           </View>
-          {withReturn && <ChipRow>{EVENING.map((t) => <Chip rect key={t} label={fmtClock(t)} selected={back === t} onPress={() => setBack(t)} />)}</ChipRow>}
+          {withReturn && <TimeField label="Return at" pm placeholder="6:30" value={back} onChange={setBack} error={returnBeforeLeave ? 'The return must be later than the time you leave.' : undefined} />}
         </View>
 
         <View style={{ gap: 12 }}>
@@ -178,7 +174,7 @@ export default function Publish() {
       </ScrollView>
 
       <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 30, backgroundColor: colors.white, borderTopWidth: 1, borderTopColor: colors.line }}>
-        <Button label={`Publish · ${seats} seat${seats > 1 ? 's' : ''}, ${dayText}`} loading={busy} disabled={!origin || !destination || !vehicleId || days.length === 0} onPress={publish} />
+        <Button label={`Publish · ${seats} seat${seats > 1 ? 's' : ''}, ${dayText}`} loading={busy} disabled={!origin || !destination || !vehicleId || days.length === 0 || !timesOk} onPress={publish} />
       </View>
 
       <PlacePicker

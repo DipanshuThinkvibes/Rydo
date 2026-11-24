@@ -21,6 +21,8 @@ export interface EmployeeDetails {
   fullName: string;
   workEmail: string;
   phone: string;
+  /** "" until chosen. Used only for women-only rides; fixed after sign-up. */
+  gender: "" | "FEMALE" | "MALE" | "OTHER" | "UNDISCLOSED";
   idType: IdType;
   /** The full number; only its last 4 characters are ever sent. */
   idNumber: string;
@@ -44,7 +46,8 @@ export async function submitRegistration(d: EmployeeDetails): Promise<{ status: 
   return api("POST", "/me/registration", {
     fullName: d.fullName,
     phone: d.phone,
-    idType: d.idType,   
+    gender: d.gender,
+    idType: d.idType,
     idLast4: d.idNumber.slice(-4),
     employeeId: d.employeeId,
     designation: d.designation,

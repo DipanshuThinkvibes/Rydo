@@ -49,7 +49,7 @@ export class RegistrationController {
 
     const data = { organizationId: org.id, userId: auth.userId, fullName: b.fullName, phone: b.phone, idType: b.idType, idLast4: b.idLast4, employeeId: b.employeeId, designation: b.designation, department: b.department, office: b.office, managerName: b.managerName, managerEmail: b.managerEmail };
     const reg = await this.prisma.$transaction(async (tx) => {
-      await tx.user.update({ where: { id: auth.userId }, data: { name: b.fullName, phone: b.phone } });
+      await tx.user.update({ where: { id: auth.userId }, data: { name: b.fullName, phone: b.phone, gender: b.gender } });
       await tx.membership.update({ where: { id: m.id }, data: { employeeCode: b.employeeId } });
       return tx.employeeRegistration.upsert({ where: { membershipId: m.id }, create: { ...data, membershipId: m.id }, update: data });
     });

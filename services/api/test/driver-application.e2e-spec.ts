@@ -129,11 +129,12 @@ describe('Driver application', () => {
     expect((await profile('priya')).readiness.photos).toBe(true);
   });
 
+  const check = (k: string, vId = vehicleId) => api(app).post(`/api/v1/driver/vehicles/${vId}/check`).set(me(k));
+
   it('a wrong RC number is caught by the vehicle check: it must match the plate', async () => {
     await upload('priya', { kind: 'VEHICLE_RC', number: 'RC-KA01ZZ0001', expiresAt: nextYear, vehicleId }).expect(201);
     await upload('priya', { kind: 'INSURANCE', number: 'POL-12345', expiresAt: nextYear, vehicleId }).expect(201);
-    const res = (await apply('priya').expect(200)).body.data;
-    expect(res.sentToHr).toBe(false);
+    const res = (await check('priya').expect(200)).body.data; // the driver's own "check my vehicle": HR hears nothing
     const rc = res.checks.find((c: { code: string }) => c.code === 'RC_MATCH');
     expect(rc).toMatchObject({ passed: false });
     expect(rc.detail).toContain('KA 09 MJ 5521');
@@ -143,11 +144,11 @@ describe('Driver application', () => {
   it('a licence class that cannot drive this vehicle is caught', async () => {
     await upload('priya', { kind: 'VEHICLE_RC', number: 'RC-KA09MJ5521', expiresAt: nextYear, vehicleId }, { back: true }).expect(201); // a smart-card RC has a back too
     await api(app).patch('/api/v1/driver/profile').set(me('priya')).send({ details: { licenseClass: 'MCWG' } }).expect(200);
-    const res = (await apply('priya').expect(200)).body.data;
-    expect(res.sentToHr).toBe(false);
+    const res = (await check('priya').expect(200)).body.data;
     expect(res.checks.find((c: { code: string }) => c.code === 'LICENSE_CLASS')).toMatchObject({ passed: false, group: 'DRIVER' });
     expect(res.vehiclePassed).toBe(true); // the vehicle itself is fine; the driver details are not
     await api(app).patch('/api/v1/driver/profile').set(me('priya')).send({ details: { licenseClass: 'LMV' } }).expect(200);
+    expect((await api(app).get('/api/v1/admin/drivers').set(me('hr')).expect(200)).body.data).toHaveLength(0);
   });
 
   it('when all seven steps are done the vehicle is verified FIRST, then HR is asked, and the driver is told', async () => {
@@ -196,14 +197,41 @@ describe('Driver application', () => {
     await api(app).post('/api/v1/ride-plans').set(me('priya')).send({ vehicleId }).expect((r) => expect([400, 403]).toContain(r.status));
   });
 
-  it('HR will not approve until the vehicle has passed, and approving makes the person a driver', async () => {
+  it('HR decides: approving makes the person a driver and their vehicle verified, even if an automatic check had failed', async () => {
     await prisma.vehicle.update({ where: { id: vehicleId }, data: { checkStatus: 'REJECTED' } });
-    const blocked = await api(app).post(`/api/v1/admin/drivers/${driverId}/verify`).set(me('hr')).expect(409);
-    expect(blocked.body.error.message).toMatch(/vehicle has not passed the vehicle check/);
-    await prisma.vehicle.update({ where: { id: vehicleId }, data: { checkStatus: 'VERIFIED' } });
     await api(app).post(`/api/v1/admin/drivers/${driverId}/verify`).set(me('hr')).expect(200);
-    expect((await profile('priya')).status).toBe('VERIFIED');
+    const p = await profile('priya');
+    expect(p.status).toBe('VERIFIED');
+    expect(p.vehicles.find((v: { id: string }) => v.id === vehicleId).checkStatus).toBe('VERIFIED'); // so rides can be published with it
     expect(await prisma.membershipRole.count({ where: { membershipId: w.ms.priya, role: 'DRIVER' } })).toBe(1);
+    const log = await prisma.auditLog.findFirstOrThrow({ where: { action: 'DRIVER_VERIFIED', entityId: driverId } });
+    expect(log.after).toMatchObject({ vehicleApprovedDespiteCheck: 'KA 09 MJ 5521' });
+  });
+
+  it('the request goes to HR once licence, RC and insurance are in, with failed checks for HR to look at', async () => {
+    await api(app).post('/api/v1/driver/profile').set(me('kiran')).send({ details: { dateOfBirth: '1992-01-15', licenseClass: 'LMV' } }).expect(201);
+    const v = (await api(app).post('/api/v1/driver/vehicles').set(me('kiran')).send({ ...car, plateNumber: 'KA 03 KK 4410' }).expect(201)).body.data.vehicles[0].id;
+    // only the licence so far: nothing goes to HR yet, and the answer says what is missing
+    await licence('kiran');
+    const early = (await apply('kiran').expect(200)).body.data;
+    expect(early).toMatchObject({ sentToHr: false });
+    expect(failedCodes(early.checks)).toEqual(expect.arrayContaining(['RC_PRESENT', 'INSURANCE_PRESENT']));
+    await upload('kiran', { kind: 'VEHICLE_RC', number: 'RC-KA03KK4410', expiresAt: nextYear, vehicleId: v }).expect(201);
+    await upload('kiran', { kind: 'INSURANCE', number: 'POL-K-1', expiresAt: nextYear, vehicleId: v }).expect(201);
+    // no vehicle photos, no guidelines, no profile photo: still sent, HR decides
+    const res = (await apply('kiran').expect(200)).body.data;
+    expect(res).toMatchObject({ sentToHr: true, passed: false });
+    expect(res.profile.applicationStatus).toBe('WITH_HR');
+    const asked = await prisma.notification.findFirstOrThrow({ where: { type: 'DRIVER_APPLICATION', userId: w.users.hr, title: { startsWith: 'kiran' } } });
+    expect(asked.body).toMatch(/automatic checks need a look for KA 03 KK 4410/);
+    const listed = (await api(app).get('/api/v1/admin/drivers').set(me('hr')).expect(200)).body.data.map((d: { name: string }) => d.name);
+    expect(listed).toContain('kiran person');
+    // a new upload while with HR keeps the request with HR
+    await allPhotos('kiran', v);
+    expect((await profile('kiran')).applicationStatus).toBe('WITH_HR');
+    const kiranId = (await profile('kiran')).id;
+    await api(app).post(`/api/v1/admin/drivers/${kiranId}/verify`).set(me('hr')).expect(200);
+    expect((await profile('kiran')).status).toBe('VERIFIED');
   });
 
   it('a second vehicle must pass its own check (papers and photos) before it can be used for a ride', async () => {

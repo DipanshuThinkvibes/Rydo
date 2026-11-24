@@ -10,7 +10,7 @@ import { useSession } from '@/lib/session';
 import { GoogleButton, googleSignInAvailable } from '@/components/google-button';
 import { Icon } from '@/components/icons';
 import { Select } from '@/components/select';
-import { Button, Field, Logo, Notice, s } from '@/components/ui';
+import { Button, Chip, Field, Logo, Notice, s } from '@/components/ui';
 
 type Step = 'company' | 'details' | 'verify' | 'done';
 const STEPS: { key: Step; label: string }[] = [
@@ -30,11 +30,19 @@ const ID_FORMAT: Record<IdProofType, { re: RegExp; hint: string }> = {
   VOTER_ID: { re: /^[A-Z]{3}\d{7}$/, hint: 'Like ABC1234567' },
 };
 const cleanId = (n: string) => n.toUpperCase().replace(/[\s-]/g, '');
+const GENDER_CHOICES = [
+  ['FEMALE', 'Female'],
+  ['MALE', 'Male'],
+  ['OTHER', 'Other'],
+  ['UNDISCLOSED', 'Prefer not to say'],
+] as const;
 
 type Form = {
   name: string;
   email: string;
   phone: string;
+  /** '' until chosen. Used only for women-only rides; fixed after sign-up. */
+  gender: '' | 'FEMALE' | 'MALE' | 'OTHER' | 'UNDISCLOSED';
   idProofType: IdProofType;
   idProofNumber: string;
   employeeId: string;
@@ -66,6 +74,7 @@ export default function Signup() {
     name: '',
     email: params.email ?? '',
     phone: '',
+    gender: '',
     idProofType: 'AADHAAR',
     idProofNumber: '',
     employeeId: '',
@@ -200,6 +209,7 @@ async function register(f: Form) {
   await api('POST', '/me/registration', {
     fullName: f.name.trim(),
     phone: f.phone,
+    gender: f.gender,
     idType: f.idProofType,
     idLast4: cleanId(f.idProofNumber).slice(-4),
     employeeId: f.employeeId.trim(),
@@ -366,6 +376,7 @@ function Details({
     const parsed = registrationSchema.safeParse({
       fullName: f.name,
       phone: f.phone,
+      gender: f.gender || undefined,
       idType: f.idProofType,
       idLast4: id.slice(-4),
       employeeId: f.employeeId,
@@ -450,6 +461,16 @@ function Details({
           />
         </View>
         {errors.phone ? <Text style={s.error}>{errors.phone}</Text> : <Text style={s.small}>Private. Never shown to other employees.</Text>}
+      </View>
+
+      <View style={{ gap: 6 }}>
+        <Text style={s.label}>Gender</Text>
+        <View accessibilityRole="radiogroup" style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          {GENDER_CHOICES.map(([v, l]) => (
+            <Chip key={v} label={l} selected={f.gender === v} onPress={() => set('gender', v)} />
+          ))}
+        </View>
+        {errors.gender ? <Text style={s.error}>{errors.gender}</Text> : <Text style={s.small}>Used only for women-only rides. You cannot change it later.</Text>}
       </View>
 
       <Select label="ID proof" value={f.idProofType} options={ID_PROOF_TYPES.map((t) => ({ value: t, label: ID_LABEL[t] }))} onChange={(v) => (set('idProofType', v as IdProofType), set('idProofNumber', ''))} />

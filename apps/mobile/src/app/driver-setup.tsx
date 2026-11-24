@@ -6,7 +6,7 @@ import type { DriverStep } from '@rydo/shared';
 import { colors } from '@/lib/theme';
 import { api, errText } from '@/lib/api';
 import { Alert } from '@/lib/dialog';
-import { STATUS_LOOK, STEP_INFO, type DriverSignup } from '@/lib/driver-signup';
+import { NEEDED_FOR_HR, STATUS_LOOK, STEP_INFO, type ApplyResult, type DriverSignup } from '@/lib/driver-signup';
 import { useData } from '@/lib/hooks';
 import { Icon } from '@/components/icons';
 import { BackButton, Badge, Button, Card, Chip, Label, Loading, Notice, s } from '@/components/ui';
@@ -21,7 +21,8 @@ const PREFS: [keyof Prefs, string][] = [
 
 /**
  * Become a driver, like the Uber driver app: a checklist of steps, each with its own status, done in any order.
- * The API works the checklist out (GET /driver/profile → checklist); HR verifies once everything is in.
+ * The API works the checklist out (GET /driver/profile → checklist). Once the licence, vehicle, RC and insurance are in,
+ * the driver sends a request to their company's HR, who approves it; then they can publish rides.
  */
 export default function DriverSetup() {
   const [refreshing, setRefreshing] = useState(false);
@@ -54,6 +55,24 @@ function Checklist({ profile, onChanged }: { profile: DriverSignup; onChanged: (
   const done = steps.filter((x) => x.status === 'DONE' || x.status === 'IN_REVIEW').length;
   const attention = steps.filter((x) => x.status === 'NEEDS_ATTENTION').length;
   const allIn = steps.every((x) => x.status === 'DONE' || x.status === 'IN_REVIEW');
+  const withHr = profile.applicationStatus === 'WITH_HR' && profile.status === 'PENDING';
+  const missing = steps.filter((x) => NEEDED_FOR_HR.includes(x.key) && x.status === 'TODO').map((x) => STEP_INFO[x.key].title.toLowerCase());
+  const canSend = profile.status !== 'VERIFIED' && !withHr;
+  const [sending, setSending] = useState(false);
+
+  const send = async () => {
+    setSending(true);
+    try {
+      const r = await api<ApplyResult>('POST', '/driver/application', {});
+      await onChanged();
+      if (r.sentToHr) Alert.alert('Request sent to HR', 'Your HR team checks your papers and approves you, usually within a working day. We will let you know.');
+      else Alert.alert('Not sent yet', `Add these first: ${r.checks.filter((c) => !c.passed && /_PRESENT$/.test(c.code)).map((c) => c.label.toLowerCase()).join(', ')}.`);
+    } catch (e) {
+      Alert.alert('Could not send', errText(e));
+    } finally {
+      setSending(false);
+    }
+  };
 
   const banner =
     profile.status === 'VERIFIED'
@@ -62,9 +81,11 @@ function Checklist({ profile, onChanged }: { profile: DriverSignup; onChanged: (
         ? { tone: 'danger' as const, title: 'A document has expired', text: 'Upload the renewed one to drive again.' }
         : attention
           ? { tone: 'danger' as const, title: `${attention} ${attention === 1 ? 'step needs' : 'steps need'} your attention`, text: 'Open it to see why and upload again.' }
-          : allIn
-            ? { tone: 'warning' as const, title: 'Waiting for HR', text: 'Everything is in. Your HR team checks it, usually within a working day. We will email you.' }
-            : { tone: 'neutral' as const, title: 'Offer your empty seats', text: 'Drive colleagues who live on your route. Finish these steps in any order; HR checks them before your first ride.' };
+          : withHr
+            ? { tone: 'warning' as const, title: 'Request sent to HR', text: 'Your HR team checks your papers and approves you, usually within a working day. We will let you know.' }
+            : allIn
+              ? { tone: 'neutral' as const, title: 'Ready to send', text: 'Everything is in. Send your request to HR below.' }
+              : { tone: 'neutral' as const, title: 'Offer your empty seats', text: 'Drive colleagues who live on your route. Add your licence, vehicle, RC and insurance, then send a request to your HR.' };
 
   return (
     <>
@@ -81,19 +102,26 @@ function Checklist({ profile, onChanged }: { profile: DriverSignup; onChanged: (
 
       <Card style={{ gap: 0, paddingVertical: 4 }}>
         {steps.map((x, i) => (
-          <StepRow key={x.key} step={x} first={i === 0} />
+          <StepRow key={x.key} step={x} first={i === 0} withHr={withHr} />
         ))}
       </Card>
 
+      {canSend ? (
+        <View style={{ gap: 6 }}>
+          <Button label="Send request to HR" variant="lime" loading={sending} disabled={missing.length > 0} onPress={send} />
+          <Text style={[s.small, { textAlign: 'center' }]}>{missing.length ? `First add your ${missing.join(', ')}.` : 'HR approves you, then you can publish rides.'}</Text>
+        </View>
+      ) : null}
       {profile.status === 'VERIFIED' ? <Button label="Go to Drive" variant="lime" onPress={() => router.replace('/drive')} /> : null}
       <Preferences profile={profile} onChanged={onChanged} />
     </>
   );
 }
 
-function StepRow({ step, first }: { step: DriverStep; first: boolean }) {
+function StepRow({ step, first, withHr }: { step: DriverStep; first: boolean; withHr: boolean }) {
   const info = STEP_INFO[step.key];
-  const look = STATUS_LOOK[step.status];
+  // Uploaded papers are only "with HR" once the request has been sent.
+  const look = step.status === 'IN_REVIEW' && !withHr ? { label: 'uploaded', tone: 'neutral' as const } : STATUS_LOOK[step.status];
   return (
     <Pressable
       accessibilityRole="button"

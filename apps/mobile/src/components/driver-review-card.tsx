@@ -4,7 +4,7 @@ import { DOCUMENT_LABEL, LICENSE_CLASS_LABEL, type DocumentKindName } from '@ryd
 import { colors } from '@/lib/theme';
 import { api, errText, RequestError } from '@/lib/api';
 import { Alert } from '@/lib/dialog';
-import { latestOf, mainVehicle, STATUS_LOOK, STEP_INFO, type DriverDocument, type DriverForReview } from '@/lib/driver-signup';
+import { latestOf, mainVehicle, NEEDED_FOR_HR, STATUS_LOOK, STEP_INFO, type DriverDocument, type DriverForReview } from '@/lib/driver-signup';
 import { CheckNotes } from './doc-photo';
 import { Avatar, Badge, Button, Chip, Field, s } from './ui';
 
@@ -20,7 +20,9 @@ export function DriverReviewCard({ driver, onChanged }: { driver: DriverForRevie
   const [asking, setAsking] = useState(false);
   const vehicle = mainVehicle(driver.vehicles);
   const docs = ORDER.map((k) => latestOf(driver.documents, k, vehicle?.id)).filter((d): d is DriverDocument => !!d);
-  const missing = driver.checklist.filter((x) => x.status === 'TODO');
+  // HR decides: only the licence, vehicle, RC and insurance must be in. Other open steps are shown, not enforced.
+  const missing = driver.checklist.filter((x) => x.status === 'TODO' && NEEDED_FOR_HR.includes(x.key));
+  const openSteps = driver.checklist.filter((x) => x.status === 'TODO' && !NEEDED_FOR_HR.includes(x.key));
 
   const run = async (key: string, fn: () => Promise<unknown>) => {
     setBusy(key);
@@ -132,10 +134,14 @@ export function DriverReviewCard({ driver, onChanged }: { driver: DriverForRevie
         disabled={!!busy || missing.length > 0}
         loading={busy === 'verify'}
         onPress={() =>
-          Alert.alert(`Verify ${driver.name}?`, 'Only after you have opened and checked every document and photo.', [
+          Alert.alert(
+            `Verify ${driver.name}?`,
+            `Only after you have opened and checked the licence, RC and insurance.${openSteps.length ? ` Still open: ${openSteps.map((x) => STEP_INFO[x.key].title.toLowerCase()).join(', ')}.` : ''}`,
+            [
             { text: 'Cancel', style: 'cancel' },
             { text: 'Verify', onPress: () => verify(false) },
-          ])
+            ],
+          )
         }
       />
     </View>

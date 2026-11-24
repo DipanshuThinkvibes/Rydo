@@ -44,12 +44,19 @@ function ProfileTab() {
   const phoneVal = phone ?? profile?.phone ?? '';
   const genderVal = gender ?? profile?.gender ?? 'UNDISCLOSED';
 
+  // Name, phone and gender come from sign-up and are fixed. Only a phone or gender that was never given can be added (once).
+  const savedPhone = profile?.phone ?? null;
+  const savedGender = profile?.gender ?? 'UNDISCLOSED';
+  const canAddPhone = active && !!profile && !savedPhone;
+  const canAddGender = active && !!profile && savedGender === 'UNDISCLOSED';
+  const adding = (canAddPhone && !!phoneVal.trim()) || (canAddGender && genderVal !== 'UNDISCLOSED');
+
   const saveProfile = async () => {
     setPFields({});
     setPMsg(undefined);
     setSaving(true);
     try {
-      await api('PATCH', '/me', { name: nameVal, ...(active ? { gender: genderVal, phone: phoneVal.trim() ? phoneVal : null } : {}) });
+      await api('PATCH', '/me', { ...(canAddPhone && phoneVal.trim() ? { phone: phoneVal } : {}), ...(canAddGender && genderVal !== 'UNDISCLOSED' ? { gender: genderVal } : {}) });
       await Promise.all([reloadProfile(), reload()]);
       setName(null);
       setPhone(null);
@@ -103,12 +110,13 @@ function ProfileTab() {
   return (
     <>
       <Section icon="user" title="Profile" sub={active ? 'This is how colleagues see you. Your phone number stays private.' : 'Your name as RYDO staff and colleagues see it.'}>
-        <Field label="Name" value={nameVal} onChangeText={setName} autoComplete="name" error={pFields.name} />
-        {active ? <Field label="Phone (private)" value={phoneVal} onChangeText={setPhone} placeholder="+91 98765 43210" keyboardType="phone-pad" autoComplete="tel" error={pFields.phone} /> : null}
-        {active ? <Select label="Gender (only used for women-only rides)" value={genderVal} options={GENDERS} onChange={setGender} /> : null}
+        <InfoRow label="Name" value={nameVal} />
+        {active ? (canAddPhone ? <Field label="Phone (private)" value={phoneVal} onChangeText={setPhone} placeholder="+91 98765 43210" keyboardType="phone-pad" autoComplete="tel" error={pFields.phone} /> : <InfoRow label="Phone (private)" value={savedPhone ?? ''} />) : null}
+        {active ? (canAddGender ? <Select label="Gender (only used for women-only rides)" value={genderVal} options={GENDERS} onChange={setGender} /> : <InfoRow label="Gender (only used for women-only rides)" value={GENDERS.find((g) => g.value === savedGender)?.label ?? ''} />) : null}
+        <Text style={s.small}>{canAddPhone || canAddGender ? 'You can add a missing phone or gender once. After that, ask your HR team to change your details.' : 'Your name, phone and gender come from sign-up. Ask your HR team if something is wrong.'}</Text>
         {pMsg ? <Notice tone={pMsg.tone}>{pMsg.text}</Notice> : null}
         <View style={{ flexDirection: 'row', gap: 10 }}>
-          <Button label="Save profile" loading={saving} onPress={saveProfile} style={{ flex: 1 }} />
+          {canAddPhone || canAddGender ? <Button label="Save" loading={saving} disabled={!adding} onPress={saveProfile} style={{ flex: 1 }} /> : null}
           {photoUrl ? <Button label="Remove photo" variant="ghost" onPress={removePhoto} /> : null}
         </View>
       </Section>
@@ -182,6 +190,19 @@ function Ring({ pct }: { pct: number }) {
   return (
     <View style={{ width: 48, height: 48, borderRadius: 24, borderWidth: 5, borderColor: pct >= 100 ? colors.lime : colors.surface2, borderTopColor: colors.lime, borderRightColor: pct >= 50 ? colors.lime : colors.surface2, borderBottomColor: pct >= 75 ? colors.lime : colors.surface2, alignItems: 'center', justifyContent: 'center' }}>
       <Text style={{ fontSize: 12, fontWeight: '800', color: colors.ink }}>{pct}%</Text>
+    </View>
+  );
+}
+
+/** A detail that cannot be edited here: label and value, no input. */
+function InfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={{ gap: 6 }}>
+      <Text style={s.label}>{label}</Text>
+      <View accessible accessibilityLabel={`${label}: ${value || 'not given'}`} style={{ minHeight: 52, borderRadius: 14, paddingHorizontal: 14, justifyContent: 'center', backgroundColor: colors.surface2, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+        <Text style={{ flex: 1, fontSize: 16, color: value ? colors.ink : colors.muted }}>{value || 'Not given'}</Text>
+        <Icon name="lock" size={16} color={colors.muted} />
+      </View>
     </View>
   );
 }

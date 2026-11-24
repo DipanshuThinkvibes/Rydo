@@ -163,6 +163,19 @@ describe('Safety, profile and car filters', () => {
       expect((await api(app).get('/api/v1/me/profile').set(w.as('priya')).expect(200)).body.data.photoUrl).toBeNull();
     });
 
+    it('name, phone and gender are fixed once given: only a missing phone or gender can be added', async () => {
+      const name = (await api(app).get('/api/v1/me').set(w.as('arjun')).expect(200)).body.data.user.name;
+      const renamed = await api(app).patch('/api/v1/me').set(w.as('arjun')).send({ name: 'Someone Else' }).expect(400);
+      expect(renamed.body.error.fields.name).toMatch(/cannot be changed/);
+      await api(app).patch('/api/v1/me').set(w.as('arjun')).send({ name }).expect(200); // the same name is fine (the apps send it back)
+      await api(app).patch('/api/v1/me').set(w.as('arjun')).send({ phone: '+91 98888 77777' }).expect(200); // no phone yet: may be added
+      expect((await api(app).patch('/api/v1/me').set(w.as('arjun')).send({ phone: '+91 90000 11111' }).expect(400)).body.error.fields.phone).toBeDefined();
+      await api(app).patch('/api/v1/me').set(w.as('arjun')).send({ gender: 'MALE' }).expect(200); // not given yet: may be added
+      expect((await api(app).patch('/api/v1/me').set(w.as('arjun')).send({ gender: 'FEMALE' }).expect(400)).body.error.fields.gender).toBeDefined();
+      const u = await prisma.user.findUniqueOrThrow({ where: { id: w.users.arjun } });
+      expect(u).toMatchObject({ name, phone: '+91 98888 77777', gender: 'MALE' });
+    });
+
     it('updates the phone number, which stays private', async () => {
       await api(app).patch('/api/v1/me').set(w.as('driver')).send({ phone: 'not a phone' }).expect(400);
       await api(app).patch('/api/v1/me').set(w.as('driver')).send({ phone: '+91 99999 88888' }).expect(200);

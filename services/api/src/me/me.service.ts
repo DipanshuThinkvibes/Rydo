@@ -4,6 +4,7 @@ import { applyLicenses, licenseDaysLeft, licenseState, orgFeatures, type Members
 import { AppError } from '../common/app-error';
 import { hashPassword, verifyPassword } from '../auth/password';
 import { PrismaService } from '../prisma/prisma.service';
+import { env } from '../config/env';
 
 @Injectable()
 export class MeService {
@@ -37,7 +38,7 @@ export class MeService {
     }));
     const platformRole: 'SUPER_ADMIN' | 'SUPPORT' | null = user.platformRoles.some((p) => p.role === 'SUPER_ADMIN') ? 'SUPER_ADMIN' : user.platformRoles.some((p) => p.role === 'SUPPORT') ? 'SUPPORT' : null;
     return {
-      user: { id: user.id, email: user.email, name: user.name, emailVerified: !!user.emailVerifiedAt, hasPhoto: !!user.photoKey, isPlatformAdmin: user.platformRoles.some((p) => p.role === 'SUPER_ADMIN'), platformRole },
+      user: { id: user.id, email: user.email, name: user.name, emailVerified: !!user.emailVerifiedAt, hasPhoto: !!user.photoKey, photoRequired: env().REQUIRE_PROFILE_PHOTO === 'true', isPlatformAdmin: user.platformRoles.some((p) => p.role === 'SUPER_ADMIN'), platformRole },
       memberships,
     };
   }
@@ -53,6 +54,13 @@ export class MeService {
   }
 
   async update(userId: string, data: UpdateMe) {
+    // Name, phone and gender are fixed after sign-up. Sending the same value is fine; a missing phone or gender may be added once.
+    const u = await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { name: true, phone: true, gender: true } });
+    const locked: Record<string, string> = {};
+    if (data.name !== undefined && data.name !== u.name) locked.name = 'Your name cannot be changed. Ask your HR team if it is wrong.';
+    if (data.phone !== undefined && u.phone && data.phone !== u.phone) locked.phone = 'Your phone number cannot be changed. Ask your HR team if it is wrong.';
+    if (data.gender !== undefined && u.gender !== 'UNDISCLOSED' && data.gender !== u.gender) locked.gender = 'Your gender cannot be changed. Ask your HR team if it is wrong.';
+    if (Object.keys(locked).length) throw new AppError('VALIDATION_ERROR', Object.values(locked)[0], 400, locked);
     await this.prisma.user.update({ where: { id: userId }, data });
     return this.summary(userId);
   }

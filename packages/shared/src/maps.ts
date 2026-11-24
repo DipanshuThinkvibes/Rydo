@@ -15,6 +15,16 @@ export const autocompleteQuerySchema = z.object({
 });
 
 /** Route preview between two points, e.g. while a driver publishes a ride. */
+/** A spot on the map to turn into an address (the movable pin). */
+export const reverseQuerySchema = z.object({
+  lat: z.coerce.number().min(-90).max(90),
+  lng: z.coerce.number().min(-180).max(180),
+});
+/** null label = no address known for that spot (the app then shows the pin's own name). */
+export interface ReverseGeocode {
+  label: string | null;
+}
+
 export const routeQuerySchema = z.object({
   fromLat: z.coerce.number().min(-90).max(90),
   fromLng: z.coerce.number().min(-180).max(180),
