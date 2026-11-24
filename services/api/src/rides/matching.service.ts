@@ -1,6 +1,8 @@
-import { Injectable } from '@nestjs/common';
-import { DEFAULT_ORG_SETTINGS, orgFeatures, type OrgFeatures, type CarType, type OrgSettings, type RideMatch, type RideSearch } from '@rydo/shared';
+import { Inject, Injectable } from '@nestjs/common';
+import { DEFAULT_ORG_SETTINGS, orgFeatures, type OrgFeatures, type OrgSettings, type RideMatch, type RideSearch } from '@rydo/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { STORAGE_ADAPTER, StorageAdapter } from '../adapters/storage.adapter';
+import { profilePhotoUrls, vehicleFrontPhotoUrls } from '../common/photos';
 
 interface Row {
   id: string;
@@ -19,12 +21,14 @@ interface Row {
   driverMembershipId: string;
   driverName: string;
   type: 'CAR' | 'BIKE';
-  carType: CarType | null;
+  carType: 'HATCHBACK' | 'SEDAN' | 'SUV' | null;
   make: string;
   model: string;
   color: string;
   plateNumber: string;
   hasAc: boolean;
+  vehicleId: string;
+  checkStatus: string;
   rating: number | null;
   ratingCount: number;
   requestStatus: 'PENDING' | 'ACCEPTED' | null;
@@ -43,7 +47,10 @@ const clamp = (x: number) => Math.max(0, Math.min(1, x));
 /** Finds rides whose road route passes near the pickup and then the drop, inside the rider's time window. */
 @Injectable()
 export class MatchingService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(STORAGE_ADAPTER) private readonly storage: StorageAdapter,
+  ) {}
 
   /** The company's ride rules with RYDO's feature switches applied on top (a switched-off feature wins). */
   async settings(organizationId: string): Promise<OrgSettings & { features: OrgFeatures }> {
@@ -75,7 +82,7 @@ export class MatchingService {
         ((${s.date}::date + ${s.fromTime}::time) AT TIME ZONE o.timezone) AS "wantFrom",
         ((${s.date}::date + ${s.toTime}::time) AT TIME ZONE o.timezone) AS "wantTo",
         m.id AS "driverMembershipId", u.name AS "driverName",
-        v.type::text AS type, v.car_type::text AS "carType", v.make, v.model, v.color, v.plate_number AS "plateNumber", v.has_ac AS "hasAc",
+        v.type::text AS type, v.car_type::text AS "carType", v.make, v.model, v.color, v.plate_number AS "plateNumber", v.has_ac AS "hasAc", v.id AS "vehicleId", v.check_status::text AS "checkStatus",
         (SELECT avg(stars)::float FROM ratings WHERE ratee_membership_id = m.id) AS rating,
         (SELECT count(*)::int FROM ratings WHERE ratee_membership_id = m.id) AS "ratingCount",
         (SELECT x.status::text FROM ride_requests x WHERE x.ride_id = r.id AND x.rider_membership_id = ${org.membershipId}::uuid AND x.status IN ('PENDING', 'ACCEPTED') ORDER BY x.created_at DESC LIMIT 1) AS "requestStatus",
@@ -109,7 +116,13 @@ export class MatchingService {
       ORDER BY r.depart_at
       LIMIT 50`;
 
-    return rows.map((r) => this.score(r, radius, s)).sort((a, b) => b.score - a.score).slice(0, 20);
+    const top = rows.map((r) => ({ r, m: this.score(r, radius, s) })).sort((a, b) => b.m.score - a.m.score).slice(0, 20);
+    // The rider sees the driver's photo and the vehicle's front photo, to check who and what arrives.
+    const [people, cars] = await Promise.all([
+      profilePhotoUrls(this.prisma, this.storage, top.map((x) => x.r.driverMembershipId)),
+      vehicleFrontPhotoUrls(this.prisma, this.storage, top.map((x) => x.r.vehicleId)),
+    ]);
+    return top.map(({ r, m }) => ({ ...m, driver: { ...m.driver, photoUrl: people.get(r.driverMembershipId) ?? null }, vehicle: { ...m.vehicle, verified: r.checkStatus === 'VERIFIED', photoUrl: cars.get(r.vehicleId) ?? null } }));
   }
 
   private score(r: Row, radius: number, s: RideSearch): RideMatch {

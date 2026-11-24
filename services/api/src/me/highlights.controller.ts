@@ -77,7 +77,7 @@ export class HighlightsController {
         count('PENDING'),
         count('ACTIVE'),
         count('SUSPENDED'),
-        this.prisma.driverProfile.count({ where: { status: 'PENDING', membership: { organizationId } } }),
+        this.prisma.driverProfile.count({ where: { status: 'PENDING', applicationStatus: 'WITH_HR', membership: { organizationId } } }),
       ]);
       return [
         { key: 'waiting', label: 'to approve', value: waiting, href: '/employees' },

@@ -18,6 +18,7 @@ interface Person {
   status: string;
   blocked: boolean;
   blockedAt: string | null;
+  blockedUntil?: string | null;
   blockReason: string | null;
   reportsAgainst: number;
   recentReportsAgainst: number;
@@ -59,6 +60,7 @@ function People() {
   const [open, setOpen] = useState<string | null>(null);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [reason, setReason] = useState("");
+  const [days, setDays] = useState<string>("7");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ tone: "ok" | "error"; text: string }>();
 
@@ -72,15 +74,16 @@ function People() {
   }, [org, q, filter, page]);
 
   useEffect(() => {
-    if (!me?.user.isPlatformAdmin) return;
-    api<Client[]>("GET", "/admin/platform/organizations").then(setClients, () => undefined);
+    if (!me?.user.platformRole) return;
+    api<Client[]>("GET", "/admin/platform/people/companies").then(setClients, () => undefined);
   }, [me]);
   useEffect(() => {
-    if (!me?.user.isPlatformAdmin) return;
+    if (!me?.user.platformRole) return;
     fetchPeople().then(setData, (e) => setError(e instanceof Error ? e.message : "Could not load."));
   }, [me, fetchPeople]);
 
-  if (!me?.user.isPlatformAdmin) return <Notice tone="error">RYDO owner team only.</Notice>;
+  if (!me?.user.platformRole) return <Notice tone="error">RYDO team only.</Notice>;
+  const superAdmin = me.user.platformRole === "SUPER_ADMIN";
 
   const reset = () => {
     setData(null);
@@ -103,7 +106,7 @@ function People() {
     setBusy(true);
     setMsg(undefined);
     try {
-      await api("POST", `/admin/platform/people/${p.id}/${kind}`, { reason });
+      await api("POST", `/admin/platform/people/${p.id}/${kind}`, { reason, ...(kind === "block" ? { days: days === "open" ? null : Number(days) } : {}) });
       setMsg({ tone: "ok", text: kind === "block" ? `${p.name} is blocked in ${p.organization.name}. They were told, and only RYDO can lift it.` : `${p.name} can use ${p.organization.name} again.` });
       setReason("");
       const [list, one] = await Promise.all([fetchPeople(), api<Detail>("GET", `/admin/platform/people/${p.id}`)]);
@@ -158,7 +161,7 @@ function People() {
                   <span className="block text-xs text-muted">{p.organization.name} · {p.roles.map(label).join(", ")}{p.department ? ` · ${p.department}` : ""}</span>
                 </span>
                 {p.flagged && <Badge tone="warning">reported {p.recentReportsAgainst}×</Badge>}
-                {p.blocked ? <Badge tone="warning">Blocked by RYDO</Badge> : <Badge tone={p.status === "ACTIVE" ? "success" : "neutral"}>{label(p.status)}</Badge>}
+                {p.blocked ? <Badge tone="warning">{p.blockedUntil ? `Paused until ${fmtWhen(p.blockedUntil)}` : "Blocked by RYDO"}</Badge> : <Badge tone={p.status === "ACTIVE" ? "success" : "neutral"}>{label(p.status)}</Badge>}
               </button>
               {open === p.id && (
                 <div className="flex animate-rise flex-col gap-4 bg-surface px-5 py-4 text-sm">
@@ -197,7 +200,16 @@ function People() {
                       {(p.blocked || p.status === "ACTIVE" || p.status === "SUSPENDED") && (
                         <div className="flex flex-col gap-3 rounded-2xl bg-white p-4">
                           <Textarea label={p.blocked ? "Why are you unblocking? (kept in the activity log)" : "Why are you blocking? (kept in the activity log)"} value={reason} onChange={(e) => setReason(e.target.value)} rows={2} maxLength={300} />
-                          <p className="text-xs text-muted">{p.blocked ? "They get their access back and are told." : "They lose access to this company at once and are told. The company admin cannot undo it; only you can."}</p>
+                          {!p.blocked && (
+                            <div className="flex flex-col gap-1.5">
+                              <label htmlFor="block-days" className="text-sm font-bold">For how long?</label>
+                              <select id="block-days" value={days} onChange={(e) => setDays(e.target.value)} className={fieldClass}>
+                                {[1, 3, 7, 14, 30].map((d) => <option key={d} value={d}>{d} {d === 1 ? "day" : "days"}</option>)}
+                                {superAdmin && <option value="open">Until I lift it</option>}
+                              </select>
+                            </div>
+                          )}
+                          <p className="text-xs text-muted">{p.blocked ? "They get their access back and are told." : "They lose access to this company at once and are told. A timed pause ends by itself; the company admin cannot undo it."}</p>
                           <Button className="self-start" variant={p.blocked ? "primary" : "danger"} loading={busy} disabled={reason.trim().length < 5} onClick={() => act(p, p.blocked ? "unblock" : "block")}>
                             {p.blocked ? "Unblock" : "Block"} {p.name}
                           </Button>

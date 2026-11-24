@@ -1,4 +1,4 @@
-import type { CarType, DocumentCheckView, DocumentKindName, DriverStep, DriverStepName, LicenceClass } from '@rydo/shared';
+import type { CarType, DocumentCheckView, DocumentKindName, DriverStep, DriverStepName, LicenseClass } from '@rydo/shared';
 import { api } from './api';
 import { appendFile, type Picked } from './photo';
 import type { Vehicle } from './types';
@@ -15,7 +15,6 @@ export interface DriverDocument {
   rejectReason: string | null;
   uploadedAt: string;
   hasBack: boolean;
-  vehicleClasses: string[];
   /** Government records check (licence, RC, insurance); null for photos. */
   check: DocumentCheckView | null;
   expired: boolean;
@@ -32,6 +31,8 @@ export interface DriverSignup {
   preferences: Partial<Record<'ac' | 'noSmoking' | 'quiet' | 'musicOk' | 'womenRidersOnly', boolean>>;
   verifiedAt: string | null;
   guidelinesAcceptedAt: string | null;
+  /** Saved on the licence step; checked for age and vehicle type. */
+  details: { dateOfBirth: string | null; licenseClass: LicenseClass | null; drivingSince: number | null } | null;
   vehicles: DriverVehicle[];
   documents: DriverDocument[];
   checklist: DriverStep[];
@@ -49,6 +50,7 @@ export interface DriverForReview {
   hasExpiryWarning: boolean;
   hasPhoto: boolean;
   guidelinesAcceptedAt: string | null;
+  details: { licenseClass: LicenseClass | null; drivingSince: number | null; age: number | null } | null;
   checklist: DriverStep[];
   vehicles: DriverVehicle[];
   documents: DriverDocument[];
@@ -81,9 +83,9 @@ export const mainVehicle = (vehicles: DriverVehicle[]) => vehicles.find((v) => v
 export const latestOf = (docs: DriverDocument[], kind: DocumentKindName, vehicleId?: string) =>
   docs.filter((d) => d.kind === kind && (kind === 'DRIVING_LICENSE' || d.vehicleId === vehicleId)).sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt))[0];
 
-/** POST /driver/documents as multipart: fields, "file" (front or photo) and optional "back". */
+/** POST /driver/documents as multipart: fields, "file" (front or photo) and optional "fileBack". */
 export async function uploadDocument(
-  fields: { kind: DocumentKindName; number?: string; expiresAt?: string; vehicleId?: string; dateOfBirth?: string; vehicleClasses?: LicenceClass[] },
+  fields: { kind: DocumentKindName; number?: string; expiresAt?: string; vehicleId?: string },
   front: Picked,
   back?: Picked | null,
 ) {
@@ -92,10 +94,8 @@ export async function uploadDocument(
   if (fields.number) form.append('number', fields.number.trim());
   if (fields.expiresAt) form.append('expiresAt', fields.expiresAt.trim());
   if (fields.vehicleId) form.append('vehicleId', fields.vehicleId);
-  if (fields.dateOfBirth) form.append('dateOfBirth', fields.dateOfBirth.trim());
-  if (fields.vehicleClasses) form.append('vehicleClasses', fields.vehicleClasses.join(','));
   await appendFile(form, 'file', front);
-  if (back) await appendFile(form, 'back', back);
+  if (back) await appendFile(form, 'fileBack', back);
   return api<DriverDocument>('POST', '/driver/documents', form);
 }
 

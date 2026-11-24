@@ -5,7 +5,9 @@ import { ID_PROOFS, type IdType } from "@/lib/validators";
 import { ORG_ROLES, type OrgRoleName } from "@rydo/shared";
 import { api, RequestError } from "@/lib/api";
 import { useSession } from "@/lib/session";
+import { JOIN_METHOD_LABEL, type JoinMethod } from "@rydo/shared";
 import { Badge, Button, Notice, PageHeader } from "@/components/ui";
+import { InviteLinks } from "@/components/invite-links";
 
 interface Member {
   id: string;
@@ -15,6 +17,8 @@ interface Member {
   departmentId: string | null;
   status: "PENDING" | "ACTIVE" | "REJECTED" | "SUSPENDED" | "LEFT";
   roles: OrgRoleName[];
+  /** How the account was created: own sign-up, invite link or added by an admin. */
+  joinedVia?: JoinMethod;
   /** What the person wrote when they signed up (waiting employees). */
   registration: { employeeId: string; designation: string; department: string; office: string; phone: string; idType: string; idLast4: string; managerName: string; managerEmail: string; submittedAt: string } | null;
 }
@@ -81,7 +85,8 @@ export default function EmployeesPage() {
 
   return (
     <section className="flex max-w-4xl flex-col gap-5">
-      <PageHeader title="Employees" sub="New sign-ups wait here until HR approves them. Approved people can book and offer rides." />
+      <PageHeader title="Employees" sub="New sign-ups wait here until HR approves them. Or invite people with a link and their account is ready at once. Approved people can book and offer rides." />
+      {can("ORG_ADMIN", "HR_ADMIN") && <InviteLinks onChanged={() => void load()} />}
       <div className="flex flex-wrap items-center gap-3">
         <div role="group" aria-label="Filter" className="flex w-fit flex-wrap gap-1 rounded-2xl bg-surface-2 p-1">
           {filters.map((f) => (
@@ -132,6 +137,7 @@ export default function EmployeesPage() {
                     <span className="truncate text-sm text-muted">
                       {m.email}
                       {m.department ? ` · ${m.department}` : ""} · {m.roles.map((r) => roleLabel[r]).join(", ")}
+                      {m.joinedVia ? ` · ${JOIN_METHOD_LABEL[m.joinedVia]}` : ""}
                     </span>
                   </span>
                   {m.status === "PENDING" ? (

@@ -12,8 +12,9 @@ import { Icon } from "@/components/icons";
 import { Plate, Seats } from "@/components/trip-bits";
 import { MapView, type MapMarker } from "@/components/map/map-view";
 import { DriverTrip, useLiveRide } from "@/components/trip-live";
+import { MismatchDialog } from "@/components/mismatch-dialog";
 
-interface Person { name: string; department: string | null; reliability: number; rating: number | null }
+interface Person { name: string; photoUrl?: string | null; department: string | null; reliability: number; rating: number | null }
 interface Ride {
   id: string; status: string; departAt: string; from: string; to: string; seatsTotal: number; seatsBooked: number; distanceMeters: number | null; durationSeconds: number | null;
   route: string | null;
@@ -39,6 +40,7 @@ export default function ManageRidePage() {
   const [msg, setMsg] = useState<{ tone: "ok" | "error"; text: string }>();
   const [busy, setBusy] = useState<string | null>(null);
   const [hover, setHover] = useState<string | null>(null);
+  const [reporting, setReporting] = useState<{ id: string; name: string } | null>(null);
   const now = useNow(1000);
   const liveState = useLiveRide(id);
 
@@ -132,10 +134,11 @@ export default function ManageRidePage() {
               className="flex animate-rise flex-col gap-3 rounded-[22px] border-2 border-orange/30 bg-white p-4 shadow-soft transition-shadow hover:shadow-lift"
             >
               <div className="flex items-center gap-3">
-                <Avatar name={r.name} tone="orange" />
+                <Avatar name={r.name} tone="orange" size={64} photoUrl={r.photoUrl} />
                 <span className="flex min-w-0 flex-1 flex-col">
                   <span className="font-extrabold">{r.name}{r.rating ? <span className="text-muted"> · ★ {r.rating.toFixed(1)}</span> : ""}</span>
                   <span className="text-sm text-muted">{r.department ?? "No department"} · reliability {Math.round(r.reliability)}%</span>
+                  {!r.photoUrl && <span className="text-xs font-bold text-warning">No profile photo</span>}
                 </span>
                 <Countdown from={r.createdAt} until={r.expiresAt} now={now} />
               </div>
@@ -161,12 +164,13 @@ export default function ManageRidePage() {
           {ride.riders.length === 0 && <EmptyState icon="users" title="No one booked yet">Riders who match your route will send requests here.</EmptyState>}
           {ride.riders.map((r) => (
             <div key={r.bookingId} onMouseEnter={() => setHover(r.bookingId)} onMouseLeave={() => setHover(null)} className="flex animate-rise items-center gap-3 rounded-[22px] bg-white p-4 shadow-soft transition-shadow hover:shadow-lift">
-              <Avatar name={r.name} />
+              <Avatar name={r.name} size={56} photoUrl={r.photoUrl} />
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="font-extrabold">{r.name}</span>
                 <span className="text-sm text-muted">Pickup {r.pickupLabel} · {r.seats} {r.seats === 1 ? "seat" : "seats"}</span>
               </span>
               <Badge tone="success">{r.status.toLowerCase()}</Badge>
+              {r.status === "CONFIRMED" && <button type="button" onClick={() => setReporting({ id: r.bookingId, name: r.name })} className="rounded-full border-[1.5px] border-danger/40 px-3 py-1.5 text-xs font-extrabold text-danger hover:border-danger">Not this person</button>}
             </div>
           ))}
         </div>}
@@ -195,6 +199,7 @@ export default function ManageRidePage() {
           </MapView>
         </div>
       </div>
+      {reporting && <MismatchDialog bookingId={reporting.id} role="DRIVER" who={reporting.name} onClose={() => setReporting(null)} onDone={() => { setReporting(null); void fetchRide().then(setRide, () => undefined); }} />}
     </section>
   );
 }

@@ -41,6 +41,23 @@ export class NotificationsService {
     if (n.email && (must || prefs.emailUpdates)) await this.messages.sendEmail({ to: m.user.email, subject: n.title, text: n.body });
   }
 
+  /** Tell specific people by user id (RYDO's own team has no company membership). Same rules as the others. */
+  async notifyUsers(userIds: string[], n: Notice) {
+    if (!userIds.length) return 0;
+    const us = await this.prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, email: true, notificationPrefs: true } });
+    const must = isCriticalNotice(n.type);
+    if (n.inbox !== false) {
+      await this.prisma.notification.createMany({ data: us.map((u) => ({ userId: u.id, type: n.type, title: n.title, body: n.body, data: (n.data ?? {}) as object })) });
+    }
+    if (n.push !== false) await this.pushTo(us.filter((u) => must || notificationPrefs(u.notificationPrefs).pushUpdates).map((u) => u.id), n);
+    if (n.email) {
+      for (const u of us.filter((x) => must || notificationPrefs(x.notificationPrefs).emailUpdates)) {
+        await this.messages.sendEmail({ to: u.email, subject: n.title, text: n.body }).catch((e) => this.log.warn(`Email to one person failed: ${(e as Error).message}`));
+      }
+    }
+    return us.length;
+  }
+
   /** Every active admin of a company (Org, HR and Ops admins unless roles are given). */
   async notifyAdmins(organizationId: string, n: Notice, roles: OrgRoleName[] = [...ADMIN_ROLES]) {
     const admins = await this.prisma.membership.findMany({ where: { organizationId, status: 'ACTIVE', roles: { some: { role: { in: roles } } } }, select: { id: true } });

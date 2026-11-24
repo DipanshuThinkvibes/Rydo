@@ -55,7 +55,7 @@ describe('Live trips', () => {
     await person('ops', ['OPS_ADMIN']);
     await person('outsider', ['ORG_ADMIN'], other);
     const p = await prisma.driverProfile.create({ data: { membershipId: ms.driver, status: 'VERIFIED' } });
-    const v = await prisma.vehicle.create({ data: { organizationId: org, driverProfileId: p.id, type: 'CAR', make: 'Hyundai', model: 'i20', color: 'Grey', plateNumber: 'KA 03 MN 4521', seatCapacity: 3, isDefault: true } });
+    const v = await prisma.vehicle.create({ data: { checkStatus: 'VERIFIED', organizationId: org, driverProfileId: p.id, type: 'CAR', make: 'Hyundai', model: 'i20', color: 'Grey', plateNumber: 'KA 03 MN 4521', seatCapacity: 3, isDefault: true } });
     const [r] = await prisma.$queryRawUnsafe<{ id: string }[]>(`
       INSERT INTO rides (id, organization_id, driver_membership_id, vehicle_id, direction, origin_label, origin, destination_label, destination, route_line,
         distance_meters, duration_seconds, depart_at, seats_total, seats_booked, women_only, status, created_at, updated_at)

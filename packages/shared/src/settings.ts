@@ -17,4 +17,4 @@ export function notificationPrefs(raw: unknown): NotificationPrefs {
 }
 
 /** Messages people must not miss are never switched off: SOS and safety, and account actions like a block. */
-export const isCriticalNotice = (type: string) => /^SOS/.test(type) || /^ACCOUNT_/.test(type);
+export const isCriticalNotice = (type: string) => /^SOS/.test(type) || /^ACCOUNT_/.test(type) || /^SAFETY_/.test(type);

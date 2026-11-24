@@ -113,3 +113,12 @@ body {
 [data-theme="dark"] :is(button, a).bg-ink { background-color: #c8f560; color: #0b1426; }
 [data-theme="dark"] :is(button, a).bg-ink:hover, [data-theme="dark"] :is(button, a).hover\:bg-ink-2:hover { background-color: #b5e84a; }
 [data-theme="dark"] .skeleton { background: linear-gradient(90deg, #121b31 0%, #1a243d 50%, #121b31 100%); background-size: 800px 100%; }
+
+/* Scrollable dark side menu: a slim, quiet bar that appears only when the menu is taller than the screen */
+@media (min-width: 768px) {
+  .scroll-dark { scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.22) transparent; }
+  .scroll-dark.no-scrollbar { scrollbar-width: thin; }
+  .scroll-dark.no-scrollbar::-webkit-scrollbar { display: block; width: 6px; }
+  .scroll-dark::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.22); border-radius: 999px; }
+  .scroll-dark::-webkit-scrollbar-track { background: transparent; }
+}

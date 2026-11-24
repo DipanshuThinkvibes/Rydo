@@ -2,7 +2,7 @@ import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Query } fr
 import { chatHistorySchema, chatMessageSchema, type ChatHistoryQuery, type ChatMessageInput } from '@rydo/shared';
 import { ZodPipe } from '../common/zod.pipe';
 import { Org, type OrgContext } from '../common/request-context';
-import { MembersOnly, OrgScoped, RequireFeature } from '../tenancy/decorators';
+import { OrgScoped, RequireFeature } from '../tenancy/decorators';
 import { ChatService } from './chat.service';
 
 /**
@@ -12,7 +12,6 @@ import { ChatService } from './chat.service';
 @Controller()
 @OrgScoped()
 @RequireFeature('share')
-@MembersOnly()
 export class ChatController {
   constructor(private readonly chat: ChatService) {}
 

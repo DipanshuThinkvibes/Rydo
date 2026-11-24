@@ -1,6 +1,7 @@
 # Tasks
 
 ## Now
+- [ ] Everyone who ran our old `20261121100000_driver_signup` migration (Anjali's dev and test databases): reset the local database, because that migration was replaced by `20261121100000_document_records_check` in the merge with dipanshu/rydo-web
 - [ ] Owner: rotate the Google Maps key that is in git history (first commit, services/api/.env.test) and use a separate server key for Places/Routes
 - [ ] Screens (web + mobile) for the new APIs: ride chat, issue reports, feedback form + admin feedback dashboard, surveys, announcements, emergency contacts, profile photo and rating card, car-type/AC filters
 - [ ] Set up Firebase (FCM_PROJECT_ID, FCM_CLIENT_EMAIL, FCM_PRIVATE_KEY) so phone push is actually delivered
@@ -26,6 +27,7 @@
 - [ ] Masked calls; Enterprise module; Campus module; payments and subscriptions (switched on per client in the owner console)
 
 ## Done (recent)
+- [x] Merged dipanshu/rydo-web into anjali/rydo-dev: incoming driver application and admin rule, plus our car types, records checks and app driver steps (2026-11-24, Anjali, not committed)
 - [x] Driver sign-up like Uber: checklist, insurance, vehicle photos, licence back, government-record checks adapter, guidelines (2026-11-19, Anjali, not committed)
 - [x] Mobile catches up with the web: forgot password, account (photo, email check, password), notifications, messages, preferred drivers, waitlist, help pages, contact us, and admin tools (/manage) (2026-11-19, Anjali, not committed)
 - [x] Mobile sign-up on Dipanshu's sign-up API + company search (`GET /auth/companies`); merged dipanshu/rydo-web into anjali/rydo-dev (2026-11-19, Anjali, merge staged, not committed)

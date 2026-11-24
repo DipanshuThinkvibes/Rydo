@@ -28,7 +28,7 @@ describe('Ride plans and generation', () => {
     ms[key] = m.id;
     if (driver) {
       const p = await prisma.driverProfile.create({ data: { membershipId: m.id, status: driver } });
-      const v = await prisma.vehicle.create({ data: { organizationId: orgs[org], driverProfileId: p.id, type: 'CAR', make: 'Honda', model: 'City', color: 'White', plateNumber: `KA 01 ${key.slice(0, 2).toUpperCase()} 1234`, seatCapacity: 3, isDefault: true } });
+      const v = await prisma.vehicle.create({ data: { checkStatus: 'VERIFIED', organizationId: orgs[org], driverProfileId: p.id, type: 'CAR', make: 'Honda', model: 'City', color: 'White', plateNumber: `KA 01 ${key.slice(0, 2).toUpperCase()} 1234`, seatCapacity: 3, isDefault: true } });
       vehicles[key] = v.id;
       await prisma.document.createMany({
         data: [

@@ -9,8 +9,11 @@ import { Auth, Org, type AuthContext, type OrgContext } from '../common/request-
 import { OrgScoped } from '../tenancy/decorators';
 import { MESSAGE_ADAPTER, MessageAdapter } from '../adapters/message.adapter';
 import { STORAGE_ADAPTER, StorageAdapter } from '../adapters/storage.adapter';
-import { documentView, driverChecklist, latestDocuments } from './documents';
+import { ageOn } from '@rydo/shared';
+import { documentView, driverChecklist, expiryFlags, latestDocuments } from './documents';
 import { DocumentCheckService } from './document-check.service';
+
+const LABEL: Record<string, string> = { DRIVING_LICENSE: 'license', VEHICLE_RC: 'RC', INSURANCE: 'insurance', VEHICLE_PHOTO_FRONT: 'front photo', VEHICLE_PHOTO_SIDE: 'side photo', VEHICLE_PHOTO_INSIDE: 'inside photo' };
 
 const include = {
   membership: { include: { user: { select: { name: true, email: true, photoKey: true } }, department: { select: { name: true } } } },
@@ -27,7 +30,7 @@ export class DriverReviewController {
     private readonly audit: AuditService,
     @Inject(STORAGE_ADAPTER) private readonly storage: StorageAdapter,
     @Inject(MESSAGE_ADAPTER) private readonly messages: MessageAdapter,
-    private readonly checks: DocumentCheckService,
+    private readonly recordChecks: DocumentCheckService,
   ) {}
 
   private async driverInMyCompany(org: OrgContext, id: string) {
@@ -40,6 +43,8 @@ export class DriverReviewController {
   async list(@Org() org: OrgContext, @Query(new ZodPipe(driverListQuerySchema)) q: z.infer<typeof driverListQuerySchema>) {
     const rows = await this.prisma.driverProfile.findMany({
       where: {
+        // HR only sees applications that were sent to them: the vehicle check has already passed.
+        applicationStatus: 'WITH_HR',
         membership: {
           organizationId: org.organizationId,
           ...(q.q ? { user: { OR: [{ name: { contains: q.q, mode: 'insensitive' } }, { email: { contains: q.q, mode: 'insensitive' } }] } } : {}),
@@ -60,13 +65,16 @@ export class DriverReviewController {
         email: p.membership.user.email,
         department: p.membership.department?.name ?? null,
         status: p.status,
+        applicationStatus: p.applicationStatus,
+        submittedAt: p.submittedAt,
+        details: { licenseClass: p.licenseClass, drivingSince: p.drivingSince, age: p.dateOfBirth ? ageOn(p.dateOfBirth) : null },
         verifiedAt: p.verifiedAt,
         needsReview,
         hasExpiryWarning: documents.some((d) => d.expiringSoon || d.expired),
         hasPhoto: !!p.membership.user.photoKey,
         guidelinesAcceptedAt: p.guidelinesAcceptedAt,
         checklist: driverChecklist(p, !!p.membership.user.photoKey),
-        vehicles: p.vehicles.map((v) => ({ id: v.id, type: v.type, carType: v.carType, make: v.make, model: v.model, color: v.color, plateNumber: v.plateNumber, seatCapacity: v.seatCapacity, hasAc: v.hasAc, isDefault: v.isDefault })),
+        vehicles: p.vehicles.map((v) => ({ id: v.id, type: v.type, carType: v.carType, make: v.make, model: v.model, color: v.color, plateNumber: v.plateNumber, seatCapacity: v.seatCapacity, hasAc: v.hasAc, isDefault: v.isDefault, manufactureYear: v.manufactureYear, fuelType: v.fuelType, checkStatus: v.checkStatus, checkedAt: v.checkedAt, checks: v.checkResults ?? [] })),
         documents,
       };
     });
@@ -74,15 +82,16 @@ export class DriverReviewController {
     return { data: filtered };
   }
 
-  /** Links that work for 2 minutes (front, and back when there is one). Every view is written to the audit log. */
+  /** A link that works for 2 minutes. Every view is written to the audit log. */
   @Get('documents/:id/view-url')
-  async viewUrl(@Auth() auth: AuthContext, @Org() org: OrgContext, @Param('id', ParseUUIDPipe) id: string) {
+  async viewUrl(@Auth() auth: AuthContext, @Org() org: OrgContext, @Param('id', ParseUUIDPipe) id: string, @Query('side') side?: string) {
     const doc = await this.prisma.document.findFirst({ where: { id, organizationId: org.organizationId } });
     if (!doc) throw new AppError('NOT_FOUND', 'Document not found.', 404);
-    const url = await this.storage.signedReadUrl(doc.storageKey, 120);
-    const backUrl = doc.backStorageKey ? await this.storage.signedReadUrl(doc.backStorageKey, 120) : null;
-    await this.audit.log({ organizationId: org.organizationId, actorUserId: auth.userId, action: 'DOCUMENT_VIEWED', entityType: 'document', entityId: id });
-    return { data: { url, backUrl, expiresInSeconds: 120 } };
+    const key = side === 'back' ? doc.backStorageKey : doc.storageKey;
+    if (!key) throw new AppError('NOT_FOUND', 'This document has no back side.', 404);
+    const url = await this.storage.signedReadUrl(key, 120);
+    await this.audit.log({ organizationId: org.organizationId, actorUserId: auth.userId, action: 'DOCUMENT_VIEWED', entityType: 'document', entityId: id, after: side === 'back' ? { side: 'back' } : undefined });
+    return { data: { url, expiresInSeconds: 120 } };
   }
 
   /** Runs the government records check again (for example after the provider was down). */
@@ -91,42 +100,49 @@ export class DriverReviewController {
   async recheck(@Auth() auth: AuthContext, @Org() org: OrgContext, @Param('id', ParseUUIDPipe) id: string) {
     const doc = await this.prisma.document.findFirst({ where: { id, organizationId: org.organizationId } });
     if (!doc) throw new AppError('NOT_FOUND', 'Document not found.', 404);
-    const checked = await this.checks.checkAndStore(id);
+    const checked = await this.recordChecks.checkAndStore(id);
     if (!checked) throw new AppError('VALIDATION_ERROR', 'Photos are checked by eye; there is no record to look up.', 400);
     await this.audit.log({ organizationId: org.organizationId, actorUserId: auth.userId, action: 'DOCUMENT_CHECKED', entityType: 'document', entityId: id, after: { status: checked.checkStatus } });
     return { data: documentView(checked) };
   }
 
   /**
-   * Approves the latest documents and lets the person publish rides. Everything on the checklist must be in:
-   * photo, licence (both sides), vehicle, RC, insurance, 3 vehicle photos and the guidelines. A government records
-   * check that FAILED needs ignoreFailedChecks: true (HR has looked at it); that choice is in the audit log.
+   * Approves the latest documents and lets the person publish rides. A government records check that FAILED needs
+   * ignoreFailedChecks: true (HR has looked at the photos); that choice is in the audit log.
    */
   @Post('drivers/:id/verify')
   @HttpCode(200)
   async verify(@Auth() auth: AuthContext, @Org() org: OrgContext, @Param('id', ParseUUIDPipe) id: string, @Body(new ZodPipe(verifyDriverSchema)) body: VerifyDriver) {
     const p = await this.driverInMyCompany(org, id);
-    const checklist = driverChecklist(p, !!p.membership.user.photoKey);
-    const LABEL = { PHOTO: 'profile photo', LICENCE: 'driving licence', VEHICLE: 'vehicle', RC: 'vehicle RC', INSURANCE: 'insurance', VEHICLE_PHOTOS: 'vehicle photos', GUIDELINES: 'driver guidelines' } as const;
     const docs = latestDocuments(p.documents);
-    const failedChecks = docs.filter((d) => d.checkStatus === 'FAILED' && d.status !== 'REJECTED');
+    const license = docs.find((d) => d.kind === 'DRIVING_LICENSE');
+    const vehicle = p.vehicles.find((v) => v.isDefault) ?? p.vehicles[0];
+    const rc = vehicle && docs.find((d) => d.kind === 'VEHICLE_RC' && d.vehicleId === vehicle.id);
+    const insurance = vehicle && docs.find((d) => d.kind === 'INSURANCE' && d.vehicleId === vehicle.id);
     const problems: string[] = [];
-    for (const s of checklist) {
-      if (s.status === 'TODO') problems.push(s.key === 'GUIDELINES' ? 'driver guidelines not accepted yet' : `${LABEL[s.key]} missing`);
-      // A failed records check can be overridden below; a re-upload request, an expiry or a missing back side cannot.
-      else if (s.status === 'NEEDS_ATTENTION' && s.cause !== 'CHECK_FAILED') problems.push(`${LABEL[s.key]}: ${s.note}`);
+    if (!license) problems.push('driving license missing');
+    if (!vehicle) problems.push('no vehicle added');
+    else if (!rc) problems.push('vehicle RC missing');
+    if (vehicle && !insurance) problems.push('insurance missing');
+    if (vehicle && vehicle.checkStatus !== 'VERIFIED') problems.push('the vehicle has not passed the vehicle check');
+    for (const d of [license, rc, insurance]) {
+      if (!d) continue;
+      if (d.status === 'REJECTED') problems.push(`${LABEL[d.kind]} waiting for re-upload`);
+      if (expiryFlags(d.expiresAt).expired) problems.push(`${LABEL[d.kind]} has expired`);
     }
-    if (problems.length) throw new AppError('CONFLICT', `Can't verify yet: ${problems.join('; ')}.`, 409);
+    if (problems.length) throw new AppError('CONFLICT', `Can't verify yet: ${problems.join(', ')}.`, 409);
+    const failedChecks = [license, rc, insurance].filter((d): d is NonNullable<typeof d> => !!d && d.checkStatus === 'FAILED');
     if (failedChecks.length && !body.ignoreFailedChecks) {
       throw new AppError('CHECK_FAILED', `Government records did not match for: ${failedChecks.map((d) => DOCUMENT_LABEL[d.kind].toLowerCase()).join(', ')}. Look at the photos and verify anyway only if you are sure.`, 409);
     }
+
     await this.prisma.$transaction(async (tx) => {
       await tx.document.updateMany({ where: { id: { in: docs.filter((d) => d.status === 'PENDING').map((d) => d.id) } }, data: { status: 'APPROVED', reviewedById: org.membershipId, reviewedAt: new Date(), rejectReason: null } });
       await tx.driverProfile.update({ where: { id }, data: { status: 'VERIFIED', verifiedById: org.membershipId, verifiedAt: new Date() } });
       await tx.membershipRole.upsert({ where: { membershipId_role: { membershipId: p.membershipId, role: 'DRIVER' } }, update: {}, create: { membershipId: p.membershipId, role: 'DRIVER' } });
       await this.audit.log({ organizationId: org.organizationId, actorUserId: auth.userId, action: 'DRIVER_VERIFIED', entityType: 'driver_profile', entityId: id, before: { status: p.status }, after: { status: 'VERIFIED', ...(failedChecks.length ? { verifiedDespiteFailedChecks: failedChecks.map((d) => d.kind) } : {}) } }, tx);
     });
-    await this.messages.sendEmail({ to: p.membership.user.email, subject: "You're a verified RYDO driver", text: 'Your HR team checked your licence, vehicle papers and photos. You can now publish rides in the RYDO app.' });
+    await this.messages.sendEmail({ to: p.membership.user.email, subject: "You're a verified RYDO driver", text: 'Your HR team checked your license and RC. You can now publish rides in the RYDO app.' });
     return { data: { id, status: 'VERIFIED' } };
   }
 

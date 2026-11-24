@@ -36,8 +36,9 @@ describe('Ride chat', () => {
   it('only the driver and that rider can open a thread: not other riders, riders without a seat, admins or outsiders', async () => {
     await api(app).get(chat(w.ms.priya)).set(w.as('arjun')).expect(404); // another rider on the same ride
     await api(app).get(chat(w.ms.priya)).set(w.as('kiran')).expect(404); // no seat
-    await api(app).get(chat(w.ms.priya)).set(w.as('hr')).expect(404); // admins do not read private chats
-    await api(app).get(chat(w.ms.priya)).set(w.as('outsider', w.other)).expect(404);
+    await api(app).get(chat(w.ms.priya)).set(w.as('hr')).expect(403); // an admin account does not use ride chat at all // admins do not read private chats
+    await api(app).get(chat(w.ms.priya)).set(w.as('outsiderRider', w.other)).expect(404); // an employee of another company
+    await api(app).get(chat(w.ms.priya)).set(w.as('outsider', w.other)).expect(403); // an admin account of another company
     await api(app).post(chat(w.ms.priya)).set(w.as('arjun')).send({ body: 'hi' }).expect(404);
     await api(app).get(`/api/v1/rides/${w.rideId}/chat`).set(w.as('kiran')).expect(404);
     await api(app).get(chat('not-an-id')).set(w.as('priya')).expect(400);

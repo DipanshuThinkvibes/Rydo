@@ -1,24 +1,28 @@
-import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post } from '@nestjs/common';
-import { cancelSchema, rideRequestSchema, rideSearchSchema, type RideRequestInput, type RideSearch } from '@rydo/shared';
+import { Body, Controller, Get, HttpCode, Inject, Param, ParseUUIDPipe, Post } from '@nestjs/common';
+import { cancelSchema, mismatchSchema, rideRequestSchema, rideSearchSchema, type MismatchInput, type RideRequestInput, type RideSearch } from '@rydo/shared';
 import { z } from 'zod';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppError } from '../common/app-error';
 import { ZodPipe } from '../common/zod.pipe';
 import { Auth, Org, type AuthContext, type OrgContext } from '../common/request-context';
-import { MembersOnly, OrgScoped, RequireFeature } from '../tenancy/decorators';
+import { OrgScoped, RequireFeature } from '../tenancy/decorators';
 import { MatchingService } from './matching.service';
 import { BookingService } from './booking.service';
+import { MismatchService } from './mismatch.service';
+import { STORAGE_ADAPTER, StorageAdapter } from '../adapters/storage.adapter';
+import { profilePhotoUrls, vehicleFrontPhotoUrls } from '../common/photos';
 
 /** Rider and driver actions on rides (web now, mobile later). Every query is limited to the caller's company. */
 @Controller()
 @OrgScoped()
 @RequireFeature('share')
-@MembersOnly()
 export class TripsController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly matching: MatchingService,
     private readonly booking: BookingService,
+    private readonly mismatch: MismatchService,
+    @Inject(STORAGE_ADAPTER) private readonly storage: StorageAdapter,
   ) {}
 
   // ── Rider ──
@@ -43,10 +47,11 @@ export class TripsController {
       take: 30,
     });
     const drivers = await this.names(rows.map((r) => r.ride.driverMembershipId));
+    const [driverPhotos, carPhotos] = await Promise.all([profilePhotoUrls(this.prisma, this.storage, rows.map((r) => r.ride.driverMembershipId)), vehicleFrontPhotoUrls(this.prisma, this.storage, rows.map((r) => r.ride.vehicleId))]);
     return {
       data: rows.map((r) => ({
         id: r.id, status: r.status, seats: r.seats, pickupLabel: r.pickupLabel, dropLabel: r.dropLabel, matchScore: r.matchScore, expiresAt: r.expiresAt, createdAt: r.createdAt,
-        ride: { id: r.ride.id, departAt: r.ride.departAt, from: r.ride.originLabel, to: r.ride.destinationLabel, driverName: drivers.get(r.ride.driverMembershipId), plateNumber: r.ride.vehicle.plateNumber },
+        ride: { id: r.ride.id, departAt: r.ride.departAt, from: r.ride.originLabel, to: r.ride.destinationLabel, driverName: drivers.get(r.ride.driverMembershipId), driverPhotoUrl: driverPhotos.get(r.ride.driverMembershipId) ?? null, plateNumber: r.ride.vehicle.plateNumber, vehicleVerified: r.ride.vehicle.checkStatus === 'VERIFIED', vehiclePhotoUrl: carPhotos.get(r.ride.vehicleId) ?? null },
       })),
     };
   }
@@ -67,6 +72,7 @@ export class TripsController {
       take: 30,
     });
     const drivers = await this.names(rows.map((b) => b.ride.driverMembershipId));
+    const [driverPhotos, carPhotos] = await Promise.all([profilePhotoUrls(this.prisma, this.storage, rows.map((b) => b.ride.driverMembershipId)), vehicleFrontPhotoUrls(this.prisma, this.storage, rows.map((b) => b.ride.vehicleId))]);
     const geo = await this.points('bookings', rows.map((b) => b.id), true);
     const rated = new Set((await this.prisma.rating.findMany({ where: { raterMembershipId: org.membershipId, rideId: { in: rows.map((b) => b.rideId) } }, select: { rideId: true } })).map((r) => r.rideId));
     return {
@@ -78,8 +84,8 @@ export class TripsController {
         costShareEstimate: b.costShareEst ? Number(b.costShareEst) : null,
         ride: {
           id: b.ride.id, departAt: b.ride.departAt, status: b.ride.status, from: b.ride.originLabel, to: b.ride.destinationLabel, driverName: drivers.get(b.ride.driverMembershipId),
-          driverMembershipId: b.ride.driverMembershipId, ratedDriver: rated.has(b.ride.id),
-          vehicle: { make: b.ride.vehicle.make, model: b.ride.vehicle.model, color: b.ride.vehicle.color, plateNumber: b.ride.vehicle.plateNumber },
+          driverMembershipId: b.ride.driverMembershipId, ratedDriver: rated.has(b.ride.id), driverPhotoUrl: driverPhotos.get(b.ride.driverMembershipId) ?? null,
+          vehicle: { make: b.ride.vehicle.make, model: b.ride.vehicle.model, color: b.ride.vehicle.color, plateNumber: b.ride.vehicle.plateNumber, verified: b.ride.vehicle.checkStatus === 'VERIFIED', photoUrl: carPhotos.get(b.ride.vehicleId) ?? null },
         },
       })),
     };
@@ -89,6 +95,17 @@ export class TripsController {
   @HttpCode(200)
   async cancelBooking(@Auth() auth: AuthContext, @Org() org: OrgContext, @Param('id', ParseUUIDPipe) id: string, @Body(new ZodPipe(cancelSchema)) body: z.infer<typeof cancelSchema>) {
     return { data: await this.booking.cancelBooking(org, id, auth.userId, body.reason) };
+  }
+
+  /**
+   * Cancel at pickup because the person or the vehicle does not match what the app showed. Works for the rider (driver or vehicle
+   * is wrong) and for the driver (rider is not the person in the photo). No penalty for the one who reports; HR is told; the other
+   * person gets a warning; a repeat goes to RYDO's team.
+   */
+  @Post('bookings/:id/mismatch')
+  @HttpCode(200)
+  async reportMismatch(@Auth() auth: AuthContext, @Org() org: OrgContext, @Param('id', ParseUUIDPipe) id: string, @Body(new ZodPipe(mismatchSchema)) body: MismatchInput) {
+    return { data: await this.mismatch.report(org, auth.userId, id, body) };
   }
 
   // ── Driver ──
@@ -165,10 +182,11 @@ export class TripsController {
   private async people(ids: string[]) {
     const unique = [...new Set(ids)];
     const ms = await this.prisma.membership.findMany({ where: { id: { in: unique } }, include: { user: { select: { name: true } }, department: { select: { name: true } } } });
+    const photos = await profilePhotoUrls(this.prisma, this.storage, unique);
     const ratings = await this.prisma.rating.groupBy({ by: ['rateeMembershipId'], where: { rateeMembershipId: { in: unique } }, _avg: { stars: true }, _count: true });
     const r = new Map(ratings.map((x) => [x.rateeMembershipId, x]));
     return new Map(
-      ms.map((m) => [m.id, { name: m.user.name, department: m.department?.name ?? null, reliability: Number(m.reliabilityScore), rating: (r.get(m.id)?._count ?? 0) >= 3 ? r.get(m.id)!._avg.stars : null }]),
+      ms.map((m) => [m.id, { name: m.user.name, photoUrl: photos.get(m.id) ?? null, department: m.department?.name ?? null, reliability: Number(m.reliabilityScore), rating: (r.get(m.id)?._count ?? 0) >= 3 ? r.get(m.id)!._avg.stars : null }]),
     );
   }
 }

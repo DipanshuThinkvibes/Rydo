@@ -1,6 +1,6 @@
 import { Body, Controller, Get, HttpCode, Inject, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
 import { z } from 'zod';
-import { isAdminAccount, memberListQuerySchema, setRolesSchema, updateMemberSchema, type OrgRoleName } from '@rydo/shared';
+import { EMPLOYEE_ROLES, isAdminAccount, memberListQuerySchema, setRolesSchema, updateMemberSchema, type OrgRoleName } from '@rydo/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { AppError } from '../common/app-error';
@@ -46,6 +46,7 @@ export class MembersController {
           status: m.status,
           roles: m.roles.map((x) => x.role),
           joinedAt: m.createdAt,
+          joinedVia: m.joinedVia,
           registration: r
             ? { employeeId: r.employeeId, designation: r.designation, department: r.department, office: r.office, phone: r.phone, idType: r.idType, idLast4: r.idLast4, managerName: r.managerName, managerEmail: r.managerEmail, submittedAt: r.createdAt }
             : null,
@@ -148,17 +149,18 @@ export class MembersController {
   async setRoles(@Auth() auth: AuthContext, @Org() org: OrgContext, @Param('id', ParseUUIDPipe) id: string, @Body(new ZodPipe(setRolesSchema)) body: { roles: OrgRoleName[] }) {
     const m = await this.inMyCompany(org, id);
     const before = m.roles.map((r) => r.role);
-    // Admin accounts can't ride or drive, so rider/driver roles are dropped when an admin role is given.
-    const roles = [...new Set(isAdminAccount(body.roles) ? body.roles.filter((r) => r !== 'RIDER' && r !== 'DRIVER') : body.roles)];
-    if (before.includes('ORG_ADMIN') && !roles.includes('ORG_ADMIN')) {
+    if (isAdminAccount(body.roles) && body.roles.some((r) => EMPLOYEE_ROLES.includes(r))) {
+      throw new AppError('CONFLICT', "An admin account can't also ride or drive. Give this person a separate employee account for that.", 409, { roles: 'Admin roles and rider or driver roles cannot be mixed' });
+    }
+    if (before.includes('ORG_ADMIN') && !body.roles.includes('ORG_ADMIN')) {
       const admins = await this.prisma.membershipRole.count({ where: { role: 'ORG_ADMIN', membership: { organizationId: org.organizationId, status: 'ACTIVE' } } });
       if (admins <= 1) throw new AppError('CONFLICT', 'A company needs at least one Org Admin.', 409);
     }
     await this.prisma.$transaction(async (tx) => {
       await tx.membershipRole.deleteMany({ where: { membershipId: id } });
-      await tx.membershipRole.createMany({ data: roles.map((role) => ({ membershipId: id, role })) });
-      await this.audit.log({ organizationId: org.organizationId, actorUserId: auth.userId, action: 'ROLES_CHANGED', entityType: 'membership', entityId: id, before: { roles: before }, after: { roles } }, tx);
+      await tx.membershipRole.createMany({ data: [...new Set(body.roles)].map((role) => ({ membershipId: id, role })) });
+      await this.audit.log({ organizationId: org.organizationId, actorUserId: auth.userId, action: 'ROLES_CHANGED', entityType: 'membership', entityId: id, before: { roles: before }, after: body }, tx);
     });
-    return { data: { id, roles } };
+    return { data: { id, roles: body.roles } };
   }
 }

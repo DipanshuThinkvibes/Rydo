@@ -4,7 +4,7 @@ import { AuditService } from '../audit/audit.service';
 import { MESSAGE_ADAPTER, MessageAdapter } from '../adapters/message.adapter';
 import { expiryFlags, latestDocuments } from './documents';
 
-/** Nightly: a verified driver whose licence, or the RC or insurance of their main vehicle, has expired stops being able to drive. */
+/** Nightly: a verified driver whose license or default-vehicle RC has expired stops being able to drive. */
 @Injectable()
 export class DocumentExpiryService {
   constructor(
@@ -25,16 +25,17 @@ export class DocumentExpiryService {
       const needed = [
         docs.find((d) => d.kind === 'DRIVING_LICENSE'),
         vehicle && docs.find((d) => d.kind === 'VEHICLE_RC' && d.vehicleId === vehicle.id),
-        vehicle && docs.find((d) => d.kind === 'VEHICLE_INSURANCE' && d.vehicleId === vehicle.id),
+        vehicle && docs.find((d) => d.kind === 'INSURANCE' && d.vehicleId === vehicle.id),
       ];
       const lapsed = needed.filter((d) => d && expiryFlags(d.expiresAt).expired);
       if (!lapsed.length) continue;
       await this.prisma.driverProfile.update({ where: { id: p.id }, data: { status: 'EXPIRED' } });
+      if (vehicle) await this.prisma.vehicle.update({ where: { id: vehicle.id }, data: { checkStatus: 'EXPIRED' } });
       await this.audit.log({ organizationId: p.membership.organizationId, action: 'DRIVER_EXPIRED', entityType: 'driver_profile', entityId: p.id, after: { documents: lapsed.map((d) => d!.kind) } });
       await this.messages.sendEmail({
         to: p.membership.user.email,
         subject: 'Your RYDO driver documents have expired',
-        text: 'Your licence, vehicle RC or insurance has expired, so you cannot offer rides for now. Upload the renewed document in the RYDO app and HR will check it.',
+        text: 'Your license, vehicle RC or insurance has expired, so you cannot offer rides for now. Upload the renewed document in the RYDO app; we check the vehicle again and HR will review it.',
       });
       expired++;
     }

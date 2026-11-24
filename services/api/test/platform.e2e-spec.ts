@@ -81,17 +81,20 @@ describe('RYDO owner console', () => {
   });
 
   it('switching a feature off is enforced for the client', async () => {
+    // Riding is for employee accounts: the client's admin (lisa) is refused, a rider (rita) is not.
+    const u = await prisma.user.create({ data: { email: 'rita@globex.test', name: 'Rita' } });
+    await prisma.membership.create({ data: { organizationId: clientId, userId: u.id, status: 'ACTIVE', roles: { create: [{ role: 'RIDER' }] } } });
+    tokens.rita = (await signIn(app, messages, 'rita@globex.test')).accessToken;
     const me = (await api(app).get('/api/v1/me').set(as('lisa')).expect(200)).body.data;
     expect(me.memberships[0].organization.features).toMatchObject({ share: true, womenOnly: false });
-    // Lisa is the company admin: admin accounts never ride, so carpool answers ADMIN_ACCOUNT while Share is on.
-    const on = await api(app).post('/api/v1/rides/search').set(as('lisa', clientId)).send({ pickup: { label: 'Home', lat: 12.91, lng: 77.64 }, drop: { label: 'Office', lat: 12.92, lng: 77.67 }, date: '2030-01-07', fromTime: '08:00', toTime: '09:00' }).expect(403);
-    expect(on.body.error.code).toBe('ADMIN_ACCOUNT');
+    await api(app).post('/api/v1/rides/search').set(as('rita', clientId)).send({ pickup: { label: 'Home', lat: 12.91, lng: 77.64 }, drop: { label: 'Office', lat: 12.92, lng: 77.67 }, date: '2030-01-07', fromTime: '08:00', toTime: '09:00' }).expect(200);
     await api(app).patch(`/api/v1/admin/platform/organizations/${clientId}`).set(as('root')).send({ features: { share: false } }).expect(200);
-    const off = await api(app).post('/api/v1/rides/search').set(as('lisa', clientId)).send({ pickup: { label: 'Home', lat: 12.91, lng: 77.64 }, drop: { label: 'Office', lat: 12.92, lng: 77.67 }, date: '2030-01-07', fromTime: '08:00', toTime: '09:00' }).expect(403);
+    const off = await api(app).post('/api/v1/rides/search').set(as('rita', clientId)).send({ pickup: { label: 'Home', lat: 12.91, lng: 77.64 }, drop: { label: 'Office', lat: 12.92, lng: 77.67 }, date: '2030-01-07', fromTime: '08:00', toTime: '09:00' }).expect(403);
     expect(off.body.error.code).toBe('FEATURE_OFF');
     const org = await prisma.organization.findUniqueOrThrow({ where: { id: clientId } });
     expect(org.features).toMatchObject({ share: false, womenOnly: false, costShare: true });
     await api(app).patch(`/api/v1/admin/platform/organizations/${clientId}`).set(as('root')).send({ features: { share: true } }).expect(200);
+    await prisma.membership.updateMany({ where: { userId: u.id }, data: { status: 'LEFT' } }); // give the seat back for the tests that follow
   });
 
   it('the seat limit stops approvals past the plan', async () => {

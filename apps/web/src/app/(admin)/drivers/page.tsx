@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, RequestError } from "@/lib/api";
 import { useSession } from "@/lib/session";
+import { LICENSE_CLASS_LABEL, FUEL_LABEL, type LicenseClass } from "@rydo/shared";
 import { Badge, Button, Notice, PageHeader } from "@/components/ui";
+import { Icon } from "@/components/icons";
 
 interface Vehicle {
   id: string;
@@ -15,10 +17,15 @@ interface Vehicle {
   seatCapacity: number;
   hasAc: boolean;
   isDefault: boolean;
+  manufactureYear: number | null;
+  fuelType: string | null;
+  checkStatus: "PENDING" | "VERIFIED" | "REJECTED" | "EXPIRED";
+  checks: { code: string; group: "VEHICLE" | "DRIVER"; label: string; passed: boolean; detail: string }[];
 }
 interface Doc {
   id: string;
-  kind: "DRIVING_LICENSE" | "VEHICLE_RC";
+  kind: keyof typeof kindLabel;
+  hasBack: boolean;
   number: string | null;
   vehicleId: string | null;
   expiresAt: string | null;
@@ -35,6 +42,7 @@ interface Driver {
   status: "PENDING" | "VERIFIED" | "REJECTED" | "EXPIRED";
   needsReview: boolean;
   hasExpiryWarning: boolean;
+  details: { licenseClass: string | null; drivingSince: number | null; age: number | null };
   vehicles: Vehicle[];
   documents: Doc[];
 }
@@ -47,7 +55,7 @@ const tabs = [
 ] as const;
 const statusTone = { PENDING: "warning", VERIFIED: "success", REJECTED: "neutral", EXPIRED: "neutral" } as const;
 const statusLabel = { PENDING: "waiting for review", VERIFIED: "verified", REJECTED: "re-upload asked", EXPIRED: "expired" };
-const kindLabel = { DRIVING_LICENSE: "Driving license", VEHICLE_RC: "Vehicle RC" };
+const kindLabel = { DRIVING_LICENSE: "Driving licence", VEHICLE_RC: "Vehicle RC", INSURANCE: "Insurance", VEHICLE_PHOTO_FRONT: "Vehicle photo: front", VEHICLE_PHOTO_SIDE: "Vehicle photo: side", VEHICLE_PHOTO_INSIDE: "Vehicle photo: inside" };
 
 export default function DriversPage() {
   const { org, can } = useSession();
@@ -79,10 +87,10 @@ export default function DriversPage() {
   }
 
   /** Opens the document in a new tab through a link that works for 2 minutes. */
-  async function view(doc: Doc) {
+  async function view(doc: Doc, side?: "back") {
     const win = window.open("", "_blank");
     try {
-      const { url } = await api<{ url: string }>("GET", `/admin/documents/${doc.id}/view-url`);
+      const { url } = await api<{ url: string }>("GET", `/admin/documents/${doc.id}/view-url${side ? "?side=back" : ""}`);
       if (win) win.location.href = url;
       else window.location.href = url;
     } catch (e) {
@@ -96,7 +104,7 @@ export default function DriversPage() {
 
   return (
     <section className="flex max-w-4xl flex-col gap-5">
-      <PageHeader title="Drivers" sub="Check each driver's license and vehicle RC before they can offer rides. Every document you open is logged." />
+      <PageHeader title="Drivers" sub="Drivers appear here after their vehicle has passed the vehicle check. Review the papers, then approve. Every document you open is logged." />
       <div role="group" aria-label="Filter" className="flex w-fit flex-wrap gap-1 rounded-2xl bg-surface-2 p-1">
         {tabs.map((t) => (
           <button
@@ -115,7 +123,7 @@ export default function DriversPage() {
         <p className="text-muted">Loading…</p>
       ) : rows.length === 0 ? (
         <div className="rounded-[18px] border-[1.5px] border-dashed border-line-strong p-8 text-center text-muted">
-          {tab === "PENDING" ? "Nothing to review. New driver documents will appear here." : "No drivers here."}
+          {tab === "PENDING" ? "Nothing to review. A driver appears here once their vehicle check has passed and they have applied." : "No drivers here."}
         </div>
       ) : (
         <ul className="flex flex-col gap-3">
@@ -128,7 +136,7 @@ export default function DriversPage() {
   );
 }
 
-function DriverCard({ driver: d, busy, onView, act }: { driver: Driver; busy: boolean; onView: (doc: Doc) => void; act: (fn: () => Promise<unknown>, ok: string) => Promise<boolean> }) {
+function DriverCard({ driver: d, busy, onView, act }: { driver: Driver; busy: boolean; onView: (doc: Doc, side?: "back") => void; act: (fn: () => Promise<unknown>, ok: string) => Promise<boolean> }) {
   const [asking, setAsking] = useState(false);
   const [picked, setPicked] = useState<string[]>([]);
   const [reason, setReason] = useState("");
@@ -151,12 +159,40 @@ function DriverCard({ driver: d, busy, onView, act }: { driver: Driver; busy: bo
         <Badge tone={statusTone[d.status]}>{statusLabel[d.status]}</Badge>
       </div>
 
-      {d.vehicles.map((v) => (
-        <p key={v.id} className="rounded-2xl bg-surface px-4 py-3 text-sm">
-          <span className="font-extrabold">{v.plateNumber}</span> · {v.color} {v.make} {v.model} · {v.type === "CAR" ? `${v.seatCapacity} seats` : "bike"}
-          {v.hasAc ? " · AC" : ""}
-          {v.isDefault && d.vehicles.length > 1 ? " · default" : ""}
+      {(d.details.licenseClass || d.details.age) && (
+        <p className="flex flex-wrap gap-x-4 gap-y-1 rounded-2xl bg-surface px-4 py-3 text-sm">
+          {d.details.licenseClass && <span><span className="text-muted">Licence class</span> <b>{LICENSE_CLASS_LABEL[d.details.licenseClass as LicenseClass] ?? d.details.licenseClass}</b></span>}
+          {d.details.drivingSince && <span><span className="text-muted">Driving since</span> <b>{d.details.drivingSince}</b></span>}
+          {d.details.age && <span><span className="text-muted">Age</span> <b>{d.details.age}</b></span>}
         </p>
+      )}
+
+      {d.vehicles.map((v) => (
+        <div key={v.id} className="flex flex-col gap-2 rounded-2xl bg-surface px-4 py-3 text-sm">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="min-w-0 flex-1">
+              <span className="font-extrabold">{v.plateNumber}</span> · {v.color} {v.make} {v.model}
+              {v.manufactureYear ? ` · ${v.manufactureYear}` : ""} · {v.type === "CAR" ? `${v.seatCapacity} seats` : "bike"}
+              {v.fuelType ? ` · ${FUEL_LABEL[v.fuelType as keyof typeof FUEL_LABEL] ?? v.fuelType}` : ""}
+              {v.hasAc ? " · AC" : ""}
+              {v.isDefault && d.vehicles.length > 1 ? " · default" : ""}
+            </span>
+            <Badge tone={v.checkStatus === "VERIFIED" ? "success" : "warning"}>{v.checkStatus === "VERIFIED" ? "vehicle check passed" : `vehicle check: ${v.checkStatus.toLowerCase()}`}</Badge>
+          </div>
+          {v.checks.length > 0 && (
+            <details className="text-xs">
+              <summary className="cursor-pointer font-extrabold text-muted">See the {v.checks.length} checks that were run</summary>
+              <ul className="mt-2 grid gap-1 sm:grid-cols-2">
+                {v.checks.map((c) => (
+                  <li key={c.code} className="flex items-start gap-1.5">
+                    <Icon name={c.passed ? "check" : "x"} size={13} className={`mt-0.5 shrink-0 ${c.passed ? "text-success" : "text-danger"}`} />
+                    <span><b>{c.label}.</b> <span className="text-muted">{c.detail}</span></span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </div>
       ))}
 
       <table className="w-full text-left text-sm">
@@ -180,7 +216,7 @@ function DriverCard({ driver: d, busy, onView, act }: { driver: Driver; busy: bo
             <tr key={doc.id}>
               <td className="py-3 font-bold">
                 {kindLabel[doc.kind]}
-                {doc.kind === "VEHICLE_RC" && plate(doc.vehicleId) ? <span className="block text-xs font-semibold text-muted">{plate(doc.vehicleId)}</span> : null}
+                {doc.kind !== "DRIVING_LICENSE" && plate(doc.vehicleId) ? <span className="block text-xs font-semibold text-muted">{plate(doc.vehicleId)}</span> : null}
               </td>
               <td className="py-3">{doc.number}</td>
               <td className="py-3">
@@ -193,7 +229,8 @@ function DriverCard({ driver: d, busy, onView, act }: { driver: Driver; busy: bo
                 {doc.rejectReason && doc.status === "REJECTED" && <span className="block text-xs text-muted">“{doc.rejectReason}”</span>}
               </td>
               <td className="py-3 text-right">
-                <Button variant="ghost" className="h-9" onClick={() => onView(doc)}>View</Button>
+                <Button variant="ghost" className="h-9" onClick={() => onView(doc)}>{doc.hasBack ? "View front" : "View"}</Button>
+                {doc.hasBack && <Button variant="ghost" className="h-9" onClick={() => onView(doc, "back")}>View back</Button>}
               </td>
             </tr>
           ))}

@@ -1,5 +1,5 @@
 import type { Document, Vehicle } from '@prisma/client';
-import { DOCUMENT_LABEL, EXPIRY_WARNING_DAYS, VEHICLE_PHOTO_KINDS, type DriverStep, type DriverStepStatus } from '@rydo/shared';
+import { DOCUMENT_LABEL, EXPIRY_WARNING_DAYS, VEHICLE_PHOTO_KINDS, type DriverStep } from '@rydo/shared';
 
 /** The newest document per (kind, vehicle). Older uploads are kept as history. */
 export function latestDocuments(docs: Document[]) {
@@ -32,7 +32,6 @@ export function documentView(d: Document) {
     rejectReason: d.rejectReason,
     uploadedAt: d.createdAt,
     hasBack: !!d.backStorageKey,
-    vehicleClasses: d.vehicleClasses,
     check: d.checkStatus ? { status: d.checkStatus, notes: d.checkNotes, checkedAt: d.checkedAt?.toISOString() ?? null } : null,
     ...expiryFlags(d.expiresAt),
   };
@@ -41,10 +40,10 @@ export function documentView(d: Document) {
 /** The car or bike a driver drives with: the default one, else the first. */
 export const mainVehicle = <V extends Pick<Vehicle, 'isDefault'>>(vehicles: V[]) => vehicles.find((v) => v.isDefault) ?? vehicles[0];
 
-/** Kinds that need a back-side photo before HR can verify. */
+/** Kinds that need a back-side photo. */
 const NEEDS_BACK: Document['kind'][] = ['DRIVING_LICENSE'];
 
-/** One document's step status: what the driver still has to do, or where HR is with it. */
+/** One step's status from its documents: what the driver still has to do, or where HR is with it. */
 function stepFor(docs: (Document | undefined)[], label: string): Omit<DriverStep, 'key'> {
   if (docs.some((d) => !d)) {
     const missing = docs.filter((d) => !d).length;
@@ -58,33 +57,36 @@ function stepFor(docs: (Document | undefined)[], label: string): Omit<DriverStep
   const noBack = list.find((d) => NEEDS_BACK.includes(d.kind) && !d.backStorageKey);
   if (noBack) return { status: 'NEEDS_ATTENTION', cause: 'BACK_MISSING', note: 'Add a photo of the back side.' };
   const failed = list.find((d) => d.checkStatus === 'FAILED');
-  if (failed) return { status: 'NEEDS_ATTENTION', cause: 'CHECK_FAILED', note: failed.checkNotes.find((n: string) => n.startsWith('✗'))?.slice(2) ?? 'This did not match government records. Check the number and upload again.' };
+  if (failed) return { status: 'NEEDS_ATTENTION', cause: 'CHECK_FAILED', note: failed.checkNotes.find((n) => n.startsWith('✗'))?.slice(2) ?? 'This did not match government records. Check the number and upload again.' };
   if (list.every((d) => d.status === 'APPROVED')) return { status: 'DONE', note: null };
   return { status: 'IN_REVIEW', note: null };
 }
 
 /**
- * The checklist the driver app shows (Uber style): photo, licence, vehicle, RC, insurance, vehicle photos, guidelines.
- * Computed here so the app and HR see the same thing.
+ * The checklist the driver app shows: photo, licence (with date of birth and class), vehicle, RC, insurance,
+ * vehicle photos, guidelines. Computed here so the app and HR see the same thing.
  */
-export function driverChecklist(p: { documents: Document[]; vehicles: Vehicle[]; guidelinesAcceptedAt: Date | null }, hasPhoto: boolean): DriverStep[] {
+export function driverChecklist(
+  p: { documents: Document[]; vehicles: Vehicle[]; guidelinesAcceptedAt: Date | null; dateOfBirth: Date | null; licenseClass: string | null },
+  hasPhoto: boolean,
+): DriverStep[] {
   const docs = latestDocuments(p.documents);
   const vehicle = mainVehicle(p.vehicles);
   const forVehicle = (kind: Document['kind']) => (vehicle ? docs.find((d) => d.kind === kind && d.vehicleId === vehicle.id) : undefined);
   const step = (key: DriverStep['key'], s: Omit<DriverStep, 'key'>): DriverStep => ({ key, ...s });
   const noVehicle = { status: 'TODO' as const, note: 'Add your vehicle first.' };
+  const licence = stepFor([docs.find((d) => d.kind === 'DRIVING_LICENSE')], DOCUMENT_LABEL.DRIVING_LICENSE);
+  const licenceStep = licence.status !== 'TODO' && (!p.dateOfBirth || !p.licenseClass) ? { status: 'TODO' as const, note: 'Add your date of birth and licence class.' } : licence;
   return [
     step('PHOTO', hasPhoto ? { status: 'DONE', note: null } : { status: 'TODO', note: null }),
-    step('LICENCE', stepFor([docs.find((d) => d.kind === 'DRIVING_LICENSE')], DOCUMENT_LABEL.DRIVING_LICENSE)),
+    step('LICENCE', licenceStep),
     step('VEHICLE', vehicle ? { status: 'DONE', note: null } : { status: 'TODO', note: null }),
     step('RC', vehicle ? stepFor([forVehicle('VEHICLE_RC')], DOCUMENT_LABEL.VEHICLE_RC) : noVehicle),
-    step('INSURANCE', vehicle ? stepFor([forVehicle('VEHICLE_INSURANCE')], DOCUMENT_LABEL.VEHICLE_INSURANCE) : noVehicle),
+    step('INSURANCE', vehicle ? stepFor([forVehicle('INSURANCE')], DOCUMENT_LABEL.INSURANCE) : noVehicle),
     step('VEHICLE_PHOTOS', vehicle ? stepFor(VEHICLE_PHOTO_KINDS.map((k) => forVehicle(k)), 'Vehicle photo') : noVehicle),
     step('GUIDELINES', p.guidelinesAcceptedAt ? { status: 'DONE', note: null } : { status: 'TODO', note: null }),
   ];
 }
 
 export const DOC_TYPES: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'application/pdf': 'pdf' };
-/** Vehicle photos must be photos. */
-export const PHOTO_TYPES: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
 export const DOC_MAX_BYTES = 5 * 1024 * 1024;

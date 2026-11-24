@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Linking, Pressable, Text, View } from 'react-native';
-import { DOCUMENT_LABEL, type DocumentKindName } from '@rydo/shared';
+import { DOCUMENT_LABEL, LICENSE_CLASS_LABEL, type DocumentKindName } from '@rydo/shared';
 import { colors } from '@/lib/theme';
 import { api, errText, RequestError } from '@/lib/api';
 import { Alert } from '@/lib/dialog';
@@ -8,7 +8,7 @@ import { latestOf, mainVehicle, STATUS_LOOK, STEP_INFO, type DriverDocument, typ
 import { CheckNotes } from './doc-photo';
 import { Avatar, Badge, Button, Chip, Field, s } from './ui';
 
-const ORDER: DocumentKindName[] = ['DRIVING_LICENSE', 'VEHICLE_RC', 'VEHICLE_INSURANCE', 'VEHICLE_PHOTO_FRONT', 'VEHICLE_PHOTO_SIDE', 'VEHICLE_PHOTO_INSIDE'];
+const ORDER: DocumentKindName[] = ['DRIVING_LICENSE', 'VEHICLE_RC', 'INSURANCE', 'VEHICLE_PHOTO_FRONT', 'VEHICLE_PHOTO_SIDE', 'VEHICLE_PHOTO_INSIDE'];
 const CHECK_LOOK = { PASSED: { label: 'records match', tone: 'success' }, WARNING: { label: 'check the notes', tone: 'warning' }, FAILED: { label: "records don't match", tone: 'danger' }, UNAVAILABLE: { label: 'not checked', tone: 'neutral' } } as const;
 
 /**
@@ -36,18 +36,20 @@ export function DriverReviewCard({ driver, onChanged }: { driver: DriverForRevie
     }
   };
 
-  const open = (doc: DriverDocument) =>
-    api<{ url: string; backUrl: string | null }>('GET', `/admin/documents/${doc.id}/view-url`).then(
-      (r) =>
-        r.backUrl
-          ? Alert.alert(DOCUMENT_LABEL[doc.kind], 'Which side?', [
-              { text: 'Front', onPress: () => Linking.openURL(r.url) },
-              { text: 'Back', onPress: () => Linking.openURL(r.backUrl!) },
-              { text: 'Cancel', style: 'cancel' },
-            ])
-          : Linking.openURL(r.url),
+  /** Each side has its own 2-minute link (every view is logged), so a side is only fetched when HR picks it. */
+  const openSide = (doc: DriverDocument, side: 'front' | 'back') =>
+    api<{ url: string }>('GET', `/admin/documents/${doc.id}/view-url${side === 'back' ? '?side=back' : ''}`).then(
+      (r) => Linking.openURL(r.url),
       (e) => Alert.alert('Could not open', errText(e)),
     );
+  const open = (doc: DriverDocument) =>
+    doc.hasBack
+      ? Alert.alert(DOCUMENT_LABEL[doc.kind], 'Which side?', [
+          { text: 'Front', onPress: () => openSide(doc, 'front') },
+          { text: 'Back', onPress: () => openSide(doc, 'back') },
+          { text: 'Cancel', style: 'cancel' },
+        ])
+      : openSide(doc, 'front');
 
   const verify = async (ignoreFailedChecks = false) => {
     setBusy('verify');
@@ -95,7 +97,7 @@ export function DriverReviewCard({ driver, onChanged }: { driver: DriverForRevie
             <Text style={s.small}>
               {d.number ? `No. ${d.number}` : ''}
               {d.expiresAt ? `${d.number ? ' · ' : ''}valid till ${d.expiresAt}${d.expired ? ' (expired)' : d.expiringSoon ? ' (soon)' : ''}` : ''}
-              {d.vehicleClasses.length ? ` · ${d.vehicleClasses.join(', ')}` : ''}
+              {d.kind === 'DRIVING_LICENSE' && driver.details?.licenseClass ? ` · ${LICENSE_CLASS_LABEL[driver.details.licenseClass]}` : ''}
             </Text>
           ) : null}
           {d.check ? <CheckNotes notes={d.check.notes} /> : null}

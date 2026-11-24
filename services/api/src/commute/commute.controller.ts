@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { commuteUpdateSchema, homePlaceSchema, preferredDriverSchema, waitlistCreateSchema, type CommuteUpdate, type Place, type WaitlistCreate } from '@rydo/shared';
 import { ZodPipe } from '../common/zod.pipe';
 import { Org, type OrgContext } from '../common/request-context';
-import { MembersOnly, OrgScoped, RequireFeature } from '../tenancy/decorators';
+import { OrgScoped, RequireFeature } from '../tenancy/decorators';
 import { CommuteService } from './commute.service';
 import { WaitlistService } from './waitlist.service';
 
@@ -11,7 +11,6 @@ import { WaitlistService } from './waitlist.service';
 @Controller('me')
 @OrgScoped()
 @RequireFeature('share')
-@MembersOnly()
 export class CommuteController {
   constructor(
     private readonly commute: CommuteService,

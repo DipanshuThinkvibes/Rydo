@@ -42,7 +42,7 @@ export async function buildWorld(app: INestApplication, messages: FakeMessages, 
 
   const profile = await prisma.driverProfile.create({ data: { membershipId: ms.driver, status: 'VERIFIED' } });
   const vehicle = await prisma.vehicle.create({
-    data: { organizationId: org, driverProfileId: profile.id, type: 'CAR', carType: 'SEDAN', make: 'Honda', model: 'City', color: 'White', plateNumber: 'KA 01 EE 0001', seatCapacity: 3, hasAc: true, isDefault: true },
+    data: { checkStatus: 'VERIFIED', organizationId: org, driverProfileId: profile.id, type: 'CAR', carType: 'SEDAN', make: 'Honda', model: 'City', color: 'White', plateNumber: 'KA 01 EE 0001', seatCapacity: 3, hasAc: true, isDefault: true },
   });
   const [r] = await prisma.$queryRawUnsafe<{ id: string }[]>(`
     INSERT INTO rides (id, organization_id, driver_membership_id, vehicle_id, direction, origin_label, origin, destination_label, destination, route_line,

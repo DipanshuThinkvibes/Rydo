@@ -60,7 +60,7 @@ export class PlatformInsightsController {
           (SELECT count(*)::int FROM memberships WHERE status = 'ACTIVE') AS "activeMembers",
           (SELECT count(*)::int FROM memberships WHERE status = 'PENDING') AS "pendingMembers",
           (SELECT count(*)::int FROM driver_profiles WHERE status = 'VERIFIED') AS "verifiedDrivers",
-          (SELECT count(*)::int FROM driver_profiles WHERE status = 'PENDING') AS "pendingDrivers",
+          (SELECT count(*)::int FROM driver_profiles WHERE status = 'PENDING' AND application_status = 'WITH_HR') AS "pendingDrivers",
           (SELECT count(*)::int FROM rides WHERE status <> 'CANCELLED' AND (depart_at AT TIME ZONE 'Asia/Kolkata')::date = (now() AT TIME ZONE 'Asia/Kolkata')::date) AS "ridesToday",
           (SELECT count(*)::int FROM bookings b JOIN rides r ON r.id = b.ride_id WHERE (r.depart_at AT TIME ZONE 'Asia/Kolkata')::date = (now() AT TIME ZONE 'Asia/Kolkata')::date AND b.status NOT IN ('CANCELLED_BY_RIDER', 'CANCELLED_BY_DRIVER')) AS "bookingsToday",
           (SELECT count(*)::int FROM ride_requests WHERE status = 'PENDING' AND expires_at > now()) AS "openRequests",
@@ -84,7 +84,7 @@ export class PlatformInsightsController {
         SELECT * FROM (
           SELECT o.id, o.name,
             (SELECT count(*)::int FROM memberships m WHERE m.organization_id = o.id AND m.status = 'PENDING') AS members,
-            (SELECT count(*)::int FROM driver_profiles p JOIN memberships m ON m.id = p.membership_id WHERE m.organization_id = o.id AND p.status = 'PENDING') AS drivers
+            (SELECT count(*)::int FROM driver_profiles p JOIN memberships m ON m.id = p.membership_id WHERE m.organization_id = o.id AND p.status = 'PENDING' AND p.application_status = 'WITH_HR') AS drivers
           FROM organizations o WHERE o.status = 'ACTIVE'
         ) x WHERE members + drivers > 0
         ORDER BY members + drivers DESC LIMIT 8`,

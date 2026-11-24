@@ -11,5 +11,6 @@ export * from './commute';
 export * from './engagement';
 export * from './inquiries';
 export * from './registration';
+export * from './invites';
 export * from './google';
 export * from './settings';

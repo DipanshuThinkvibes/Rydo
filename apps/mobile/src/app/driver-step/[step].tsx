@@ -3,7 +3,7 @@ import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } fro
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { CAR_TYPE_LABEL, CAR_TYPES, CLASSES_FOR, DRIVER_STEPS, LICENCE_CLASSES, LICENCE_CLASS_LABEL, type CarType, type DriverStepName, type LicenceClass } from '@rydo/shared';
+import { CAR_TYPE_LABEL, CAR_TYPES, DRIVER_STEPS, LICENSE_ALLOWS, LICENSE_CLASSES, LICENSE_CLASS_LABEL, type CarType, type DriverStepName, type LicenseClass } from '@rydo/shared';
 import { colors } from '@/lib/theme';
 import { api, errText, RequestError } from '@/lib/api';
 import { Alert } from '@/lib/dialog';
@@ -52,7 +52,7 @@ export default function DriverStepScreen() {
               {key === 'LICENCE' ? <LicenceStep profile={profile} onDone={done} /> : null}
               {key === 'VEHICLE' ? <VehicleStep vehicle={vehicle} onDone={done} /> : null}
               {key === 'RC' && vehicle ? <PaperStep kind="VEHICLE_RC" profile={profile} vehicle={vehicle} onDone={done} /> : null}
-              {key === 'INSURANCE' && vehicle ? <PaperStep kind="VEHICLE_INSURANCE" profile={profile} vehicle={vehicle} onDone={done} /> : null}
+              {key === 'INSURANCE' && vehicle ? <PaperStep kind="INSURANCE" profile={profile} vehicle={vehicle} onDone={done} /> : null}
               {key === 'VEHICLE_PHOTOS' && vehicle ? <VehiclePhotosStep profile={profile} vehicle={vehicle} onChanged={reload} onDone={done} /> : null}
               {key === 'GUIDELINES' ? <GuidelinesStep profile={profile} onDone={done} /> : null}
             </>
@@ -146,14 +146,16 @@ function LicenceStep({ profile, onDone }: { profile: DriverSignup; onDone: () =>
   const types = [...new Set(profile.vehicles.map((v) => v.type))];
   const [number, setNumber] = useState('');
   const [expiry, setExpiry] = useState('');
-  const [dob, setDob] = useState('');
-  const [classes, setClasses] = useState<LicenceClass[]>(doc?.vehicleClasses.length ? (doc.vehicleClasses as LicenceClass[]) : types.includes('BIKE') && !types.includes('CAR') ? ['MCWG'] : ['LMV']);
+  const [dob, setDob] = useState(profile.details?.dateOfBirth ?? '');
+  const [licenseClass, setLicenseClass] = useState<LicenseClass>(
+    (profile.details?.licenseClass as LicenseClass | null) ?? (types.includes('BIKE') && types.includes('CAR') ? 'LMV_MCWG' : types.includes('BIKE') ? 'MCWG' : 'LMV'),
+  );
   const [front, setFront] = useState<Picked | null>(null);
   const [back, setBack] = useState<Picked | null>(null);
   const [fields, setFields] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
-  const covers = types.every((t) => CLASSES_FOR[t].some((c) => classes.includes(c)));
+  const covers = types.every((t) => LICENSE_ALLOWS[t].includes(licenseClass));
 
   const send = async () => {
     if (!front || !back) return;
@@ -161,7 +163,9 @@ function LicenceStep({ profile, onDone }: { profile: DriverSignup; onDone: () =>
     setError(undefined);
     setFields({});
     try {
-      const d = await uploadDocument({ kind: 'DRIVING_LICENSE', number: number.replace(/\s/g, '').toUpperCase(), expiresAt: expiry, dateOfBirth: dob, vehicleClasses: classes }, front, back);
+      // Date of birth and licence class belong to the driver (checked for age and vehicle type), the photos to the licence.
+      await api('PATCH', '/driver/profile', { details: { dateOfBirth: dob.trim(), licenseClass } });
+      const d = await uploadDocument({ kind: 'DRIVING_LICENSE', number: number.replace(/\s/g, '').toUpperCase(), expiresAt: expiry }, front, back);
       afterUpload(d, onDone);
     } catch (e) {
       if (e instanceof RequestError && e.fields) setFields(e.fields);
@@ -178,21 +182,21 @@ function LicenceStep({ profile, onDone }: { profile: DriverSignup; onDone: () =>
         <Label>{doc ? 'Upload a new licence' : 'Your licence'}</Label>
         <Field label="Licence number" value={number} onChangeText={setNumber} autoCapitalize="characters" placeholder="KA0120190012345" error={fields.number} />
         <Field label="Valid till (YYYY-MM-DD)" value={expiry} onChangeText={setExpiry} placeholder="2035-06-30" keyboardType="numbers-and-punctuation" maxLength={10} error={fields.expiresAt} />
-        <Field label="Your date of birth (YYYY-MM-DD)" value={dob} onChangeText={setDob} placeholder="1994-08-21" keyboardType="numbers-and-punctuation" maxLength={10} error={fields.dateOfBirth} />
+        <Field label="Your date of birth (YYYY-MM-DD)" value={dob} onChangeText={setDob} placeholder="1994-08-21" keyboardType="numbers-and-punctuation" maxLength={10} error={fields.dateOfBirth ?? fields['details.dateOfBirth']} />
         <Text style={s.small}>Needed to check the licence with the RTO. Not shown to anyone.</Text>
         <Text style={s.label}>What your licence covers</Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-          {LICENCE_CLASSES.map((c) => (
-            <Chip key={c} tone="lime" label={LICENCE_CLASS_LABEL[c]} selected={classes.includes(c)} onPress={() => setClasses((x) => (x.includes(c) ? x.filter((y) => y !== c) : [...x, c]))} />
+          {LICENSE_CLASSES.map((c) => (
+            <Chip key={c} tone="lime" label={LICENSE_CLASS_LABEL[c]} selected={licenseClass === c} onPress={() => setLicenseClass(c)} />
           ))}
         </View>
-        {fields.vehicleClasses ? <Text style={s.error}>{fields.vehicleClasses}</Text> : null}
-        {!covers ? <Notice tone="error">Your licence must cover your vehicle ({types.map((t) => (t === 'CAR' ? 'LMV for a car' : 'MCWG or MCWOG for a bike')).join(', ')}).</Notice> : null}
+        {fields['details.licenseClass'] ? <Text style={s.error}>{fields['details.licenseClass']}</Text> : null}
+        {!covers ? <Notice tone="error">Your licence must cover your vehicle ({types.map((t) => (t === 'CAR' ? 'a car licence (LMV)' : 'a motorcycle licence for a bike')).join(', ')}).</Notice> : null}
         <DocPhoto label="Front side" hint="All four corners visible, no glare, text readable." value={front} onChange={setFront} />
         <DocPhoto label="Back side" hint="Uber-style tip: upload the licence first; it speeds up the check of your other papers." value={back} onChange={setBack} />
-        {fields.back ? <Text style={s.error}>{fields.back}</Text> : null}
+        {fields.fileBack ? <Text style={s.error}>{fields.fileBack}</Text> : null}
         {error ? <Notice tone="error">{error}</Notice> : null}
-        <Button label="Upload licence" loading={busy} disabled={!front || !back || number.trim().length < 6 || !isIsoDate(expiry) || !isIsoDate(dob) || !classes.length} onPress={send} />
+        <Button label="Upload licence" loading={busy} disabled={!front || !back || number.trim().length < 6 || !isIsoDate(expiry) || !isIsoDate(dob) || !covers} onPress={send} />
       </Card>
     </>
   );
@@ -306,7 +310,7 @@ function VehicleStep({ vehicle, onDone }: { vehicle?: DriverVehicle; onDone: () 
 
 // ── RC and insurance ──
 
-function PaperStep({ kind, profile, vehicle, onDone }: { kind: 'VEHICLE_RC' | 'VEHICLE_INSURANCE'; profile: DriverSignup; vehicle: DriverVehicle; onDone: () => void }) {
+function PaperStep({ kind, profile, vehicle, onDone }: { kind: 'VEHICLE_RC' | 'INSURANCE'; profile: DriverSignup; vehicle: DriverVehicle; onDone: () => void }) {
   const rc = kind === 'VEHICLE_RC';
   const doc = latestOf(profile.documents, kind, vehicle.id);
   const [number, setNumber] = useState(rc ? vehicle.plateNumber.replace(/\s/g, '') : '');

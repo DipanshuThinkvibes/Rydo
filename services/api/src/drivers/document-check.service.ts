@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { DocumentCheckStatus } from '@prisma/client';
-import { CLASSES_FOR, LICENCE_CLASS_LABEL } from '@rydo/shared';
+import { LICENSE_CLASS_LABEL, type LicenseClass } from '@rydo/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { DOCUMENT_CHECK, DocumentCheckAdapter, type CheckOutcome } from '../adapters/document-check.adapter';
 
@@ -19,6 +19,10 @@ export function sameName(a: string, b: string) {
   return x.every((w) => y.some((v) => v === w || (w.length === 1 && v.startsWith(w))));
 }
 const today = () => new Date().toISOString().slice(0, 10);
+/** Class codes as the RTO prints them that let someone drive each vehicle type on RYDO. */
+const RECORD_CLASSES_FOR: Record<'CAR' | 'BIKE', string[]> = { CAR: ['LMV'], BIKE: ['MCWG', 'MCWOG'] };
+/** The codes inside the class the driver picked (LMV_MCWG covers both LMV and MCWG). */
+const codesOf = (c: string) => c.split('_');
 
 /**
  * Checks licence, RC and insurance numbers against government records through the DOCUMENT_CHECK adapter and stores
@@ -45,13 +49,13 @@ export class DocumentCheckService {
       where: { id: documentId },
       include: { vehicle: true, driver: { include: { vehicles: { where: { active: true } }, membership: { include: { user: { select: { name: true } } } } } } },
     });
-    if (!['DRIVING_LICENSE', 'VEHICLE_RC', 'VEHICLE_INSURANCE'].includes(doc.kind)) return null;
+    if (!['DRIVING_LICENSE', 'VEHICLE_RC', 'INSURANCE'].includes(doc.kind)) return null;
     const name = doc.driver.membership.user.name;
     const notes: Note[] = [];
     let unavailable: string | null = null;
 
     if (doc.kind === 'DRIVING_LICENSE') {
-      const r = await this.withTimeout(this.checks.checkLicence({ number: doc.number ?? '', dateOfBirth: doc.dateOfBirth?.toISOString().slice(0, 10) ?? '' }));
+      const r = await this.withTimeout(this.checks.checkLicence({ number: doc.number ?? '', dateOfBirth: doc.driver.dateOfBirth?.toISOString().slice(0, 10) ?? '' }));
       if (r.kind === 'unavailable') unavailable = r.reason;
       else if (r.kind === 'notFound') notes.push({ level: 'fail', text: 'No licence with this number and date of birth in government records (Sarathi).' });
       else {
@@ -67,11 +71,11 @@ export class DocumentCheckService {
         const has = rec.vehicleClasses.map((c) => c.toUpperCase());
         if (has.length) {
           for (const type of [...new Set(doc.driver.vehicles.map((v) => v.type))]) {
-            const needed = CLASSES_FOR[type];
-            if (!needed.some((c) => has.some((h) => h.includes(c)))) notes.push({ level: 'fail', text: `The licence does not cover ${type === 'CAR' ? 'cars' : 'bikes'} (${needed.map((c) => LICENCE_CLASS_LABEL[c]).join(' or ')}).` });
+            const needed = RECORD_CLASSES_FOR[type];
+            if (!needed.some((c) => has.some((h) => h.includes(c)))) notes.push({ level: 'fail', text: `The licence does not cover ${type === 'CAR' ? 'cars' : 'bikes'} (${needed.join(' or ')}).` });
           }
-          const extra = doc.vehicleClasses.filter((c: string) => !has.some((h) => h.includes(c)));
-          if (extra.length) notes.push({ level: 'warn', text: `Driver ticked ${extra.join(', ')}, which the record does not list.` });
+          const picked = doc.driver.licenseClass;
+          if (picked && !codesOf(picked).every((c) => has.some((h) => h.includes(c)))) notes.push({ level: 'warn', text: `Driver picked ${LICENSE_CLASS_LABEL[picked as LicenseClass] ?? picked}, which the record does not list.` });
         }
       }
     } else {

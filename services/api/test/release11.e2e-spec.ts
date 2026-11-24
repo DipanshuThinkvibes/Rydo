@@ -50,7 +50,7 @@ describe('Release 1.1', () => {
     await person('arjun', ['RIDER']);
     await person('kiran', ['RIDER']);
     const p = await prisma.driverProfile.create({ data: { membershipId: ms.driver, status: 'VERIFIED' } });
-    vehicleId = (await prisma.vehicle.create({ data: { organizationId: org, driverProfileId: p.id, type: 'CAR', make: 'Honda', model: 'City', color: 'White', plateNumber: 'KA 01 RR 0001', seatCapacity: 3, isDefault: true } })).id;
+    vehicleId = (await prisma.vehicle.create({ data: { checkStatus: 'VERIFIED', organizationId: org, driverProfileId: p.id, type: 'CAR', make: 'Honda', model: 'City', color: 'White', plateNumber: 'KA 01 RR 0001', seatCapacity: 3, isDefault: true } })).id;
     morning = await ride('08:30', HOME, OFFICE, 'TO_OFFICE', 1);
   });
   afterAll(() => app.close());

@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { releaseExpiredBlocks } from '../tenancy/platform-block';
 import { applyLicenses, licenseDaysLeft, licenseState, orgFeatures, type MembershipSummary, type OrgRoleName, type SetPassword, type UpdateMe } from '@rydo/shared';
 import { AppError } from '../common/app-error';
 import { hashPassword, verifyPassword } from '../auth/password';
@@ -10,6 +11,7 @@ export class MeService {
 
   /** The signed-in person, their companies and roles, in one query. */
   async summary(userId: string) {
+    await releaseExpiredBlocks(this.prisma, { userId }); // a temporary pause that has run out ends here
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
       include: {
@@ -35,7 +37,7 @@ export class MeService {
     }));
     const platformRole: 'SUPER_ADMIN' | 'SUPPORT' | null = user.platformRoles.some((p) => p.role === 'SUPER_ADMIN') ? 'SUPER_ADMIN' : user.platformRoles.some((p) => p.role === 'SUPPORT') ? 'SUPPORT' : null;
     return {
-      user: { id: user.id, email: user.email, name: user.name, emailVerified: !!user.emailVerifiedAt, isPlatformAdmin: user.platformRoles.some((p) => p.role === 'SUPER_ADMIN'), platformRole },
+      user: { id: user.id, email: user.email, name: user.name, emailVerified: !!user.emailVerifiedAt, hasPhoto: !!user.photoKey, isPlatformAdmin: user.platformRoles.some((p) => p.role === 'SUPER_ADMIN'), platformRole },
       memberships,
     };
   }

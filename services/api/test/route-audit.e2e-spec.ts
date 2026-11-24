@@ -16,6 +16,8 @@ const PUBLIC = new Set([
   'GET /api/v1/public/trips/:token',
   'POST /api/v1/public/contact',
   'GET /api/v1/public/companies',
+  'GET /api/v1/public/invites/:token',
+  'POST /api/v1/public/invites/:token/join',
 ]);
 
 describe('Route audit', () => {

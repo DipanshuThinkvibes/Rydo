@@ -91,32 +91,26 @@ async function main() {
   for (const d of drivers) {
     const m = await prisma.membership.findFirstOrThrow({ where: { organizationId: acme.id, user: { email: d.email } }, include: { user: true } });
     if (await prisma.driverProfile.findUnique({ where: { membershipId: m.id } })) continue;
-    const profile = await prisma.driverProfile.create({ data: { membershipId: m.id, status: d.status, verifiedAt: d.status === 'VERIFIED' ? new Date() : null, guidelinesAcceptedAt: new Date() } });
-    const vehicle = await prisma.vehicle.create({ data: { organizationId: acme.id, driverProfileId: profile.id, type: 'CAR', hasAc: true, isDefault: true, ...d.car } });
+    const profile = await prisma.driverProfile.create({
+      data: { membershipId: m.id, status: d.status, verifiedAt: d.status === 'VERIFIED' ? new Date() : null, applicationStatus: 'WITH_HR', submittedAt: new Date(), dateOfBirth: new Date('1992-04-15'), licenseClass: 'LMV', drivingSince: 2014 },
+    });
+    const vehicle = await prisma.vehicle.create({ data: { checkStatus: 'VERIFIED', organizationId: acme.id, driverProfileId: profile.id, type: 'CAR', hasAc: true, isDefault: true, ...d.car } });
     const docStatus = d.status === 'VERIFIED' ? 'APPROVED' : 'PENDING';
     const licenseKey = `orgs/${acme.id}/drivers/${profile.id}/driving_license-sample.pdf`;
     const rcKey = `orgs/${acme.id}/drivers/${profile.id}/vehicle_rc-sample.pdf`;
-    const licenseBackKey = `orgs/${acme.id}/drivers/${profile.id}/driving_license-sample-back.pdf`;
-    const insuranceKey = `orgs/${acme.id}/drivers/${profile.id}/vehicle_insurance-sample.pdf`;
-    const photoKey = (side: string) => `orgs/${acme.id}/drivers/${profile.id}/vehicle_photo_${side}-sample.pdf`;
-    const insuranceExpiry = new Date(Date.now() + 300 * day);
+    const insuranceKey = `orgs/${acme.id}/drivers/${profile.id}/insurance-sample.pdf`;
     try {
       await putSample(licenseKey, ['SAMPLE DRIVING LICENSE', `Name: ${m.user.name}`, 'DL No: KA0120190001234', `Valid till: ${d.licenseExpiry.toISOString().slice(0, 10)}`, 'Demo document - not real']);
       await putSample(rcKey, ['SAMPLE REGISTRATION CERTIFICATE', `Owner: ${m.user.name}`, `Reg No: ${d.car.plateNumber}`, `${d.car.make} ${d.car.model}, ${d.car.color}`, 'Demo document - not real']);
-      await putSample(licenseBackKey, ['SAMPLE DRIVING LICENSE - BACK', 'Classes: LMV, MCWG', 'Demo document - not real']);
-      await putSample(insuranceKey, ['SAMPLE MOTOR INSURANCE POLICY', `Insured: ${m.user.name}`, `Vehicle: ${d.car.plateNumber}`, `Valid till: ${insuranceExpiry.toISOString().slice(0, 10)}`, 'Demo document - not real']);
-      for (const side of ['front', 'side', 'inside']) await putSample(photoKey(side), [`SAMPLE VEHICLE PHOTO (${side.toUpperCase()})`, `${d.car.make} ${d.car.model} ${d.car.plateNumber}`, 'Demo document - not real']);
+      await putSample(insuranceKey, ['SAMPLE MOTOR INSURANCE POLICY', `Insured: ${m.user.name}`, `Vehicle: ${d.car.plateNumber}`, 'Demo document - not real']);
     } catch (e) {
       console.warn(`Could not upload sample documents (is storage running?): ${(e as Error).message}`);
     }
     await prisma.document.createMany({
       data: [
-        { organizationId: acme.id, driverProfileId: profile.id, kind: 'DRIVING_LICENSE', storageKey: licenseKey, backStorageKey: licenseBackKey, number: 'KA0120190001234', expiresAt: d.licenseExpiry, dateOfBirth: new Date('1992-04-15'), vehicleClasses: ['LMV', 'MCWG'], status: docStatus },
+        { organizationId: acme.id, driverProfileId: profile.id, kind: 'DRIVING_LICENSE', storageKey: licenseKey, number: 'KA0120190001234', expiresAt: d.licenseExpiry, status: docStatus },
         { organizationId: acme.id, driverProfileId: profile.id, vehicleId: vehicle.id, kind: 'VEHICLE_RC', storageKey: rcKey, number: `RC-${d.car.plateNumber.replace(/ /g, '')}`, expiresAt: d.rcExpiry, status: docStatus },
-        { organizationId: acme.id, driverProfileId: profile.id, vehicleId: vehicle.id, kind: 'VEHICLE_INSURANCE', storageKey: insuranceKey, number: `POL-${d.car.plateNumber.replace(/ /g, '')}`, expiresAt: insuranceExpiry, status: docStatus },
-        { organizationId: acme.id, driverProfileId: profile.id, vehicleId: vehicle.id, kind: 'VEHICLE_PHOTO_FRONT', storageKey: photoKey('front'), status: docStatus },
-        { organizationId: acme.id, driverProfileId: profile.id, vehicleId: vehicle.id, kind: 'VEHICLE_PHOTO_SIDE', storageKey: photoKey('side'), status: docStatus },
-        { organizationId: acme.id, driverProfileId: profile.id, vehicleId: vehicle.id, kind: 'VEHICLE_PHOTO_INSIDE', storageKey: photoKey('inside'), status: docStatus },
+        { organizationId: acme.id, driverProfileId: profile.id, vehicleId: vehicle.id, kind: 'INSURANCE', storageKey: insuranceKey, number: `POL-${d.car.plateNumber.replace(/ /g, '')}`, expiresAt: d.rcExpiry, status: docStatus },
       ],
     });
   }

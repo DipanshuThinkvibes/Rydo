@@ -6,6 +6,7 @@ import {
   clientSetupSchema,
   createOrgSchema,
   DEFAULT_ORG_SETTINGS,
+  EMPLOYEE_ROLES,
   LICENSE_INFO,
   LICENSE_PRODUCTS,
   orgFeatures,
@@ -209,6 +210,8 @@ export class PlatformOrgsController {
     const org = await this.prisma.organization.findUnique({ where: { id } });
     if (!org) throw new AppError('NOT_FOUND', 'Company not found.', 404);
     const passwordHash = body.password ? await hashPassword(body.password) : undefined;
+    const existing = await this.prisma.membership.findFirst({ where: { organizationId: id, user: { email: body.email }, roles: { some: { role: { in: EMPLOYEE_ROLES } } } } });
+    if (existing) throw new AppError('CONFLICT', 'This person already rides or drives here. An admin needs a separate account, so use a different email.', 409, { email: 'Already an employee account' });
     const membership = await this.prisma.$transaction(async (tx) => {
       const user = await tx.user.upsert({ where: { email: body.email }, update: passwordHash ? { passwordHash } : {}, create: { email: body.email, name: body.name, passwordHash } });
       const m = await tx.membership.upsert({
@@ -271,7 +274,7 @@ export class PlatformOrgsController {
         (SELECT count(*)::int FROM memberships m WHERE m.organization_id = o.id AND m.status = 'ACTIVE') AS "activeMembers",
         (SELECT count(*)::int FROM memberships m WHERE m.organization_id = o.id AND m.status = 'PENDING') AS "pendingMembers",
         (SELECT count(*)::int FROM driver_profiles d JOIN memberships m ON m.id = d.membership_id WHERE m.organization_id = o.id AND d.status = 'VERIFIED') AS "verifiedDrivers",
-        (SELECT count(*)::int FROM driver_profiles d JOIN memberships m ON m.id = d.membership_id WHERE m.organization_id = o.id AND d.status = 'PENDING') AS "pendingDrivers",
+        (SELECT count(*)::int FROM driver_profiles d JOIN memberships m ON m.id = d.membership_id WHERE m.organization_id = o.id AND d.status = 'PENDING' AND d.application_status = 'WITH_HR') AS "pendingDrivers",
         (SELECT count(*)::int FROM rides r WHERE r.organization_id = o.id AND r.status <> 'CANCELLED' AND r.depart_at >= now() AND r.depart_at < now() + interval '7 days') AS "ridesNext7",
         (SELECT count(*)::int FROM rides r WHERE r.organization_id = o.id AND r.status <> 'CANCELLED' AND r.depart_at < now() AND r.depart_at >= now() - interval '7 days') AS "ridesLast7",
         (SELECT count(*)::int FROM bookings b JOIN rides r ON r.id = b.ride_id WHERE r.organization_id = o.id AND b.created_at >= now() - interval '7 days') AS "bookingsLast7",

@@ -9,8 +9,9 @@ import { fmtDay, fmtKm, fmtMin, fmtTime, fmtWhen } from "@/lib/format";
 import { toPath } from "@/lib/use-now";
 import { Badge, Button, Card, EmptyState, Input, Notice, PageHeader, Skeleton, Stepper, Toggle, fieldClass } from "@/components/ui";
 import { Icon } from "@/components/icons";
-import { PlaceField, Plate, Seats, useOffices } from "@/components/trip-bits";
+import { PlaceField, Seats, useOffices } from "@/components/trip-bits";
 import { MapView, type MapMarker, type MapRoute } from "@/components/map/map-view";
+import { DriverApplication, type DriverProfile } from "@/components/driver-application";
 
 interface Vehicle { id: string; type: "CAR" | "BIKE"; carType?: "HATCHBACK" | "SEDAN" | "SUV" | null; make: string; model: string; color: string; plateNumber: string; seatCapacity: number; hasAc: boolean; isDefault: boolean }
 interface Doc { id: string; kind: "DRIVING_LICENSE" | "VEHICLE_RC"; number: string | null; expiresAt: string | null; status: "PENDING" | "APPROVED" | "REJECTED"; rejectReason: string | null; vehicleId: string | null }
@@ -29,21 +30,16 @@ export default function DrivePage() {
 
   const fetchProfile = useCallback(() => api<Profile | null>("GET", "/driver/profile"), []);
   useEffect(() => {
-    if (org) fetchProfile().then(setProfile, () => setMsg({ tone: "error", text: "Could not load your driver profile." }));
-  }, [org, fetchProfile]);
-
-  const run = useCallback(async (fn: () => Promise<unknown>, ok?: string) => {
-    setMsg(undefined);
-    try {
-      await fn();
-      setProfile(await fetchProfile());
-      if (ok) setMsg({ tone: "ok", text: ok });
-      return true;
-    } catch (e) {
-      setMsg({ tone: "error", text: e instanceof RequestError ? e.message : "That didn't work." });
-      return false;
+    if (org) {
+      fetchProfile().then(
+        (p) => {
+          setProfile(p);
+          setMsg(undefined); // a first failed try (for example while signing in) should not stay on screen once it works
+        },
+        () => setMsg({ tone: "error", text: "Could not load your driver profile." }),
+      );
     }
-  }, [fetchProfile]);
+  }, [org, fetchProfile]);
 
   if (!org || profile === undefined)
     return (
@@ -54,141 +50,23 @@ export default function DrivePage() {
     );
 
   return (
-    <section className={`flex flex-col gap-5 ${profile?.status === "VERIFIED" ? "" : "max-w-3xl"}`}>
+    <section className={`flex flex-col gap-5 ${profile?.status === "VERIFIED" ? "" : "max-w-4xl"}`}>
       <PageHeader title="Drive" sub="Offer your empty seats to colleagues on your route and share the running cost." />
       {msg && <Notice tone={msg.tone}>{msg.text}</Notice>}
-      {!profile ? (
-        <Card className="flex flex-col gap-3">
-          <h2 className="text-lg font-extrabold">Become a driver</h2>
-          <p className="text-sm text-muted">Add your car or bike and upload your driving license and vehicle RC. Your HR team checks them before you can offer rides.</p>
-          <Button className="self-start" onClick={() => run(() => api("POST", "/driver/profile", {}))}>Start</Button>
-        </Card>
-      ) : profile.status !== "VERIFIED" ? (
-        <Onboarding profile={profile} run={run} />
-      ) : (
+      {profile?.status === "VERIFIED" ? (
         <Driving profile={profile} onVerifiedRoles={reload} />
+      ) : (
+        <>
+          {!profile && (
+            <Card className="flex flex-col gap-1">
+              <h2 className="text-lg font-extrabold">Become a driver</h2>
+              <p className="text-sm text-muted">Seven short steps: photo, licence, vehicle, papers, vehicle photos and safety guidelines. We check your vehicle first. When it passes, your company HR approves you and you can offer rides.</p>
+            </Card>
+          )}
+          <DriverApplication initial={(profile as unknown as DriverProfile | null) ?? null} onVerified={() => { fetchProfile().then(setProfile); void reload(); }} />
+        </>
       )}
     </section>
-  );
-}
-
-function Onboarding({ profile, run }: { profile: Profile; run: (fn: () => Promise<unknown>, ok?: string) => Promise<boolean> }) {
-  const vehicle = profile.vehicles.find((v) => v.isDefault) ?? profile.vehicles[0];
-  const latest = (kind: Doc["kind"]) => profile.documents.find((d) => d.kind === kind && (kind === "DRIVING_LICENSE" || d.vehicleId === vehicle?.id));
-  const status = {
-    PENDING: { tone: "warning" as const, text: "Waiting for HR to check your documents." },
-    REJECTED: { tone: "neutral" as const, text: "HR asked you to upload again. See the reason below." },
-    EXPIRED: { tone: "neutral" as const, text: "A document has expired. Upload the renewed one." },
-    VERIFIED: { tone: "success" as const, text: "" },
-  }[profile.status];
-
-  return (
-    <div className="flex flex-col gap-4">
-      <Card className="flex flex-wrap items-center justify-between gap-3">
-        <span className="font-extrabold">Driver status</span>
-        <Badge tone={status.tone}>{status.text}</Badge>
-      </Card>
-
-      <Card className="flex flex-col gap-3">
-        <h2 className="text-lg font-extrabold">1. Your vehicle</h2>
-        {vehicle ? (
-          <p className="text-sm">{vehicle.color} {vehicle.make} {vehicle.model} · <Plate plate={vehicle.plateNumber} /> · {vehicle.type === "CAR" ? `${vehicle.seatCapacity} passenger seats` : "bike"}{vehicle.hasAc ? " · AC" : ""}</p>
-        ) : (
-          <VehicleForm run={run} />
-        )}
-      </Card>
-
-      {vehicle && (
-        <Card className="flex flex-col gap-4">
-          <h2 className="text-lg font-extrabold">2. Documents</h2>
-          <DocUpload kind="DRIVING_LICENSE" label="Driving license" current={latest("DRIVING_LICENSE")} run={run} />
-          <DocUpload kind="VEHICLE_RC" label={`Vehicle RC (${vehicle.plateNumber})`} vehicleId={vehicle.id} current={latest("VEHICLE_RC")} run={run} />
-        </Card>
-      )}
-    </div>
-  );
-}
-
-function VehicleForm({ run }: { run: (fn: () => Promise<unknown>, ok?: string) => Promise<boolean> }) {
-  const [v, setV] = useState({ type: "CAR" as "CAR" | "BIKE", carType: "" as "" | "HATCHBACK" | "SEDAN" | "SUV", make: "", model: "", color: "", plateNumber: "", seatCapacity: 3, hasAc: true });
-  return (
-    <form className="grid gap-3 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); run(() => api("POST", "/driver/vehicles", { ...v, carType: v.type === "CAR" && v.carType ? v.carType : undefined, seatCapacity: v.type === "BIKE" ? 1 : v.seatCapacity }), "Vehicle added."); }}>
-      <div className="flex gap-2 sm:col-span-2">
-        {(["CAR", "BIKE"] as const).map((t) => (
-          <button key={t} type="button" aria-pressed={v.type === t} onClick={() => setV({ ...v, type: t })} className={`h-10 rounded-full border-[1.5px] px-4 text-sm font-extrabold ${v.type === t ? "border-ink bg-ink text-white" : "border-line-strong"}`}>{t === "CAR" ? "Car" : "Bike"}</button>
-        ))}
-      </div>
-      <Input id="v-make" label="Make" required placeholder="Honda" value={v.make} onChange={(e) => setV({ ...v, make: e.target.value })} />
-      <Input id="v-model" label="Model" required placeholder="City" value={v.model} onChange={(e) => setV({ ...v, model: e.target.value })} />
-      <Input id="v-color" label="Colour" required placeholder="White" value={v.color} onChange={(e) => setV({ ...v, color: e.target.value })} />
-      <Input id="v-plate" label="Number plate" required placeholder="KA 01 AB 1234" value={v.plateNumber} onChange={(e) => setV({ ...v, plateNumber: e.target.value })} />
-      {v.type === "CAR" && (
-        <label className="flex flex-col gap-1.5 text-sm font-bold">
-          Car type
-          <select className={field} value={v.carType} onChange={(e) => setV({ ...v, carType: e.target.value as typeof v.carType })}>
-            <option value="">Not set</option>
-            <option value="HATCHBACK">Hatchback</option>
-            <option value="SEDAN">Sedan</option>
-            <option value="SUV">SUV</option>
-          </select>
-        </label>
-      )}
-      {v.type === "CAR" && (
-        <label className="flex flex-col gap-1.5 text-sm font-bold">
-          Passenger seats
-          <select className={field} value={v.seatCapacity} onChange={(e) => setV({ ...v, seatCapacity: Number(e.target.value) })}>
-            {[1, 2, 3, 4, 5, 6].map((n) => <option key={n} value={n}>{n}</option>)}
-          </select>
-        </label>
-      )}
-      <label className="flex items-center gap-2 self-end pb-3 text-sm font-bold">
-        <input type="checkbox" className="h-5 w-5 accent-[#0B1426]" checked={v.hasAc} onChange={(e) => setV({ ...v, hasAc: e.target.checked })} />
-        AC
-      </label>
-      <Button type="submit" className="self-start">Add vehicle</Button>
-    </form>
-  );
-}
-
-function DocUpload({ kind, label, vehicleId, current, run }: { kind: Doc["kind"]; label: string; vehicleId?: string; current?: Doc; run: (fn: () => Promise<unknown>, ok?: string) => Promise<boolean> }) {
-  const [number, setNumber] = useState("");
-  const [expiry, setExpiry] = useState("");
-  const [file, setFile] = useState<File | null>(null);
-  const done = current && current.status !== "REJECTED";
-
-  return (
-    <div className="flex flex-col gap-3 rounded-2xl bg-surface p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="font-extrabold">{label}</span>
-        {current && <Badge tone={current.status === "APPROVED" ? "success" : current.status === "PENDING" ? "warning" : "neutral"}>{current.status === "PENDING" ? "uploaded · waiting for HR" : current.status.toLowerCase()}</Badge>}
-      </div>
-      {current?.status === "REJECTED" && current.rejectReason && <p className="text-sm font-semibold text-danger">HR: “{current.rejectReason}”</p>}
-      {current && done && <p className="text-sm text-muted">No. {current.number} · valid till {current.expiresAt}</p>}
-      {!done && (
-        <form
-          className="grid gap-3 sm:grid-cols-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (!file) return;
-            const f = new FormData();
-            f.append("kind", kind);
-            f.append("number", number);
-            f.append("expiresAt", expiry);
-            if (vehicleId) f.append("vehicleId", vehicleId);
-            f.append("file", file);
-            run(() => api("POST", "/driver/documents", f), `${label} uploaded. HR will check it.`);
-          }}
-        >
-          <Input id={`${kind}-no`} label="Number" required value={number} onChange={(e) => setNumber(e.target.value)} />
-          <Input id={`${kind}-exp`} label="Valid till" type="date" required value={expiry} onChange={(e) => setExpiry(e.target.value)} />
-          <label className="flex flex-col gap-1.5 text-sm font-bold">
-            Photo or PDF
-            <input type="file" required accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="text-sm font-semibold file:mr-3 file:h-10 file:rounded-xl file:border-0 file:bg-ink file:px-3 file:font-bold file:text-white" />
-          </label>
-          <Button type="submit" className="self-start">Upload</Button>
-        </form>
-      )}
-    </div>
   );
 }
 
