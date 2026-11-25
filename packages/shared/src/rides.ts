@@ -48,6 +48,14 @@ export interface RideMatch {
   dropEta: string;
   pickupDistanceMeters: number;
   dropDistanceMeters: number;
+  /**
+   * A suggestion, not a direct match: the route passes further than the company's pickup distance from the pickup or
+   * drop (up to a few km), or the ride starts or ends somewhere between them. The rider meets the car at `pickupPoint`
+   * and leaves it at `dropPoint` (the nearest spots on the driver's route).
+   */
+  nearby: boolean;
+  pickupPoint: { lat: number; lng: number };
+  dropPoint: { lat: number; lng: number };
   seatsLeft: number;
   womenOnly: boolean;
   alreadyRequested: boolean;

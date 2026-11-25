@@ -48,9 +48,12 @@ export default function Results() {
   if (!search) return <Redirect href="/plan" />;
 
   const markers: MapMarker[] = [
-    { id: 'pickup', at: search.pickup, kind: 'pickup', label: chosen ? `Pickup · ${fmtDistance(chosen.pickupDistanceMeters)} walk` : 'Pickup' },
+    { id: 'pickup', at: search.pickup, kind: 'pickup', label: chosen ? (chosen.nearby ? 'Your pickup' : `Pickup · ${fmtDistance(chosen.pickupDistanceMeters)} walk`) : 'Pickup' },
     { id: 'drop', at: search.drop, kind: 'end', label: shortName(search.drop.label.split(',')[0]) },
+    // A nearby suggestion: where the rider meets the car on the driver's route.
+    ...(chosen?.nearby ? [{ id: 'meet', at: chosen.pickupPoint, kind: 'place' as const, icon: 'pin' as const, isDefault: true, label: 'Meet the car here' }] : []),
   ];
+  const firstNearby = shown.findIndex((m) => m.nearby);
 
   async function request(m: RideMatch) {
     setBusy(true);
@@ -107,7 +110,15 @@ export default function Results() {
             <Empty title="No rides match yet">Try another time or day. Or join the waitlist: when a seat opens on this route, you get it first.</Empty>
           )}
           {shown.map((m, i) => (
-            <MatchCard key={m.rideId} m={m} best={i === 0} active={m.rideId === chosen?.rideId} onPress={() => setSelected(m.rideId)} onDriver={() => setCard(m.driver.membershipId)} preferred={fav[m.driver.membershipId] ?? m.preferred} onFav={() => toggleFav(m)} />
+            <View key={m.rideId} style={{ gap: 12 }}>
+              {i === firstNearby ? (
+                <View style={{ gap: 2, paddingTop: i ? 6 : 0 }}>
+                  <Text style={[s.strong, { fontSize: 17 }]}>Nearby suggestions</Text>
+                  <Text style={s.small}>These pass a little further from your pickup or drop, or meet your trip partway. You meet the car on its route.</Text>
+                </View>
+              ) : null}
+            <MatchCard m={m} best={i === 0 && !m.nearby} active={m.rideId === chosen?.rideId} onPress={() => setSelected(m.rideId)} onDriver={() => setCard(m.driver.membershipId)} preferred={fav[m.driver.membershipId] ?? m.preferred} onFav={() => toggleFav(m)} />
+            </View>
           ))}
           <View style={{ gap: 10, padding: 16, borderRadius: 20, backgroundColor: colors.surface }}>
             <Text style={s.strong}>{shown.length ? 'Nothing quite right?' : 'Join the waitlist'}</Text>
@@ -158,7 +169,7 @@ function MatchCard({ m, best, active, onPress, onDriver, preferred, onFav }: { m
             {m.vehicle.color} {m.vehicle.make} {m.vehicle.model} · {m.seatsLeft} left
           </Text>
           <Text style={[s.small, { color: colors.ink, fontWeight: '600' }]}>
-            {fmtTime(m.pickupEta)} → {fmtTime(m.dropEta)} · {m.pickupDistanceMeters < 50 ? 'on the route' : `${fmtDistance(m.pickupDistanceMeters)} walk`}
+            {fmtTime(m.pickupEta)} → {fmtTime(m.dropEta)} · {m.pickupDistanceMeters < 50 ? 'on the route' : m.nearby ? `meet ${fmtDistance(m.pickupDistanceMeters)} away` : `${fmtDistance(m.pickupDistanceMeters)} walk`}
           </Text>
         </View>
         <View style={{ alignItems: 'flex-end' }}>
@@ -178,6 +189,7 @@ function MatchCard({ m, best, active, onPress, onDriver, preferred, onFav }: { m
       </View>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
         {best && <Badge tone="lime">Best match</Badge>}
+        {m.nearby && <Badge tone="warning">Nearby suggestion</Badge>}
         {preferred && <Badge tone="ink">Preferred driver</Badge>}
         {m.womenOnly && <Badge tone="women">Women-only</Badge>}
         {m.vehicle.hasAc && <Badge tone="neutral">AC</Badge>}

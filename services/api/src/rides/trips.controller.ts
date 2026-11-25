@@ -30,7 +30,8 @@ export class TripsController {
   @Post('rides/search')
   @HttpCode(200)
   async search(@Org() org: OrgContext, @Body(new ZodPipe(rideSearchSchema)) body: RideSearch) {
-    return { data: await this.matching.search(org, body) };
+    // The rider's own search also suggests rides that pass nearby or meet the trip partway (marked `nearby`).
+    return { data: await this.matching.search(org, body, { nearby: true }) };
   }
 
   @Post('rides/:id/requests')

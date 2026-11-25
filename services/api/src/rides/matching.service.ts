@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { DEFAULT_ORG_SETTINGS, orgFeatures, type OrgFeatures, type OrgSettings, type RideMatch, type RideSearch } from '@rydo/shared';
+import { DEFAULT_ORG_SETTINGS, orgFeatures, type CarType, type OrgFeatures, type OrgSettings, type RideMatch, type RideSearch } from '@rydo/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { STORAGE_ADAPTER, StorageAdapter } from '../adapters/storage.adapter';
 import { profilePhotoUrls, vehicleFrontPhotoUrls } from '../common/photos';
@@ -16,12 +16,16 @@ interface Row {
   dropM: number;
   pf: number;
   df: number;
+  pLat: number;
+  pLng: number;
+  dLat: number;
+  dLng: number;
   wantFrom: Date;
   wantTo: Date;
   driverMembershipId: string;
   driverName: string;
   type: 'CAR' | 'BIKE';
-  carType: 'HATCHBACK' | 'SEDAN' | 'SUV' | null;
+  carType: CarType | null;
   make: string;
   model: string;
   color: string;
@@ -43,8 +47,17 @@ interface Row {
  */
 const W = { pickup: 0.3, time: 0.3, drop: 0.15, rating: 0.15, type: 0.1 };
 const clamp = (x: number) => Math.max(0, Math.min(1, x));
+/** How far "nearby suggestions" reach: three times the company's pickup distance, at least 3 km. */
+export const nearbyRadius = (radius: number) => Math.max(3000, radius * 3);
+/** A suggestion must carry the rider at least this share of the way (so a ride that only grazes the trip is not offered). */
+const MIN_SHARE = 0.4;
+const distText = (m: number) => (m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(1)} km`);
 
-/** Finds rides whose road route passes near the pickup and then the drop, inside the rider's time window. */
+/**
+ * Finds rides whose road route passes near the pickup and then the drop, inside the rider's time window.
+ * With `nearby`, it also suggests rides that pass a little further away (up to nearbyRadius) or that start or end
+ * somewhere between the pickup and the drop; these come after the direct matches, marked `nearby`.
+ */
 @Injectable()
 export class MatchingService {
   constructor(
@@ -62,23 +75,30 @@ export class MatchingService {
     return { ...s, features };
   }
 
-  async search(org: { organizationId: string; membershipId: string }, s: RideSearch, opts: { onlyRideIds?: string[]; excludeRideIds?: string[] } = {}): Promise<RideMatch[]> {
+  async search(org: { organizationId: string; membershipId: string }, s: RideSearch, opts: { onlyRideIds?: string[]; excludeRideIds?: string[]; nearby?: boolean } = {}): Promise<RideMatch[]> {
     const settings = await this.settings(org.organizationId);
     const radius = settings.pickupRadiusMeters;
+    const nearby = !!opts.nearby;
+    // Without suggestions the reach is the company's pickup distance and nothing "in between" counts.
+    const reach = nearby ? nearbyRadius(radius) : radius;
     const me = await this.prisma.membership.findUniqueOrThrow({ where: { id: org.membershipId }, include: { user: { select: { gender: true } } } });
     const female = me.user.gender === 'FEMALE';
     const only = opts.onlyRideIds ?? null;
     const exclude = opts.excludeRideIds ?? [];
 
     const rows = await this.prisma.$queryRaw<Row[]>`
-      WITH q AS (
+      WITH q0 AS (
         SELECT ST_SetSRID(ST_MakePoint(${s.pickup.lng}, ${s.pickup.lat}), 4326)::geography AS p,
                ST_SetSRID(ST_MakePoint(${s.drop.lng}, ${s.drop.lat}), 4326)::geography AS d
+      ), q AS (
+        -- seg: the rider's own trip as a straight line; pd: its length
+        SELECT p, d, ST_MakeLine(p::geometry, d::geometry)::geography AS seg, GREATEST(ST_Distance(p, d), 1) AS pd FROM q0
       )
       SELECT r.id, r.depart_at AS "departAt", r.duration_seconds AS "durationSeconds", (r.seats_total - r.seats_booked) AS "seatsLeft",
         r.women_only AS "womenOnly", r.origin_label AS "originLabel", r.destination_label AS "destinationLabel",
         ST_Distance(r.route_line, q.p) AS "pickupM", ST_Distance(r.route_line, q.d) AS "dropM",
         ST_LineLocatePoint(r.route_line::geometry, q.p::geometry) AS pf, ST_LineLocatePoint(r.route_line::geometry, q.d::geometry) AS df,
+        ST_Y(c.mp) AS "pLat", ST_X(c.mp) AS "pLng", ST_Y(c.md) AS "dLat", ST_X(c.md) AS "dLng",
         ((${s.date}::date + ${s.fromTime}::time) AT TIME ZONE o.timezone) AS "wantFrom",
         ((${s.date}::date + ${s.toTime}::time) AT TIME ZONE o.timezone) AS "wantTo",
         m.id AS "driverMembershipId", u.name AS "driverName",
@@ -91,6 +111,8 @@ export class MatchingService {
         EXISTS (SELECT 1 FROM preferred_drivers pd WHERE pd.rider_membership_id = ${org.membershipId}::uuid AND pd.driver_membership_id = m.id) AS preferred
       FROM rides r
       CROSS JOIN q
+      -- mp / md: the spots on the driver's route nearest to the rider's pickup and drop (where they meet and leave the car)
+      CROSS JOIN LATERAL (SELECT ST_ClosestPoint(r.route_line::geometry, q.p::geometry) AS mp, ST_ClosestPoint(r.route_line::geometry, q.d::geometry) AS md) c
       JOIN organizations o ON o.id = r.organization_id
       JOIN memberships m ON m.id = r.driver_membership_id
       JOIN users u ON u.id = m.user_id
@@ -103,7 +125,14 @@ export class MatchingService {
         AND r.depart_at > now()
         AND r.depart_at BETWEEN ((${s.date}::date + ${s.fromTime}::time) AT TIME ZONE o.timezone) - interval '60 minutes'
                             AND ((${s.date}::date + ${s.toTime}::time) AT TIME ZONE o.timezone) + interval '30 minutes'
-        AND ST_DWithin(r.route_line, q.p, ${radius}) AND ST_DWithin(r.route_line, q.d, ${radius})
+        -- pickup: the route passes within reach, or (suggestions) it reaches the rider's trip somewhere before the drop
+        AND (ST_DWithin(r.route_line, q.p, ${reach})
+             OR (${nearby} AND ST_DWithin(c.mp::geography, q.seg, ${reach}) AND ST_Distance(c.mp::geography, q.d) < q.pd))
+        -- drop: the same, from the other end
+        AND (ST_DWithin(r.route_line, q.d, ${reach})
+             OR (${nearby} AND ST_DWithin(c.md::geography, q.seg, ${reach}) AND ST_Distance(c.md::geography, q.p) < q.pd))
+        -- the car carries the rider a real part of the way
+        AND (NOT ${nearby} OR ST_Distance(c.mp::geography, c.md::geography) >= ${MIN_SHARE} * q.pd)
         AND ST_LineLocatePoint(r.route_line::geometry, q.p::geometry) < ST_LineLocatePoint(r.route_line::geometry, q.d::geometry)
         AND (${s.vehicleType ?? null}::text IS NULL OR v.type::text = ${s.vehicleType ?? null}::text)
         AND (${s.carTypes ?? null}::text[] IS NULL OR v.car_type::text = ANY(${s.carTypes ?? null}::text[]))
@@ -114,9 +143,11 @@ export class MatchingService {
         AND (${only}::uuid[] IS NULL OR r.id = ANY(${only}::uuid[]))
         AND NOT (r.id = ANY(${exclude}::uuid[]))
       ORDER BY r.depart_at
-      LIMIT 50`;
+      LIMIT 80`;
 
-    const top = rows.map((r) => ({ r, m: this.score(r, radius, s) })).sort((a, b) => b.m.score - a.m.score).slice(0, 20);
+    // Direct matches first (best score first), then up to 10 nearby suggestions.
+    const scored = rows.map((r) => ({ r, m: this.score(r, radius, s) })).sort((a, b) => b.m.score - a.m.score);
+    const top = [...scored.filter((x) => !x.m.nearby).slice(0, 20), ...scored.filter((x) => x.m.nearby).slice(0, 10)];
     // The rider sees the driver's photo and the vehicle's front photo, to check who and what arrives.
     const [people, cars] = await Promise.all([
       profilePhotoUrls(this.prisma, this.storage, top.map((x) => x.r.driverMembershipId)),
@@ -145,10 +176,11 @@ export class MatchingService {
     const score = Math.min(100, Math.round(100 * (W.pickup * parts.pickup + W.time * parts.time + W.drop * parts.drop + W.rating * parts.rating + W.type * parts.type)) + (r.preferred ? 10 : 0));
 
     const time = (d: Date) => new Intl.DateTimeFormat('en-IN', { hour: 'numeric', minute: '2-digit', timeZone: r.timezone }).format(d);
+    const nearby = r.pickupM > radius || r.dropM > radius;
     const reasons = [
-      r.pickupM < 50 ? 'Passes right by your pickup' : `Pickup ${Math.round(r.pickupM / 10) * 10} m from the route`,
+      r.pickupM < 50 ? 'Passes right by your pickup' : nearby && r.pickupM > radius ? `Meet the car ${distText(r.pickupM)} from your pickup` : `Pickup ${Math.round(r.pickupM / 10) * 10} m from the route`,
       offMin === 0 ? `Picks you up around ${time(pickupEta)}, in your window` : `Picks you up around ${time(pickupEta)} (${Math.round(offMin)} min ${pickupEta.getTime() < from ? 'early' : 'late'})`,
-      r.dropM < 50 ? 'Drops you at your stop' : `Drop ${Math.round(r.dropM / 10) * 10} m from your stop`,
+      r.dropM < 50 ? 'Drops you at your stop' : nearby && r.dropM > radius ? `Leaves you ${distText(r.dropM)} from your stop` : `Drop ${Math.round(r.dropM / 10) * 10} m from your stop`,
       rating ? `Rated ${rating.toFixed(1)} (${r.ratingCount} rides)` : 'New driver, verified by HR',
     ];
     if (r.womenOnly) reasons.push('Women-only ride');
@@ -163,6 +195,9 @@ export class MatchingService {
       dropEta: dropEta.toISOString(),
       pickupDistanceMeters: Math.round(r.pickupM),
       dropDistanceMeters: Math.round(r.dropM),
+      nearby,
+      pickupPoint: { lat: r.pLat, lng: r.pLng },
+      dropPoint: { lat: r.dLat, lng: r.dLng },
       seatsLeft: r.seatsLeft,
       womenOnly: r.womenOnly,
       alreadyRequested: r.requestStatus !== null,

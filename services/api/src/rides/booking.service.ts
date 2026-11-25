@@ -65,10 +65,16 @@ export class BookingService {
       fromTime: '00:00',
       toTime: '23:59',
       womenOnly: false,
-    }, { onlyRideIds: [rideId] });
+    }, { onlyRideIds: [rideId], nearby: true });
     if (!match) throw new AppError('CONFLICT', "This ride doesn't pass your pickup and drop, or has no seats left.", 409);
 
+    // A nearby suggestion: the rider meets the car on the driver's route, so the driver gets that spot, not the rider's address.
     const settings = await this.matching.settings(org.organizationId);
+    const meet = (place: RideRequestInput['pickup'], at: { lat: number; lng: number }, metres: number, word: string) =>
+      match.nearby && metres > settings.pickupRadiusMeters ? { label: `${word} on your route near ${place.label}`.slice(0, 200), lat: at.lat, lng: at.lng } : place;
+    const pickup = meet(b.pickup, match.pickupPoint, match.pickupDistanceMeters, 'Meet point');
+    const drop = meet(b.drop, match.dropPoint, match.dropDistanceMeters, 'Drop point');
+
     const minutesToGo = (ride.departAt.getTime() - Date.now()) / 60000;
     const waitSeconds = Math.max(30, Math.min(minutesToGo <= 60 ? settings.driverPopupSeconds : settings.requestTimeoutMinutes * 60, (minutesToGo - 10) * 60));
 
@@ -76,8 +82,8 @@ export class BookingService {
       INSERT INTO ride_requests (id, organization_id, ride_id, rider_membership_id, seats, pickup_label, pickup, drop_label, drop,
         match_score, match_reasons, auto_rematch, status, expires_at, created_at)
       VALUES (gen_random_uuid(), ${org.organizationId}::uuid, ${rideId}::uuid, ${org.membershipId}::uuid, ${b.seats},
-        ${b.pickup.label}, ST_SetSRID(ST_MakePoint(${b.pickup.lng}, ${b.pickup.lat}), 4326)::geography,
-        ${b.drop.label}, ST_SetSRID(ST_MakePoint(${b.drop.lng}, ${b.drop.lat}), 4326)::geography,
+        ${pickup.label}, ST_SetSRID(ST_MakePoint(${pickup.lng}, ${pickup.lat}), 4326)::geography,
+        ${drop.label}, ST_SetSRID(ST_MakePoint(${drop.lng}, ${drop.lat}), 4326)::geography,
         ${match.score}, ${JSON.stringify(match.reasons)}::jsonb, ${b.autoRematch}, 'PENDING'::"RequestStatus",
         now() + make_interval(secs => ${waitSeconds}), now())
       RETURNING id`;
@@ -98,7 +104,7 @@ export class BookingService {
     await this.notify.notifyMembership(ride.driverMembershipId, {
       type: 'REQUEST_RECEIVED',
       title: `${await name(this.prisma, org.membershipId)} wants ${b.seats === 1 ? 'a seat' : `${b.seats} seats`}`,
-      body: `Pickup: ${b.pickup.label}. Answer within ${waitSeconds >= 120 ? `${Math.round(waitSeconds / 60)} minutes` : `${Math.round(waitSeconds)} seconds`}.`,
+      body: `Pickup: ${pickup.label}. Answer within ${waitSeconds >= 120 ? `${Math.round(waitSeconds / 60)} minutes` : `${Math.round(waitSeconds)} seconds`}.`,
       data: { requestId: row.id, rideId },
     });
     return { id: row.id, status: 'PENDING' as const, matchScore: match.score, expiresInSeconds: Math.round(waitSeconds) };

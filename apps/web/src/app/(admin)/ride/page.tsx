@@ -294,7 +294,8 @@ export default function FindRidePage() {
                     <li className="relative">
                       <span className="absolute -left-6 top-0.5"><StartDot /></span>
                       <span className="font-extrabold">Pickup ~{fmtTime(m.pickupEta)}</span>
-                      <span className="text-muted"> · {m.pickupDistanceMeters < 50 ? "right on the route" : `${Math.round(m.pickupDistanceMeters / 10) * 10} m from the route`}</span>
+                      <span className="text-muted"> · {m.pickupDistanceMeters < 50 ? "right on the route" : m.nearby ? `meet the car ${m.pickupDistanceMeters < 1000 ? `${Math.round(m.pickupDistanceMeters / 10) * 10} m` : `${(m.pickupDistanceMeters / 1000).toFixed(1)} km`} from your pickup` : `${Math.round(m.pickupDistanceMeters / 10) * 10} m from the route`}</span>
+                      {m.nearby && <span className="ml-2 rounded-full bg-warning-bg px-2 py-0.5 text-xs font-extrabold text-warning">Nearby suggestion</span>}
                     </li>
                     <li className="relative">
                       <span className="absolute -left-6 top-0.5"><EndSquare /></span>
